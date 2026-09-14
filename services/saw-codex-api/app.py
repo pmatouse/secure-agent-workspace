@@ -2,26 +2,21 @@
 
 import asyncio
 import re
-import time
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from jose import jwt as jose_jwt
 from pydantic import BaseModel
 
 from . import config
 from .auth import UserInfo, get_current_user
 from .k8s import (
-    ConnectionInfo,
     Session,
     create_session_cr,
     delete_session_cr,
-    get_codex_secret,
     get_vm_owner,
     list_user_vms,
-    _get_route_url,
 )
 
-app = FastAPI(title="saw-codex-api", version="0.1.0")
+app = FastAPI(title="saw-codex-api", version="0.2.0")
 
 _SAFE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,18}$")
 
@@ -42,13 +37,6 @@ class SessionResponse(BaseModel):
     created: str
     owner: str
     ws_url: str | None
-    has_secret: bool
-
-
-class ConnectResponse(BaseModel):
-    ws_url: str
-    token: str
-    expires_in: int
 
 
 class CreateRequest(BaseModel):
@@ -75,7 +63,6 @@ async def list_sessions(user: UserInfo = Depends(get_current_user)):
             created=s.created,
             owner=s.owner,
             ws_url=s.ws_url,
-            has_secret=s.has_secret,
         )
         for s in sessions
     ]
@@ -116,62 +103,3 @@ async def delete_session(name: str, user: UserInfo = Depends(get_current_user)):
     ok = await asyncio.to_thread(delete_session_cr, name)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to delete session")
-
-
-@app.get("/sessions/{name}/connect", response_model=ConnectResponse)
-async def connect_session(
-    name: str, user: UserInfo = Depends(get_current_user)
-):
-    _validate_name(name)
-    owner = await asyncio.to_thread(get_vm_owner, name)
-    if owner is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if owner != user.sub:
-        raise HTTPException(status_code=403, detail="Not your session")
-
-    ws_secret = await asyncio.to_thread(get_codex_secret, name)
-    if not ws_secret:
-        raise HTTPException(
-            status_code=503,
-            detail="Session not ready — codex secret not yet available",
-        )
-
-    ws_url = await asyncio.to_thread(
-        _get_route_url, name, config.MANAGED_NAMESPACE
-    )
-    if not ws_url:
-        raise HTTPException(
-            status_code=503, detail="Session not ready — route not available"
-        )
-
-    import httpx
-    try:
-        host = ws_url.replace("wss://", "").replace(":443", "")
-        r = await asyncio.to_thread(
-            lambda: httpx.get(f"https://{host}/readyz", timeout=5, verify=False)
-        )
-        if r.status_code != 200:
-            raise HTTPException(
-                status_code=503,
-                detail="Session not ready — Codex app-server not responding",
-            )
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=503,
-            detail="Session not ready — Codex app-server not reachable",
-        )
-
-    now = int(time.time())
-    ttl = config.SESSION_TOKEN_TTL
-    token = jose_jwt.encode(
-        {
-            "iss": "saw-codex",
-            "aud": "codex-session",
-            "sub": user.sub,
-            "exp": now + ttl,
-        },
-        ws_secret,
-        algorithm="HS256",
-    )
-
-    return ConnectResponse(ws_url=ws_url, token=token, expires_in=ttl)

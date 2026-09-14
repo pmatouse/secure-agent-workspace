@@ -280,20 +280,24 @@ class SessionsScreen(Screen):
         self.app.notify(f"Connecting to '{name}'...")
         try:
             client = self.app.get_client()
-            info = client.get_connection_info(name)
-            self.app.call_from_thread(
-                self.app._launch_codex, info["ws_url"], info["token"]
+            sessions = client.list_sessions()
+            session = next((s for s in sessions if s["name"] == name), None)
+            if not session or not session.get("ws_url"):
+                self.app.call_from_thread(
+                    self.app.notify, "Session not ready", severity="warning"
+                )
+                return
+            ws_url = session["ws_url"]
+            token = auth.get_token(
+                self.app.cfg["oidc"]["token_dir"],
+                self.app.cfg["oidc"]["client_id"],
             )
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 503:
-                detail = e.response.json().get("detail", "not ready")
+            if not token:
                 self.app.call_from_thread(
-                    self.app.notify, f"Session not ready: {detail}", severity="warning"
+                    self.app.notify, "Not authenticated", severity="error"
                 )
-            else:
-                self.app.call_from_thread(
-                    self.app.notify, f"Failed to connect: {e}", severity="error"
-                )
+                return
+            self.app.call_from_thread(self.app._launch_codex, ws_url, token)
         except Exception as e:
             self.app.call_from_thread(
                 self.app.notify, f"Failed to connect: {e}", severity="error"

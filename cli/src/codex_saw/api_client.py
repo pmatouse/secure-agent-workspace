@@ -38,12 +38,3 @@ class SawCodexClient:
         )
         return r.status_code in (200, 204)
 
-    def get_connection_info(self, name: str) -> dict:
-        r = httpx.get(
-            f"{self.api_url}/sessions/{name}/connect",
-            headers=self.headers,
-            timeout=15,
-            verify=False,
-        )
-        r.raise_for_status()
-        return r.json()

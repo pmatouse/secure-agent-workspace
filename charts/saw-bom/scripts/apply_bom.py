@@ -648,25 +648,10 @@ class WorkspaceDeployer:
         exec_cmd = ["openshell", "sandbox", "exec", "-n",
                      sandbox_name] + ws_args + ["--no-tty", "--"]
 
-        log("Generating shared secret inside sandbox...")
-        self.sh.run(
-            exec_cmd + ["sh", "-c",
-                        "mkdir -p /sandbox/.codex && "
-                        "python3 -c 'import secrets; "
-                        "print(secrets.token_hex(32), end=\"\")' "
-                        "> /sandbox/.codex/ws-secret && "
-                        "chmod 600 /sandbox/.codex/ws-secret"],
-            check=False)
-
-        rc, ws_secret, _ = self.sh.run(
-            exec_cmd + ["cat", "/sandbox/.codex/ws-secret"],
-            check=False)
-        ws_secret = re.sub(r'\x1b\[[0-9;]*m', '', ws_secret or "").strip()
-
         log("Configuring Codex (auth, model, sandbox bypass, bwrap stub)...")
         self.sh.run(
             exec_cmd + ["sh", "-c",
-                        "mkdir -p /sandbox/.local/bin && "
+                        "mkdir -p /sandbox/.codex /sandbox/.local/bin && "
                         "printf '{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"%s\"}' "
                         "\"$OPENAI_API_KEY\" > /sandbox/.codex/auth.json && "
                         "printf 'model = \"gpt-5.6-terra\"\\n"
@@ -689,15 +674,11 @@ class WorkspaceDeployer:
                         "chmod +x /sandbox/.local/bin/bwrap"],
             check=False)
 
-        log("Starting Codex app-server...")
+        log("Starting Codex app-server (localhost only, no auth)...")
         self.sh.run(
             exec_cmd + ["sh", "-c",
                         "nohup codex app-server "
-                        "--listen ws://0.0.0.0:8089 "
-                        "--ws-auth signed-bearer-token "
-                        "--ws-shared-secret-file /sandbox/.codex/ws-secret "
-                        "--ws-issuer saw-codex "
-                        "--ws-audience codex-session "
+                        "--listen ws://127.0.0.1:8090 "
                         "> /tmp/codex-app-server.log 2>&1 &"],
             check=False)
 
@@ -705,51 +686,84 @@ class WorkspaceDeployer:
             for i in range(10):
                 rc, _, _ = self.sh.run(
                     exec_cmd + ["sh", "-c",
-                                "ss -tlnp src :8089 2>/dev/null | "
-                                "grep -q 8089"],
+                                "ss -tlnp src :8090 2>/dev/null | "
+                                "grep -q 8090"],
                     check=False)
                 if rc == 0:
-                    log("Codex app-server ready")
+                    log("Codex app-server ready on localhost:8090")
                     break
                 log(f"  waiting for codex app-server... (attempt {i+1})")
                 time.sleep(3)
             else:
                 log("WARN: Codex app-server readyz check failed")
 
-        log("Installing codex port-forward as systemd service...")
+        oidc_issuer = ""
+        rc, raw, _ = self.sh.run(
+            ["grep", "-oP", 'issuer = "\\K[^"]+',
+             "/home/cloud-user/.config/openshell/gateway.toml"],
+            check=False)
+        if rc == 0:
+            oidc_issuer = re.sub(r'\x1b\[[0-9;]*m', '', raw or "").strip()
+        if not oidc_issuer:
+            rc, raw, _ = self.sh.run(
+                ["grep", "-oP", 'issuer = "\\K[^"]+',
+                 "/etc/openshell/gateway.toml"],
+                check=False)
+            oidc_issuer = re.sub(r'\x1b\[[0-9;]*m', '', raw or "").strip()
+
+        log("Installing oauth2-proxy + codex-forward as systemd services...")
         self.sh.run([
             "bash", "-c",
             f"mkdir -p ~/.config/systemd/user && "
-            f"cat > ~/.config/systemd/user/codex-forward.service << 'EOF'\n"
+            f"cat > ~/.config/systemd/user/codex-oauth-proxy.service << 'EOF'\n"
             f"[Unit]\n"
-            f"Description=Codex WebSocket port forward\n"
+            f"Description=OAuth2 proxy for Codex WebSocket\n"
             f"After=openshell-gateway.service\n"
             f"[Service]\n"
-            f"ExecStart=/home/cloud-user/.local/bin/openshell-real "
-            f"forward service {sandbox_name} "
-            f"--target-port 8089 --local 0.0.0.0:8089\n"
+            f"ExecStartPre=-sudo docker rm -f codex-oauth-proxy\n"
+            f"ExecStart=sudo docker run --rm --name codex-oauth-proxy "
+            f"--network host "
+            f"quay.io/oauth2-proxy/oauth2-proxy:v7.9.0 "
+            f"--provider=oidc "
+            f"--oidc-issuer-url={oidc_issuer} "
+            f"--client-id=openshell-cli "
+            f"--upstream=http://127.0.0.1:8090 "
+            f"--http-address=0.0.0.0:8089 "
+            f"--email-domain=* "
+            f"--skip-auth-regex=^/readyz$ "
+            f"--skip-auth-regex=^/healthz$ "
+            f"--cookie-secure=false "
+            f"--skip-provider-button=true "
+            f"--ssl-insecure-skip-verify=true "
+            f"--insecure-oidc-skip-issuer-verification=true "
+            f"--oidc-email-claim=preferred_username "
+            f"--cookie-secret=0000000000000000\n"
+            f"ExecStop=sudo docker stop codex-oauth-proxy\n"
             f"Restart=always\n"
             f"RestartSec=5\n"
             f"[Install]\n"
             f"WantedBy=default.target\n"
             f"EOF\n"
+            f"cat > ~/.config/systemd/user/codex-forward.service << 'FEOF'\n"
+            f"[Unit]\n"
+            f"Description=Codex app-server port forward (sandbox:8090 to host:8090)\n"
+            f"Before=codex-oauth-proxy.service\n"
+            f"[Service]\n"
+            f"ExecStart=/home/cloud-user/.local/bin/openshell-real "
+            f"forward service {sandbox_name} "
+            f"--target-port 8090 --local 127.0.0.1:8090\n"
+            f"Restart=always\n"
+            f"RestartSec=5\n"
+            f"[Install]\n"
+            f"WantedBy=default.target\n"
+            f"FEOF\n"
             f"systemctl --user daemon-reload && "
-            f"systemctl --user enable --now codex-forward.service"
+            f"systemctl --user enable --now codex-forward.service && "
+            f"systemctl --user enable --now codex-oauth-proxy.service"
         ], check=False)
 
         if not self.sh.dry_run:
             time.sleep(3)
-
-        log("Saving Codex shared secret to VM host...")
-        secret_dir = f"/home/cloud-user/.codex-secrets/{sandbox_name}"
-        secret_path = f"{secret_dir}/ws-secret"
-        self.sh.run([
-            "bash", "-c",
-            f"mkdir -p {secret_dir} && chmod 700 {secret_dir} && "
-            f"openshell sandbox exec -n {sandbox_name} --no-tty -- "
-            f"cat /sandbox/.codex/ws-secret > {secret_path} && "
-            f"chmod 600 {secret_path}"
-        ], check=False)
 
 
 # ---------------------------------------------------------------------------

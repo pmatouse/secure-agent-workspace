@@ -138,7 +138,7 @@ def on_delete(spec, meta, namespace, **_):
         )
 
     v1 = client.CoreV1Api()
-    for suffix in ["-cloudinit", "-codex-secret"]:
+    for suffix in ["-cloudinit"]:
         try:
             v1.delete_namespaced_secret(f"{session_name}{suffix}", MANAGED_NAMESPACE)
         except client.ApiException:
@@ -152,7 +152,6 @@ def check_status(spec, meta, namespace, **_):
     session_name = spec["name"]
     cr_name = meta["name"]
     custom = client.CustomObjectsApi()
-    v1 = client.CoreV1Api()
 
     try:
         vm = custom.get_namespaced_custom_object(
@@ -165,15 +164,8 @@ def check_status(spec, meta, namespace, **_):
 
     printable = vm.get("status", {}).get("printableStatus", "Unknown")
 
-    has_secret = False
-    try:
-        v1.read_namespaced_secret(f"{session_name}-codex-secret", MANAGED_NAMESPACE)
-        has_secret = True
-    except client.ApiException:
-        pass
-
     connectable = False
-    if has_secret:
+    if printable == "Running":
         try:
             route = custom.get_namespaced_custom_object(
                 group="route.openshift.io", version="v1",

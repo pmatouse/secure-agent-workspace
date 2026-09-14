@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
-import subprocess
 from dataclasses import dataclass
 
 from kubernetes import client, config as k8s_config
@@ -34,21 +32,12 @@ class Session:
     created: str
     owner: str
     ws_url: str | None
-    has_secret: bool
-
-
-@dataclass
-class ConnectionInfo:
-    ws_url: str
-    token: str
-    expires_in: int
 
 
 def list_user_vms(username: str) -> list[Session]:
     _ensure_api()
     ns = config.MANAGED_NAMESPACE
     custom = client.CustomObjectsApi()
-    v1 = client.CoreV1Api()
 
     sessions = []
 
@@ -92,26 +81,18 @@ def list_user_vms(username: str) -> list[Session]:
 
         ws_url = _get_route_url(name, ns)
 
-        has_secret = False
-        try:
-            v1.read_namespaced_secret(f"{name}-codex-secret", ns)
-            has_secret = True
-        except client.ApiException:
-            pass
-
         sessions.append(Session(
             name=name,
             status=status,
             created=created,
             owner=username,
             ws_url=ws_url,
-            has_secret=has_secret,
         ))
 
     for name, status in cr_map.items():
         sessions.append(Session(
             name=name, status=status, created="", owner=username,
-            ws_url=None, has_secret=False,
+            ws_url=None,
         ))
 
     return sessions
@@ -134,19 +115,6 @@ def _get_route_url(name: str, namespace: str) -> str | None:
     except client.ApiException:
         pass
     return None
-
-
-def get_codex_secret(name: str) -> str | None:
-    _ensure_api()
-    v1 = client.CoreV1Api()
-    try:
-        secret = v1.read_namespaced_secret(
-            f"{name}-codex-secret", config.MANAGED_NAMESPACE
-        )
-        encoded = secret.data.get("ws-secret", "")
-        return base64.b64decode(encoded).decode() if encoded else None
-    except client.ApiException:
-        return None
 
 
 def get_vm_owner(name: str) -> str | None:
