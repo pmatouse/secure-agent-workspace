@@ -37,13 +37,14 @@ class Provider:
     nemoclaw_provider: str = ""
     credential_secret: str = ""
     credential_secret_key: str = "api_key"
+    credential_value: str = ""
     model: str = ""
 
 
 @dataclass
 class Sandbox:
     name: str
-    type: str = "generic"       # nemoclaw, openclaw, generic
+    type: str = "generic"       # nemoclaw, openclaw, codex, generic
     enabled: bool = True
     agent: str = "openclaw"     # openclaw, hermes
     image: str = ""
@@ -175,6 +176,7 @@ def parse_profiles(profiles_dir):
                         nemoclaw_provider=p.get("nemoclawProvider", ""),
                         credential_secret=p.get("credentialSecret", ""),
                         credential_secret_key=p.get("credentialSecretKey", "api_key"),
+                        credential_value=p.get("credentialValue", ""),
                         model=p.get("model", ""),
                     ))
             sb_file = ws_entry / "sandbox.yaml"
@@ -207,14 +209,18 @@ PROVIDER_CRED_MAP = {
     "google-vertex-ai": "GOOGLE_API_KEY",
     "claude-code": "ANTHROPIC_API_KEY",
     "codex": "OPENAI_API_KEY",
+    "openai": "OPENAI_API_KEY",
     "nvidia": "NVIDIA_API_KEY",
     "build": "NVIDIA_INFERENCE_API_KEY",
     "brave": "BRAVE_API_KEY",
     "tavily": "TAVILY_API_KEY",
+    "github": "GITHUB_TOKEN",
 }
 
 
 def resolve_credential(provider):
+    if provider.credential_value:
+        return provider.credential_value
     env_var = f"PROV_{provider.name}_KEY".replace("-", "_").upper()
     val = os.environ.get(env_var)
     if val:
@@ -621,6 +627,130 @@ class WorkspaceDeployer:
                 time.sleep(3)
             log("WARN: openclaw gateway health check failed")
 
+    def start_codex_app_server(self, sandbox_name, workspace_name="default"):
+
+        ws_args = ["--workspace", workspace_name] if workspace_name else []
+
+        if not self.sh.dry_run:
+            for i in range(20):
+                rc, out, _ = self.sh.run([
+                    "openshell", "sandbox", "get", sandbox_name
+                ] + ws_args, check=False)
+                clean = re.sub(r'\x1b\[[0-9;]*m', '', out or "")
+                if "Ready" in clean and "Error" not in clean:
+                    log(f"Sandbox '{sandbox_name}' is Ready")
+                    break
+                log(f"  waiting for sandbox ready... (attempt {i+1})")
+                time.sleep(5)
+
+        self.chown_sandbox_home(sandbox_name)
+
+        exec_cmd = ["openshell", "sandbox", "exec", "-n",
+                     sandbox_name] + ws_args + ["--no-tty", "--"]
+
+        log("Generating shared secret inside sandbox...")
+        self.sh.run(
+            exec_cmd + ["sh", "-c",
+                        "mkdir -p /sandbox/.codex && "
+                        "python3 -c 'import secrets; "
+                        "print(secrets.token_hex(32), end=\"\")' "
+                        "> /sandbox/.codex/ws-secret && "
+                        "chmod 600 /sandbox/.codex/ws-secret"],
+            check=False)
+
+        rc, ws_secret, _ = self.sh.run(
+            exec_cmd + ["cat", "/sandbox/.codex/ws-secret"],
+            check=False)
+        ws_secret = re.sub(r'\x1b\[[0-9;]*m', '', ws_secret or "").strip()
+
+        log("Configuring Codex (auth, model, sandbox bypass, bwrap stub)...")
+        self.sh.run(
+            exec_cmd + ["sh", "-c",
+                        "mkdir -p /sandbox/.local/bin && "
+                        "printf '{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"%s\"}' "
+                        "\"$OPENAI_API_KEY\" > /sandbox/.codex/auth.json && "
+                        "printf 'model = \"gpt-5.6-terra\"\\n"
+                        "sandbox = \"danger-full-access\"\\n"
+                        "' > /sandbox/.codex/config.toml && "
+                        "cat > /sandbox/.local/bin/bwrap << 'BWRAP'\n"
+                        "#!/bin/sh\n"
+                        "while [ $# -gt 0 ]; do\n"
+                        "  case \"$1\" in\n"
+                        "    --) shift; break ;;\n"
+                        "    --bind|--ro-bind|--dev-bind|--tmpfs|--proc|--dev"
+                        "|--dir|--symlink|--remount-ro|--setenv|--chdir) shift 2 ;;\n"
+                        "    --file|--lock-file) shift 2 ;;\n"
+                        "    -*) shift ;;\n"
+                        "    *) break ;;\n"
+                        "  esac\n"
+                        "done\n"
+                        "exec \"$@\"\n"
+                        "BWRAP\n"
+                        "chmod +x /sandbox/.local/bin/bwrap"],
+            check=False)
+
+        log("Starting Codex app-server...")
+        self.sh.run(
+            exec_cmd + ["sh", "-c",
+                        "nohup codex app-server "
+                        "--listen ws://0.0.0.0:8089 "
+                        "--ws-auth signed-bearer-token "
+                        "--ws-shared-secret-file /sandbox/.codex/ws-secret "
+                        "--ws-issuer saw-codex "
+                        "--ws-audience codex-session "
+                        "> /tmp/codex-app-server.log 2>&1 &"],
+            check=False)
+
+        if not self.sh.dry_run:
+            for i in range(10):
+                rc, _, _ = self.sh.run(
+                    exec_cmd + ["sh", "-c",
+                                "ss -tlnp src :8089 2>/dev/null | "
+                                "grep -q 8089"],
+                    check=False)
+                if rc == 0:
+                    log("Codex app-server ready")
+                    break
+                log(f"  waiting for codex app-server... (attempt {i+1})")
+                time.sleep(3)
+            else:
+                log("WARN: Codex app-server readyz check failed")
+
+        log("Installing codex port-forward as systemd service...")
+        self.sh.run([
+            "bash", "-c",
+            f"mkdir -p ~/.config/systemd/user && "
+            f"cat > ~/.config/systemd/user/codex-forward.service << 'EOF'\n"
+            f"[Unit]\n"
+            f"Description=Codex WebSocket port forward\n"
+            f"After=openshell-gateway.service\n"
+            f"[Service]\n"
+            f"ExecStart=/home/cloud-user/.local/bin/openshell-real "
+            f"forward service {sandbox_name} "
+            f"--target-port 8089 --local 0.0.0.0:8089\n"
+            f"Restart=always\n"
+            f"RestartSec=5\n"
+            f"[Install]\n"
+            f"WantedBy=default.target\n"
+            f"EOF\n"
+            f"systemctl --user daemon-reload && "
+            f"systemctl --user enable --now codex-forward.service"
+        ], check=False)
+
+        if not self.sh.dry_run:
+            time.sleep(3)
+
+        log("Saving Codex shared secret to VM host...")
+        secret_dir = f"/home/cloud-user/.codex-secrets/{sandbox_name}"
+        secret_path = f"{secret_dir}/ws-secret"
+        self.sh.run([
+            "bash", "-c",
+            f"mkdir -p {secret_dir} && chmod 700 {secret_dir} && "
+            f"openshell sandbox exec -n {sandbox_name} --no-tty -- "
+            f"cat /sandbox/.codex/ws-secret > {secret_path} && "
+            f"chmod 600 {secret_path}"
+        ], check=False)
+
 
 # ---------------------------------------------------------------------------
 # Verification
@@ -853,6 +983,11 @@ def main():
                         workspace_name=ws.name,
                         provider_id=prov_id,
                         model_id=model or "nvidia/nemotron-3-super-120b-a12b")
+
+                elif sb.type == "codex":
+                    deployer.create_sandbox_generic(sb, ws.name)
+                    deployer.start_codex_app_server(
+                        sb.name, workspace_name=ws.name)
 
                 else:
                     # Generic: just create the sandbox

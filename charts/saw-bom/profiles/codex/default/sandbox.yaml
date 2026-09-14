@@ -1,0 +1,12 @@
+apiVersion: saw.redhat.com/v1alpha1
+kind: Sandboxes
+metadata: {}
+spec:
+  sandboxes:
+    - name: codex
+      type: codex
+      enabled: true
+      image: image-registry.openshift-image-registry.svc.cluster.local:5000/openshell-agents/codex-openshell:latest
+      providers:
+        - openai
+        - github
