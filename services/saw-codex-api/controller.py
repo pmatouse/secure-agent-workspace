@@ -438,11 +438,35 @@ def _create_kubernetes(spec, meta, namespace):
         "key": b64.b64encode(secrets_mod.token_bytes(32)).decode(),
     })
 
-    # 7. Store OIDC token in session namespace (ephemeral)
-    if oidc_token:
-        _create_secret(v1, session_ns, f"{session_name}-oidc-token", {
-            "token": oidc_token.encode(),
+    # 7. Create per-session runtime client in Keycloak
+    session_uid = meta.get("uid", session_name)
+    rt_client_id = ""
+    rt_client_sub = ""
+    try:
+        from saw_codex_api import keycloak as kc
+        rt_client_id, rt_client_secret = kc.create_session_client(session_uid)
+        _create_secret(v1, session_ns, f"{session_name}-runtime-client", {
+            "client_id": rt_client_id.encode(),
+            "client_secret": rt_client_secret.encode(),
         })
+        rt_client_sub = kc.get_service_account_subject(rt_client_id) or ""
+        logger.info("Created runtime client %s (sub=%s)", rt_client_id, rt_client_sub)
+    except Exception as e:
+        logger.warning("Failed to create runtime client: %s", e)
+
+    # 7b. Mint provisioner token (short-lived, for provisioning Job)
+    prov_token = ""
+    prov_client_id = ""
+    try:
+        from saw_codex_api import keycloak as kc
+        prov_token, prov_expires_at = kc.get_provisioner_token()
+        prov_client_id = os.environ.get("PROVISIONER_CLIENT_ID", "saw-provisioner")
+        _create_secret(v1, session_ns, f"{session_name}-provision-token", {
+            "token": prov_token.encode(),
+        })
+        logger.info("Minted provisioner token (expires_at=%s)", prov_expires_at)
+    except Exception as e:
+        logger.warning("Failed to mint provisioner token: %s", e)
 
     # 8. Helm install
     _set_status(cr_name, namespace, "Creating",
@@ -456,6 +480,12 @@ def _create_kubernetes(spec, meta, namespace):
         "--set", f"oidc.issuerUrl={OIDC_ISSUER_URL}",
         "--set", "oidc.clientId=openshell-cli",
         "--set", f"sandboxImage={SANDBOX_IMAGE}",
+        "--set", f"ownerSub={owner}",
+        "--set", f"provisioner.clientId={prov_client_id}",
+        "--set", f"provisioner.tokenSecretName={session_name}-provision-token",
+        "--set", f"runtime.clientId={rt_client_id}",
+        "--set", f"runtime.clientSecretName={session_name}-runtime-client",
+        "--set", f"runtime.clientSubject={rt_client_sub}",
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -476,6 +506,14 @@ def _create_kubernetes(spec, meta, namespace):
 def _delete_kubernetes(spec, meta, namespace):
     session_name = spec["name"]
     cr_name = meta["name"]
+    session_uid = meta.get("uid", session_name)
+
+    # Delete runtime client from Keycloak
+    try:
+        from saw_codex_api import keycloak as kc
+        kc.delete_session_client(session_uid)
+    except Exception as e:
+        logger.warning("Failed to delete runtime client: %s", e)
 
     # Read session namespace from status
     custom = client.CustomObjectsApi()

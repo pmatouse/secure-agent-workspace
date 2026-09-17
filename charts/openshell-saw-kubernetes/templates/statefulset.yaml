@@ -88,6 +88,23 @@ spec:
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 1000
+          env:
+            - name: KC_TOKEN_URL
+              value: "{{ include "openshell-k8s.oidcIssuerUrl" . }}/protocol/openid-connect/token"
+            - name: RT_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openshell-k8s.fullname" . }}-runtime-client
+                  key: client_id
+            - name: RT_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openshell-k8s.fullname" . }}-runtime-client
+                  key: client_secret
+            - name: OIDC_ISSUER
+              value: "{{ include "openshell-k8s.oidcIssuerUrl" . }}"
+            - name: OIDC_AUDIENCE
+              value: "{{ .Values.oidc.clientId }}"
           command:
             - bash
             - -c
@@ -96,24 +113,72 @@ spec:
               until curl -sf http://localhost:8081/healthz 2>/dev/null; do
                 sleep 2
               done
-              echo "Gateway ready. Setting up mTLS..."
-              GW_DIR="$HOME/.config/openshell/gateways/local-gw"
-              mkdir -p "$GW_DIR/mtls"
-              cp /etc/client-tls/ca.crt "$GW_DIR/mtls/ca.crt"
-              cp /etc/client-tls/tls.crt "$GW_DIR/mtls/tls.crt"
-              cp /etc/client-tls/tls.key "$GW_DIR/mtls/tls.key"
-              openshell gateway add https://localhost:8080 --name local-gw --local 2>&1 || true
-              echo "Starting forward..."
-              exec openshell --gateway local-gw \
-                forward service codex \
-                --target-port {{ .Values.forward.port }} \
-                --local 0.0.0.0:{{ .Values.forward.port }}
+              echo "Gateway ready."
+
+              write_gw_config() {
+                GW_DIR="$HOME/.config/openshell/gateways/local-gw"
+                mkdir -p "$GW_DIR/mtls"
+                cp /etc/client-tls/ca.crt "$GW_DIR/mtls/ca.crt"
+                python3 -c "
+              import json
+              json.dump({'name':'local-gw','gateway_endpoint':'https://localhost:8080',
+                'is_remote':False,'gateway_port':8080,'auth_mode':'oidc',
+                'oidc_issuer':'$OIDC_ISSUER','oidc_client_id':'$RT_CLIENT_ID',
+                'oidc_audience':'$OIDC_AUDIENCE'},
+                open('$GW_DIR/metadata.json','w'))
+              json.dump({'access_token':'$1','issuer':'$OIDC_ISSUER',
+                'client_id':'$RT_CLIENT_ID'},
+                open('$GW_DIR/oidc_token.json','w'))
+              "
+              }
+
+              BACKOFF=2
+              MAX_BACKOFF=60
+              while true; do
+                RESPONSE=$(curl -sf --connect-timeout 5 --max-time 10 -X POST "$KC_TOKEN_URL" \
+                  -d "grant_type=client_credentials" \
+                  --data-urlencode "client_id=$RT_CLIENT_ID" \
+                  --data-urlencode "client_secret=$RT_CLIENT_SECRET" 2>/dev/null)
+                if [ $? -ne 0 ] || [ -z "$RESPONSE" ]; then
+                  echo "WARN: token endpoint unreachable, retrying in ${BACKOFF}s" >&2
+                  sleep "$BACKOFF"
+                  BACKOFF=$((BACKOFF * 2 > MAX_BACKOFF ? MAX_BACKOFF : BACKOFF * 2))
+                  continue
+                fi
+                PARSED=$(echo "$RESPONSE" | python3 -c "
+              import sys, json
+              try:
+                  d = json.load(sys.stdin)
+                  at, ei = d['access_token'], int(d.get('expires_in', 300))
+                  if ei < 30:
+                      print('ERROR: token too short', file=sys.stderr); sys.exit(1)
+                  print(f'{at}\n{ei}')
+              except (KeyError, json.JSONDecodeError) as e:
+                  print(f'ERROR: {e}', file=sys.stderr); sys.exit(1)
+              " 2>/dev/null)
+                if [ $? -ne 0 ] || [ -z "$PARSED" ]; then
+                  echo "WARN: invalid token, retrying in ${BACKOFF}s" >&2
+                  sleep "$BACKOFF"
+                  BACKOFF=$((BACKOFF * 2 > MAX_BACKOFF ? MAX_BACKOFF : BACKOFF * 2))
+                  continue
+                fi
+                TOKEN=$(echo "$PARSED" | head -1)
+                EXPIRES_IN=$(echo "$PARSED" | tail -1)
+                BACKOFF=2
+                write_gw_config "$TOKEN"
+                RENEWAL=$(( EXPIRES_IN * 4 / 5 ))
+                echo "Token acquired (expires_in=${EXPIRES_IN}s, renewal in ${RENEWAL}s)"
+                timeout "$RENEWAL" openshell --gateway local-gw forward service codex \
+                  --target-port {{ .Values.forward.port }} \
+                  --local 0.0.0.0:{{ .Values.forward.port }} || true
+                sleep 2
+              done
           ports:
             - name: codex-ws
               containerPort: {{ .Values.forward.port }}
               protocol: TCP
           volumeMounts:
-            - name: tls-client
+            - name: tls-client-ca
               mountPath: /etc/client-tls
               readOnly: true
           resources:
@@ -162,9 +227,6 @@ spec:
         - name: tls-client-ca
           secret:
             secretName: {{ include "openshell-k8s.fullname" . }}-client-ca
-        - name: tls-client
-          secret:
-            secretName: {{ include "openshell-k8s.fullname" . }}-client-tls
         - name: jwt-keys
           secret:
             secretName: {{ include "openshell-k8s.fullname" . }}-jwt-keys

@@ -89,4 +89,6 @@ keycloak:
     # Per-session runtime clients are created dynamically by the controller.
     # Their template settings:
     runtimeTemplate:
-      accessTokenLifespan: 28800  # 8 hours, balances security vs WebSocket disruption
+      accessTokenLifespan: 86400  # 24 hours, matches openshell-cli. Disconnect once/day.
+      # Future: SDK-level token refresh on the gRPC channel would eliminate
+      # disconnects entirely. The v0.0.116 CLI caches the bearer at startup.

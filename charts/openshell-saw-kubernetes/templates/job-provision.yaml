@@ -23,22 +23,40 @@ data:
       sleep 5
     done
 
-    echo "=== Setting up mTLS ==="
-    GW_DIR="$HOME/.config/openshell/gateways/session"
+    echo "=== Setting up OIDC gateway config ==="
+    PROV_TOKEN=$(cat /etc/provision-token/token)
+    OIDC_ISSUER="{{ include "openshell-k8s.oidcIssuerUrl" . }}"
+    PROV_CLIENT_ID="{{ .Values.provisioner.clientId }}"
+    OWNER_SUB="{{ .Values.ownerSub }}"
+    RT_CLIENT_SUB="{{ .Values.runtime.clientSubject }}"
+
+    export GW_DIR="$HOME/.config/openshell/gateways/session"
+    export PROV_TOKEN OIDC_ISSUER PROV_CLIENT_ID GATEWAY
     mkdir -p "$GW_DIR/mtls"
     cp /etc/client-tls/ca.crt "$GW_DIR/mtls/ca.crt"
-    cp /etc/client-tls/tls.crt "$GW_DIR/mtls/tls.crt"
-    cp /etc/client-tls/tls.key "$GW_DIR/mtls/tls.key"
-
-    echo "=== Registering gateway ==="
-    openshell gateway add "$GATEWAY" --name session --local 2>&1 || true
+    python3 << 'PYEOF'
+    import json, os
+    gw_dir = os.environ['GW_DIR']
+    json.dump({'name':'session','gateway_endpoint':os.environ['GATEWAY'],'is_remote':False,
+      'gateway_port':8080,'auth_mode':'oidc','oidc_issuer':os.environ['OIDC_ISSUER'],
+      'oidc_client_id':os.environ['PROV_CLIENT_ID'],'oidc_audience':'{{ .Values.oidc.clientId }}'},
+      open(f'{gw_dir}/metadata.json','w'))
+    json.dump({'access_token':os.environ['PROV_TOKEN'],'issuer':os.environ['OIDC_ISSUER'],
+      'client_id':os.environ['PROV_CLIENT_ID']},
+      open(f'{gw_dir}/oidc_token.json','w'))
+    PYEOF
+    echo "Gateway registered with OIDC"
 
     echo "=== Enabling providers v2 ==="
     openshell --gateway session settings set --global --key providers_v2_enabled --value true --yes 2>&1 || true
 
-    echo "=== Creating workspace ==="
+    echo "=== Adding workspace members ==="
     openshell --gateway session workspace member add \
-      --workspace default --subject openshell-client --role admin 2>&1 || true
+      --workspace default --subject "$OWNER_SUB" --role user 2>&1 || true
+    if [ -n "$RT_CLIENT_SUB" ]; then
+      openshell --gateway session workspace member add \
+        --workspace default --subject "$RT_CLIENT_SUB" --role user 2>&1 || true
+    fi
 
     echo "=== Creating provider: openai ==="
     OPENAI_KEY=""
@@ -141,8 +159,8 @@ spec:
             - name: provision-script
               mountPath: /scripts
               readOnly: true
-            - name: oidc-token
-              mountPath: /etc/oidc
+            - name: provision-token
+              mountPath: /etc/provision-token
               readOnly: true
             - name: inference-secret
               mountPath: /etc/inference
@@ -154,14 +172,13 @@ spec:
         - name: provision-script
           configMap:
             name: {{ include "openshell-k8s.fullname" . }}-provision-script
-        - name: oidc-token
+        - name: provision-token
           secret:
-            secretName: {{ include "openshell-k8s.fullname" . }}-oidc-token
-            optional: true
+            secretName: {{ include "openshell-k8s.fullname" . }}-provision-token
         - name: inference-secret
           secret:
             secretName: inference
             optional: true
         - name: client-tls
           secret:
-            secretName: {{ include "openshell-k8s.fullname" . }}-client-tls
+            secretName: {{ include "openshell-k8s.fullname" . }}-client-ca

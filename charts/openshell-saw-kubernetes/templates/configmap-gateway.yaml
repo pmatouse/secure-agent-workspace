@@ -35,7 +35,17 @@ data:
     client_ca_path = "/etc/openshell-tls/client-ca/ca.crt"
 
     [openshell.gateway.auth]
-    allow_unauthenticated_users = true
+    allow_unauthenticated_users = false
+
+    {{- $oidcIssuer := include "openshell-k8s.oidcIssuerUrl" . }}
+    {{- if $oidcIssuer }}
+    [openshell.gateway.oidc]
+    issuer       = {{ $oidcIssuer | quote }}
+    audience     = {{ .Values.oidc.clientId | quote }}
+    roles_claim  = "realm_access.roles"
+    admin_role   = "saw-session-platform-admin"
+    user_role    = "openshell-user"
+    {{- end }}
 
     [openshell.gateway.gateway_jwt]
     signing_key_path = "/etc/openshell-jwt/signing.pem"

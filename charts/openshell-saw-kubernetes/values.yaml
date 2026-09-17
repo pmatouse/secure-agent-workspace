@@ -26,6 +26,20 @@ oidc:
   issuerUrl: ""
   clientId: "openshell-cli"
 
+# Provisioner identity for the provisioning Job (set by controller).
+provisioner:
+  clientId: ""
+  tokenSecretName: ""
+
+# Per-session runtime client for the forward sidecar (set by controller).
+runtime:
+  clientId: ""
+  clientSecretName: ""
+  clientSubject: ""
+
+# Session owner identity (set by controller).
+ownerSub: ""
+
 # Governance interceptor sidecar — runs in the gateway pod on localhost.
 governance:
   interceptorImage: "quay.io/rh-ai-quickstart/governance-interceptor:latest"

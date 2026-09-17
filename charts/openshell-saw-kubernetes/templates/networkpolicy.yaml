@@ -25,8 +25,12 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # From the OpenShift router (codex WebSocket + gateway gRPC)
-    - ports:
+    # From the OpenShift router (codex WebSocket + gateway gRPC + health)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
         - port: {{ .Values.forward.port }}
           protocol: TCP
         - port: 8080
