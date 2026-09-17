@@ -102,7 +102,7 @@ data:
 
     # Write config
     $EXEC sh -c 'printf "{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"%s\"}" "$OPENAI_API_KEY" > /sandbox/.codex/auth.json' 2>&1
-    $EXEC sh -c 'printf "model = \"gpt-5.6-terra\"\nsandbox = \"danger-full-access\"\n" > /sandbox/.codex/config.toml' 2>&1
+    $EXEC sh -c 'printf "model = \"gpt-5.6-terra\"\nsandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\n" > /sandbox/.codex/config.toml' 2>&1
 
     # Create bwrap stub
     $EXEC sh -c 'mkdir -p /sandbox/.local/bin && cat > /sandbox/.local/bin/bwrap << "BWRAP"

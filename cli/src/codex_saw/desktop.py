@@ -77,13 +77,19 @@ Host {alias}
 
     print(f"SSH host '{alias}' registered.")
     print()
-    print("To connect from ChatGPT Desktop:")
-    print(f"  1. Open Settings → Connections → SSH")
-    print(f"  2. Enable host: {alias}")
-    print(f"  3. Select project folder: /sandbox/<repo>")
+    print("┌─ ChatGPT Desktop Setup ─────────────────────────────")
+    print("│")
+    print("│  1. Open ChatGPT Desktop")
+    print("│  2. Go to Settings → Connections → SSH")
+    print(f"│  3. Click 'Add host' and select: {alias}")
+    print("│  4. Start a new Codex project (+ button)")
+    print(f"│  5. Under 'Location', pick the SSH host: {alias}")
+    print("│  6. Set the project folder to: /sandbox/<your-repo>")
+    print("│  7. Start coding — inference goes through the governed proxy")
+    print("│")
+    print("└──────────────────────────────────────────────────────")
     print()
-    print(f"To connect from terminal:")
-    print(f"  ssh {alias}")
+    print(f"Or from terminal:  ssh {alias}")
 
 
 def doctor(session: str):

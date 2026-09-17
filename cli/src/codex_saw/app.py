@@ -355,9 +355,15 @@ class SessionsScreen(Screen):
         self.app.notify(f"Registering Desktop SSH for '{name}'...")
         try:
             from . import desktop
+            desc = desktop._get_descriptor(name)
+            uid = desc.get("session_uid", "")
+            alias = desktop._alias(name, uid)
             desktop.register(name)
             self.app.call_from_thread(
-                self.app.notify, f"Desktop SSH registered for '{name}'. Check terminal for instructions."
+                self.app.notify,
+                f"Desktop registered: {alias}. "
+                f"In ChatGPT Desktop: Settings → Connections → SSH → "
+                f"add host '{alias}' → Start new project → select /sandbox/<repo>"
             )
         except Exception as e:
             self.app.call_from_thread(
