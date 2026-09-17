@@ -106,6 +106,7 @@ class SessionsScreen(Screen):
         Binding("d", "delete_session", "Delete"),
         Binding("enter", "connect", "Connect"),
         Binding("s", "shell", "Shell"),
+        Binding("D", "desktop_setup", "Desktop"),
         Binding("r", "refresh", "Refresh"),
         Binding("slash", "search", "Search"),
         Binding("s", "sort", "Sort"),
@@ -341,6 +342,27 @@ class SessionsScreen(Screen):
                      "sandbox@codex.default"],
                     env=env,
                 )
+
+    def action_desktop_setup(self):
+        name, status = self._get_selected_session()
+        if not name or status != "running":
+            self.app.notify("Select a running K8s session", severity="warning")
+            return
+        self._do_desktop_register(name)
+
+    @work(thread=True)
+    def _do_desktop_register(self, name: str):
+        self.app.notify(f"Registering Desktop SSH for '{name}'...")
+        try:
+            from . import desktop
+            desktop.register(name)
+            self.app.call_from_thread(
+                self.app.notify, f"Desktop SSH registered for '{name}'. Check terminal for instructions."
+            )
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Desktop setup failed: {e}", severity="error"
+            )
 
     @work(thread=True)
     def _fetch_and_connect(self, name: str):

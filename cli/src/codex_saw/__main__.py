@@ -21,6 +21,17 @@ def main():
     elif args and args[0] == "ssh-config" and len(args) >= 2:
         from .ssh import generate_ssh_config
         print(generate_ssh_config(args[1]))
+    elif args and args[0] == "desktop":
+        from . import desktop
+        if len(args) >= 3 and args[1] == "register":
+            desktop.register(args[2])
+        elif len(args) >= 3 and args[1] == "doctor":
+            desktop.doctor(args[2])
+        elif len(args) >= 3 and args[1] == "unregister":
+            desktop.unregister(args[2])
+        else:
+            print("Usage: codex-saw desktop <register|doctor|unregister> <session>")
+            sys.exit(1)
     else:
         from .app import CodexSawApp
         app = CodexSawApp()
