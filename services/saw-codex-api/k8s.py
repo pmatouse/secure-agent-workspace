@@ -251,6 +251,64 @@ def get_session_owner(name: str) -> str | None:
         return None
 
 
+def get_shell_descriptor(name: str) -> dict | None:
+    """Return shell connection descriptor for a K8s session."""
+    _ensure_api()
+    cr = _get_session_cr(name)
+    if not cr:
+        return None
+
+    backend = _session_backend(cr)
+    if backend != "kubernetes":
+        return None
+
+    sess_ns = _session_namespace(cr)
+    if not sess_ns:
+        return None
+
+    status = cr.get("status", {})
+    spec = cr.get("spec", {})
+
+    # Read gateway Route URL
+    custom = client.CustomObjectsApi()
+    gw_host = None
+    try:
+        route = custom.get_namespaced_custom_object(
+            group="route.openshift.io", version="v1",
+            namespace=sess_ns, plural="routes",
+            name=f"{spec.get('name', name)}-gateway",
+        )
+        gw_host = route.get("spec", {}).get("host")
+    except client.ApiException:
+        pass
+
+    # Read CA cert
+    v1 = client.CoreV1Api()
+    ca_pem = None
+    try:
+        secret = v1.read_namespaced_secret(
+            f"{spec.get('name', name)}-client-ca", sess_ns
+        )
+        ca_pem = base64.b64decode(secret.data.get("ca.crt", "")).decode()
+    except client.ApiException:
+        pass
+
+    return {
+        "session_uid": cr.get("metadata", {}).get("uid", ""),
+        "gateway_endpoint": f"https://{gw_host}:443" if gw_host else None,
+        "gateway_ca_pem": ca_pem,
+        "oidc_issuer": config.OIDC_ISSUER_URL,
+        "oidc_client_id": "openshell-cli",
+        "owner_subject": spec.get("owner", ""),
+        "owner_issuer": spec.get("ownerIssuer", ""),
+        "workspace": "default",
+        "sandbox_name": "codex",
+        "sandbox_id": status.get("sandboxId", ""),
+        "openshell_version": "0.0.116",
+        "shell_ready": status.get("phase") == "Running",
+    }
+
+
 def get_session_info(name: str) -> tuple[str | None, str | None, str | None]:
     """Return (owner, backend, namespace) for a session."""
     cr = _get_session_cr(name)

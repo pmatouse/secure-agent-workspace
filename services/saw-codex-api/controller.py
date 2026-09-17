@@ -136,6 +136,7 @@ def _generate_session_pki(session_name: str, session_ns: str) -> dict:
 
     # Server cert
     server_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cluster_domain = os.environ.get("CLUSTER_DOMAIN", "")
     server_sans = [
         x509.DNSName("localhost"),
         x509.DNSName(f"{session_name}-gateway"),
@@ -143,6 +144,10 @@ def _generate_session_pki(session_name: str, session_ns: str) -> dict:
         x509.DNSName(f"{session_name}-gateway.{session_ns}.svc.cluster.local"),
         x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
     ]
+    if cluster_domain:
+        server_sans.append(
+            x509.DNSName(f"{session_name}-gateway-{session_ns}.apps.{cluster_domain}")
+        )
     server_cert = (
         x509.CertificateBuilder()
         .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"{session_name}-gateway")]))

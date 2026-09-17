@@ -32,6 +32,14 @@ spec:
               value: {{ include "saw-codex-api.oidcIssuerUrl" . | quote }}
             - name: MAX_SESSIONS_PER_USER
               value: {{ .Values.controller.maxSessionsPerUser | quote }}
+            - name: PYTHONPATH
+              value: /app
+            {{- if .Values.global }}
+            {{- if .Values.global.clusterDomain }}
+            - name: CLUSTER_DOMAIN
+              value: {{ .Values.global.clusterDomain | quote }}
+            {{- end }}
+            {{- end }}
           resources:
             limits:
               cpu: 500m

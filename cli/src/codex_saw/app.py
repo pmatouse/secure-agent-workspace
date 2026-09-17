@@ -105,6 +105,7 @@ class SessionsScreen(Screen):
         Binding("n", "new_session", "New"),
         Binding("d", "delete_session", "Delete"),
         Binding("enter", "connect", "Connect"),
+        Binding("s", "shell", "Shell"),
         Binding("r", "refresh", "Refresh"),
         Binding("slash", "search", "Search"),
         Binding("s", "sort", "Sort"),
@@ -295,6 +296,51 @@ class SessionsScreen(Screen):
         if not name or status not in ("running", "unmanaged"):
             return
         self._fetch_and_connect(name)
+
+    def action_shell(self):
+        name, status = self._get_selected_session()
+        if not name or status != "running":
+            self.app.notify("Select a running K8s session for shell", severity="warning")
+            return
+        self._fetch_and_shell(name)
+
+    @work(thread=True)
+    def _fetch_and_shell(self, name: str):
+        self.app.notify(f"Opening shell to '{name}'...")
+        try:
+            client = self.app.get_client()
+            descriptor = client.get_shell_info(name)
+            token = self.app._token
+            self.app.call_from_thread(self._launch_shell, name, descriptor, token)
+        except httpx.HTTPStatusError as e:
+            detail = e.response.json().get("detail", str(e)) if e.response.status_code in (400, 503) else str(e)
+            self.app.call_from_thread(
+                self.app.notify, f"Shell not available: {detail}", severity="warning"
+            )
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Shell failed: {e}", severity="error"
+            )
+
+    def _launch_shell(self, name, descriptor, token):
+        import shutil, subprocess, os
+        from .openshell_adapter import GatewayConfig
+        openshell = shutil.which("openshell")
+        if not openshell:
+            self.app.notify("openshell CLI not found in PATH", severity="error")
+            return
+        with GatewayConfig(name, descriptor, token) as gw:
+            env = {**os.environ, **gw.env}
+            proxy_cmd = f"{openshell} ssh-proxy --gateway-name {gw.gateway_name} --name codex --workspace default"
+            with self.app.suspend():
+                os.system("clear")
+                subprocess.run(
+                    ["ssh", "-o", f"ProxyCommand={proxy_cmd}",
+                     "-o", "StrictHostKeyChecking=no",
+                     "-o", "UserKnownHostsFile=/dev/null",
+                     "sandbox@codex.default"],
+                    env=env,
+                )
 
     @work(thread=True)
     def _fetch_and_connect(self, name: str):

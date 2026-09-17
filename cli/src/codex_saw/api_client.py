@@ -47,3 +47,16 @@ class SawCodexClient:
         )
         r.raise_for_status()
         return r.json()
+
+    def get_shell_info(self, name: str) -> dict:
+        r = httpx.get(
+            f"{self.api_url}/sessions/{name}/shell",
+            headers=self.headers,
+            timeout=15,
+            verify=False,
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+ApiClient = SawCodexClient

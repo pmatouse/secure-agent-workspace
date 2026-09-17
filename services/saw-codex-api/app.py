@@ -18,6 +18,7 @@ from .k8s import (
     get_codex_secret,
     get_session_info,
     get_session_owner,
+    get_shell_descriptor,
     list_user_vms,
     _get_route_url,
 )
@@ -190,3 +191,29 @@ async def connect_session(
     )
 
     return ConnectResponse(ws_url=ws_url, token=token, expires_in=ttl)
+
+
+@app.get("/sessions/{name}/shell")
+async def shell_session(
+    name: str, user: UserInfo = Depends(get_current_user)
+):
+    """Return shell connection descriptor for SSH/Desktop access (K8s only)."""
+    _validate_name(name)
+    descriptor = await asyncio.to_thread(get_shell_descriptor, name)
+    if descriptor is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if descriptor.get("owner_subject") != user.sub:
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    if not descriptor.get("shell_ready"):
+        raise HTTPException(
+            status_code=503, detail="Session not ready for shell access"
+        )
+
+    if not descriptor.get("gateway_endpoint"):
+        raise HTTPException(
+            status_code=503, detail="Gateway route not available"
+        )
+
+    return descriptor
