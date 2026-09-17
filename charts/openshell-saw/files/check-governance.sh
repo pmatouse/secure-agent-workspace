@@ -5,24 +5,28 @@
 if [[ "${GOVERNANCE_ENABLED}" == "true" ]]; then
   echo "Checking governance interceptor at ${GOVERNANCE_ENDPOINT}..."
   INTERCEPTOR_READY=0
-  for i in $(seq 1 12); do
-    # NOTE: this used to be a single `A || B && C` condition. In bash, &&/||
-    # have equal precedence and evaluate left-to-right, so that actually
-    # meant (A || B) && C — even a directly-successful curl check (A) still
-    # required the journalctl grep (C) to pass, or the whole setup Job would
-    # exit 1 despite the interceptor being genuinely reachable. Split into
-    # explicit branches instead.
+  for i in $(seq 1 30); do
+    # Check from the Job pod (may be blocked by NetworkPolicy)
     if curl -sf --max-time 5 "${GOVERNANCE_ENDPOINT}" >/dev/null 2>&1; then
       INTERCEPTOR_READY=1
       break
     fi
+    # Check from inside the VM: TCP connect to interceptor (it speaks gRPC, not HTTP)
+    INTERCEPTOR_HOST=$(echo "${GOVERNANCE_ENDPOINT}" | sed 's|http://||;s|:.*||')
+    INTERCEPTOR_PORT=$(echo "${GOVERNANCE_ENDPOINT}" | sed 's|.*:||;s|/.*||')
+    if guest_ssh "timeout 3 bash -c '</dev/tcp/${INTERCEPTOR_HOST}/${INTERCEPTOR_PORT}'" >/dev/null 2>&1; then
+      INTERCEPTOR_READY=1
+      break
+    fi
+    # Check from inside the VM: gateway journal shows interceptors initialized
     if guest_ssh "openshell-gateway --version" >/dev/null 2>&1 && \
        guest_ssh "journalctl --user -u openshell-gateway.service --no-pager 2>/dev/null | grep -q 'interceptors initialized'"; then
       INTERCEPTOR_READY=1
       break
     fi
     echo "  waiting for interceptor... (attempt $i)"
-    sleep 5
+    # Longer sleep after gateway upgrade (pod restart) to give time for re-init
+    if [ "$i" -gt 12 ]; then sleep 10; else sleep 5; fi
   done
   if [[ "${INTERCEPTOR_READY}" -ne 1 ]]; then
     echo "ERROR: governance interceptor is unreachable at ${GOVERNANCE_ENDPOINT}" >&2

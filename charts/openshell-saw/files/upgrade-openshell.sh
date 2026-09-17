@@ -4,7 +4,18 @@
 #          RUNTIME, SECRETS_DIR, WORK_DIR, NS, ALLOW_ANONYMOUS_PULL,
 #          guest_ssh/guest_scp (functions)
 
+UPGRADE_NEEDED=true
 if [[ -n "${GATEWAY_IMAGE}" && -n "${SUPERVISOR_IMAGE}" && -n "${OPENSHELL_PIP_VERSION}" ]]; then
+  # Skip upgrade if binaries are already at the right version (idempotent retry)
+  CURRENT_GW_VER=$(guest_ssh "openshell-gateway --version 2>/dev/null" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\S*' | head -1 || true)
+  EXPECTED_VER=$(echo "${OPENSHELL_PIP_VERSION}" | sed 's/+/-/')
+  if [[ -n "${CURRENT_GW_VER}" && "${CURRENT_GW_VER}" == "${EXPECTED_VER}" ]]; then
+    echo "OpenShell binaries already at ${CURRENT_GW_VER}, skipping upgrade"
+    UPGRADE_NEEDED=false
+  fi
+fi
+
+if [[ "${UPGRADE_NEEDED}" == "true" && -n "${GATEWAY_IMAGE}" && -n "${SUPERVISOR_IMAGE}" && -n "${OPENSHELL_PIP_VERSION}" ]]; then
   echo "Upgrading OpenShell binaries (gateway=${GATEWAY_IMAGE}, supervisor=${SUPERVISOR_IMAGE}, cli=${OPENSHELL_PIP_VERSION})..."
   guest_ssh "
     ${RUNTIME} pull '${GATEWAY_IMAGE}' && \
@@ -95,18 +106,42 @@ if [[ -n "${OIDC_ISSUER:-}" ]]; then
   echo "OIDC config patched"
 fi
 
-# --- Restart gateway with new binaries ---
-echo "Restarting gateway service..."
-guest_ssh "systemctl --user restart openshell-gateway.service" || true
-GW_READY=0
-for i in $(seq 1 10); do
-  if guest_ssh "systemctl --user is-active openshell-gateway.service" 2>/dev/null; then
-    GW_READY=1; break
+# --- Pin supervisor image so gateway doesn't pull mutable :dev tag ---
+if [[ -n "${SUPERVISOR_IMAGE}" ]]; then
+  echo "Pinning supervisor image to ${SUPERVISOR_IMAGE}..."
+  guest_ssh "
+    for CFG in /etc/openshell/gateway.toml ~/.config/openshell/gateway.toml; do
+      if [[ -f \"\${CFG}\" ]]; then
+        grep -q 'supervisor_image' \"\${CFG}\" && \
+          sed -i 's|supervisor_image = .*|supervisor_image = \"${SUPERVISOR_IMAGE}\"|' \"\${CFG}\" || \
+          sed -i '/\\[openshell.gateway\\]/a supervisor_image = \"${SUPERVISOR_IMAGE}\"' \"\${CFG}\"
+      fi
+    done
+  " || true
+  guest_ssh "
+    grep -v '^OPENSHELL_SUPERVISOR_IMAGE' ~/.config/openshell/gateway.env > /tmp/genv.tmp 2>/dev/null && \
+    mv /tmp/genv.tmp ~/.config/openshell/gateway.env; \
+    echo 'OPENSHELL_SUPERVISOR_IMAGE=${SUPERVISOR_IMAGE}' >> ~/.config/openshell/gateway.env
+  " || true
+  echo "Supervisor image pinned"
+fi
+
+# --- Restart gateway with new binaries (skip if upgrade was skipped) ---
+if [[ "${UPGRADE_NEEDED}" == "true" ]]; then
+  echo "Restarting gateway service..."
+  guest_ssh "systemctl --user restart openshell-gateway.service" || true
+  GW_READY=0
+  for i in $(seq 1 10); do
+    if guest_ssh "systemctl --user is-active openshell-gateway.service" 2>/dev/null; then
+      GW_READY=1; break
+    fi
+    echo "  waiting for gateway... (attempt $i)"
+    sleep 3
+  done
+  if [[ "${GW_READY}" -ne 1 ]]; then
+    echo "WARN: gateway did not restart after upgrade"
+    guest_ssh "journalctl --user -u openshell-gateway.service --no-pager 2>/dev/null | tail -5" || true
   fi
-  echo "  waiting for gateway... (attempt $i)"
-  sleep 3
-done
-if [[ "${GW_READY}" -ne 1 ]]; then
-  echo "WARN: gateway did not restart after upgrade"
-  guest_ssh "journalctl --user -u openshell-gateway.service --no-pager 2>/dev/null | tail -5" || true
+else
+  echo "Skipping gateway restart (no upgrade performed)"
 fi

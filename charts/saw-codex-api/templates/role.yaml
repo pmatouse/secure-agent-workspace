@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "saw-codex-api.fullname" . }}
+  labels:
+    {{- include "saw-codex-api.labels" . | nindent 4 }}
+rules:
+  # Read VMs and VMIs for session listing
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines", "virtualmachineinstances"]
+    verbs: ["get", "list"]
+  # Read Routes for codex WebSocket URLs
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list"]
+  # Read codex-secret for JWT minting; create short-lived OIDC token secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create"]
+  # Create/delete/list CodexSession CRs
+  - apiGroups: ["saw.redhat.com"]
+    resources: ["codexsessions"]
+    verbs: ["create", "delete", "get", "list"]

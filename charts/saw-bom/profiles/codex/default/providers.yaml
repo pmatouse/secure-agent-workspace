@@ -1,0 +1,14 @@
+apiVersion: saw.redhat.com/v1alpha1
+kind: Providers
+metadata:
+  profile: codex
+spec:
+  providers:
+    - name: openai
+      type: openai
+      model: gpt-5.6-terra
+      credentialSecret: inference
+      credentialSecretKey: api_key
+    - name: github
+      type: github
+      credentialValue: anonymous
