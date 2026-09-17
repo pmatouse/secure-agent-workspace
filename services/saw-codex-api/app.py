@@ -111,7 +111,8 @@ async def create_session(
 
     oidc_token = request.headers.get("authorization", "")[7:]
     ok = await asyncio.to_thread(
-        create_session_cr, name, user.sub, oidc_token, backend
+        create_session_cr, name, user.sub, oidc_token, backend,
+        owner_issuer=user.issuer_url,
     )
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to create session")

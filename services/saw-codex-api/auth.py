@@ -14,6 +14,7 @@ from . import config
 class UserInfo:
     sub: str
     username: str
+    issuer_url: str
 
 _jwks_cache: dict | None = None
 _jwks_fetched_at: float = 0.0
@@ -70,7 +71,8 @@ async def get_current_user(request: Request) -> UserInfo:
         if not sub:
             raise HTTPException(status_code=401, detail="No sub claim in token")
         username = payload.get("preferred_username") or sub
-        return UserInfo(sub=sub, username=username)
+        issuer_url = payload.get("iss", config.OIDC_ISSUER_URL)
+        return UserInfo(sub=sub, username=username, issuer_url=issuer_url)
 
     except JWTError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}") from e

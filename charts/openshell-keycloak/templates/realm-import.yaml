@@ -58,6 +58,55 @@ spec:
               included.client.audience: {{ .Values.keycloak.clients.cli.clientId | quote }}
               id.token.claim: "true"
               access.token.claim: "true"
+      {{- if .Values.keycloak.machineClients }}
+      # --- Keycloak Admin client: manages per-session runtime clients ---
+      - clientId: {{ .Values.keycloak.machineClients.keycloakAdmin.clientId | quote }}
+        name: SAW Keycloak Admin
+        enabled: true
+        publicClient: false
+        clientAuthenticatorType: client-secret
+        secret: {{ .Values.keycloak.machineClients.keycloakAdmin.clientSecret | quote }}
+        standardFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        protocolMappers:
+          - name: audience
+            protocol: openid-connect
+            protocolMapper: oidc-audience-mapper
+            config:
+              included.client.audience: {{ .Values.keycloak.clients.cli.clientId | quote }}
+              id.token.claim: "false"
+              access.token.claim: "true"
+      # --- Provisioner client: OpenShell platform-admin for provisioning ---
+      - clientId: {{ .Values.keycloak.machineClients.provisioner.clientId | quote }}
+        name: SAW Provisioner
+        enabled: true
+        publicClient: false
+        clientAuthenticatorType: client-secret
+        secret: {{ .Values.keycloak.machineClients.provisioner.clientSecret | quote }}
+        standardFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        attributes:
+          access.token.lifespan: {{ .Values.keycloak.machineClients.provisioner.accessTokenLifespan | quote }}
+        protocolMappers:
+          - name: realm-roles
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-realm-role-mapper
+            config:
+              multivalued: "true"
+              claim.name: realm_access.roles
+              jsonType.label: String
+              id.token.claim: "false"
+              access.token.claim: "true"
+          - name: audience
+            protocol: openid-connect
+            protocolMapper: oidc-audience-mapper
+            config:
+              included.client.audience: {{ .Values.keycloak.clients.cli.clientId | quote }}
+              id.token.claim: "false"
+              access.token.claim: "true"
+      {{- end }}
       - clientId: {{ .Values.keycloak.clients.dashboard.clientId | quote }}
         name: OpenShell Dashboard
         enabled: true
@@ -108,6 +157,27 @@ spec:
               id.token.claim: "false"
               access.token.claim: "true"
     users:
+      {{- if .Values.keycloak.machineClients }}
+      # Service account for provisioner client — gets platform-admin role
+      - username: service-account-{{ .Values.keycloak.machineClients.provisioner.clientId }}
+        enabled: true
+        serviceAccountClientId: {{ .Values.keycloak.machineClients.provisioner.clientId | quote }}
+        realmRoles:
+          - "saw-session-platform-admin"
+          - "openshell-user"
+      # Service account for keycloak-admin — gets realm-management
+      - username: service-account-{{ .Values.keycloak.machineClients.keycloakAdmin.clientId }}
+        enabled: true
+        serviceAccountClientId: {{ .Values.keycloak.machineClients.keycloakAdmin.clientId | quote }}
+        realmRoles:
+          - "openshell-user"
+        clientRoles:
+          realm-management:
+            - "manage-clients"
+            - "view-clients"
+            - "view-realm"
+            - "manage-users"
+      {{- end }}
       {{- range .Values.keycloak.testUsers }}
       - username: {{ .username | quote }}
         firstName: {{ .firstName | default (.username | title) | quote }}

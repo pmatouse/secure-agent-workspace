@@ -263,7 +263,8 @@ def get_session_info(name: str) -> tuple[str | None, str | None, str | None]:
 
 
 def create_session_cr(
-    name: str, owner: str, oidc_token: str = "", backend: str = ""
+    name: str, owner: str, oidc_token: str = "", backend: str = "",
+    owner_issuer: str = "",
 ) -> bool:
     """Create a CodexSession CR and a short-lived OIDC token Secret."""
     _ensure_api()
@@ -286,6 +287,8 @@ def create_session_cr(
             logger.warning("Failed to create OIDC token secret: %s", e)
 
     spec = {"name": name, "owner": owner}
+    if owner_issuer:
+        spec["ownerIssuer"] = owner_issuer
     spec["runtime"] = {"backend": backend}
 
     try:

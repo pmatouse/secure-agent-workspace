@@ -28,6 +28,8 @@ spec:
                   pattern: "^[a-z][a-z0-9-]*$"
                 owner:
                   type: string
+                ownerIssuer:
+                  type: string
                 runtime:
                   type: object
                   properties:
@@ -49,6 +51,12 @@ spec:
                 backend:
                   type: string
                 namespace:
+                  type: string
+                shellReady:
+                  type: boolean
+                gatewayEndpoint:
+                  type: string
+                sandboxId:
                   type: string
       subresources:
         status: {}

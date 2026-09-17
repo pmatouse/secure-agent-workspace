@@ -71,3 +71,22 @@ keycloak:
   roles:
     - openshell-user
     - openshell-admin
+    - saw-session-platform-admin
+
+  # Machine clients for K8s backend automation (confidential, not public)
+  machineClients:
+    # Keycloak admin: creates/deletes per-session runtime clients.
+    # Credentials stay in the controller pod ONLY.
+    keycloakAdmin:
+      clientId: saw-keycloak-admin
+      clientSecret: ""  # Override in values-secret.yaml
+    # Provisioner: mints OpenShell provisioning tokens.
+    # Has saw-session-platform-admin role but NO Keycloak admin permissions.
+    provisioner:
+      clientId: saw-provisioner
+      clientSecret: ""  # Override in values-secret.yaml
+      accessTokenLifespan: 600  # 10 min, short-lived for provisioning Jobs
+    # Per-session runtime clients are created dynamically by the controller.
+    # Their template settings:
+    runtimeTemplate:
+      accessTokenLifespan: 28800  # 8 hours, balances security vs WebSocket disruption
