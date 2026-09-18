@@ -27,6 +27,44 @@ def _get_client():
     return ApiClient(c["api_url"], token), token
 
 
+def _login_interactive() -> tuple:
+    """Attempt interactive browser login, return (client, token) or exit."""
+    c = cfg_mod.load_config()
+    print("codex-saw: opening browser for login...", file=sys.stderr)
+    token = auth.browser_login(
+        c["oidc"].get("issuer_url", ""),
+        c["oidc"].get("client_id", "openshell-cli"),
+        c["oidc"]["token_dir"],
+    )
+    if not token:
+        print("codex-saw: login failed", file=sys.stderr)
+        sys.exit(1)
+    return ApiClient(c["api_url"], token), token
+
+
+def _get_descriptor(client, token, session: str, interactive: bool):
+    """Get shell descriptor, retry with login on 401 if interactive."""
+    try:
+        return client.get_shell_info(session), client, token
+    except Exception as e:
+        msg = str(e)
+        if "401" in msg and interactive:
+            print("codex-saw: token expired, re-authenticating...", file=sys.stderr)
+            client, token = _login_interactive()
+            return client.get_shell_info(session), client, token
+        elif "401" in msg:
+            print("codex-saw: session expired — run 'codex-saw' and log in again", file=sys.stderr)
+        elif "403" in msg:
+            print(f"codex-saw: access denied to session '{session}'", file=sys.stderr)
+        elif "404" in msg:
+            print(f"codex-saw: session '{session}' not found", file=sys.stderr)
+        elif "503" in msg:
+            print(f"codex-saw: session '{session}' not ready for shell access", file=sys.stderr)
+        else:
+            print(f"codex-saw: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
 def ssh_proxy(
     session: str,
     expected_uid: str | None = None,
@@ -36,14 +74,17 @@ def ssh_proxy(
 
     All diagnostics go to stderr. stdout is clean for SSH transport.
     """
+    interactive = not non_interactive
+
     try:
         client, token = _get_client()
-    except Exception as e:
+    except Exception:
         if non_interactive:
-            print(f"codex-saw: login required — run 'codex-saw' to authenticate", file=sys.stderr)
+            print("codex-saw: login required — run 'codex-saw' to authenticate", file=sys.stderr)
             sys.exit(1)
-        raise
-    descriptor = client.get_shell_info(session)
+        client, token = _login_interactive()
+
+    descriptor, client, token = _get_descriptor(client, token, session, interactive)
 
     if expected_uid and descriptor.get("session_uid") != expected_uid:
         print(
@@ -100,8 +141,12 @@ Host {alias}
 
 def shell(session: str):
     """Open an interactive shell in a sandbox."""
-    client, token = _get_client()
-    descriptor = client.get_shell_info(session)
+    try:
+        client, token = _get_client()
+    except Exception:
+        client, token = _login_interactive()
+
+    descriptor, client, token = _get_descriptor(client, token, session, interactive=True)
 
     openshell = shutil.which("openshell")
     if not openshell:
