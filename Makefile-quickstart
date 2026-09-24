@@ -572,10 +572,13 @@ codex-setup: check-prereqs generate-keys ## Full Codex setup: build images, depl
 	@echo "=== Step 8/10: Deploy saw-bom with codex profile ==="
 	helm upgrade --install saw-bom charts/saw-bom -n $(NS) --set 'profiles={codex}'
 	@echo ""
-	@echo "=== Step 9/10: Authenticate ==="
+	@echo "=== Step 9/11: Configure Keycloak machine clients ==="
+	$(MAKE) codex-setup-keycloak-clients
+	@echo ""
+	@echo "=== Step 10/11: Authenticate ==="
 	$(MAKE) login
 	@echo ""
-	@echo "=== Step 10/10: Check inference secret ==="
+	@echo "=== Step 11/11: Check inference secret ==="
 	@if ! oc get secret inference -n $(NS) >/dev/null 2>&1; then \
 		echo ""; \
 		echo "  WARNING: Inference secret not found. Create it now:"; \
@@ -603,14 +606,71 @@ codex-deploy-api: build-saw-codex-api-local ## Build and deploy the saw-codex-ap
 		echo "Error: Cannot detect OIDC issuer. Deploy Keycloak first: make keycloak"; \
 		exit 1; \
 	fi; \
-	echo "Deploying saw-codex-api (OIDC issuer: $$OIDC_ISSUER)..."; \
+	CLUSTER_DOMAIN=$$(oc get ingress.config cluster -o jsonpath='{.spec.domain}' 2>/dev/null | sed 's/^apps\.//'); \
+	echo "Deploying saw-codex-api (OIDC: $$OIDC_ISSUER, domain: $$CLUSTER_DOMAIN)..."; \
 	helm upgrade --install saw-codex-api charts/saw-codex-api \
 		--namespace $(NS) \
 		--set "oidc.issuerUrl=$$OIDC_ISSUER" \
+		--set "global.clusterDomain=$$CLUSTER_DOMAIN" \
 		--set "image=image-registry.openshift-image-registry.svc:5000/$(NS)/saw-codex-api:latest"; \
 	echo ""; \
 	echo "API URL: $$(oc get route saw-codex-api -n $(NS) -o jsonpath='https://{.spec.host}' 2>/dev/null)"; \
 	echo "Health:  $$(oc get route saw-codex-api -n $(NS) -o jsonpath='https://{.spec.host}' 2>/dev/null)/health"
+
+codex-setup-keycloak-clients: ## Create Keycloak machine clients for K8s backend OIDC
+	@KC_HOST=$$(oc get routes -n $(NS) -o jsonpath='{.items[?(@.metadata.labels.app=="keycloak")].spec.host}' 2>/dev/null); \
+	if [ -z "$$KC_HOST" ]; then \
+		KC_HOST=$$(oc get routes -n $(NS) -l app=keycloak -o jsonpath='{.items[0].spec.host}' 2>/dev/null); \
+	fi; \
+	if [ -z "$$KC_HOST" ]; then \
+		KC_HOST=$$(oc get routes -n $(NS) -o jsonpath='{range .items[*]}{.spec.host}{"\n"}{end}' 2>/dev/null | grep keycloak | head -1); \
+	fi; \
+	if [ -z "$$KC_HOST" ]; then echo "Error: Keycloak route not found"; exit 1; fi; \
+	echo "Keycloak: $$KC_HOST"; \
+	KC_ADMIN_USER=$$(oc get secret openshell-keycloak-initial-admin -n $(NS) -o jsonpath='{.data.username}' | base64 -d); \
+	KC_ADMIN_PW=$$(oc get secret openshell-keycloak-initial-admin -n $(NS) -o jsonpath='{.data.password}' | base64 -d); \
+	ADMIN_TOKEN=$$(curl -sk -X POST "https://$$KC_HOST/realms/master/protocol/openid-connect/token" \
+		-d "grant_type=password&client_id=admin-cli&username=$$KC_ADMIN_USER&password=$$KC_ADMIN_PW" \
+		| python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"); \
+	BASE="https://$$KC_HOST/admin/realms/openshell"; \
+	echo "Creating saw-session-platform-admin role..."; \
+	curl -sk -X POST "$$BASE/roles" -H "Authorization: Bearer $$ADMIN_TOKEN" \
+		-H "Content-Type: application/json" \
+		-d '{"name":"saw-session-platform-admin","composite":false}' -w " %{http_code}\n" -o /dev/null; \
+	KC_ADMIN_SECRET=$$(openssl rand -hex 16); \
+	PROV_SECRET=$$(openssl rand -hex 16); \
+	echo "Creating saw-keycloak-admin client..."; \
+	curl -sk -X POST "$$BASE/clients" -H "Authorization: Bearer $$ADMIN_TOKEN" \
+		-H "Content-Type: application/json" \
+		-d "{\"clientId\":\"saw-keycloak-admin\",\"enabled\":true,\"publicClient\":false,\"clientAuthenticatorType\":\"client-secret\",\"secret\":\"$$KC_ADMIN_SECRET\",\"standardFlowEnabled\":false,\"directAccessGrantsEnabled\":false,\"serviceAccountsEnabled\":true,\"protocolMappers\":[{\"name\":\"audience\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-audience-mapper\",\"config\":{\"included.client.audience\":\"openshell-cli\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}}]}" \
+		-w " %{http_code}\n" -o /dev/null; \
+	echo "Creating saw-provisioner client..."; \
+	curl -sk -X POST "$$BASE/clients" -H "Authorization: Bearer $$ADMIN_TOKEN" \
+		-H "Content-Type: application/json" \
+		-d "{\"clientId\":\"saw-provisioner\",\"enabled\":true,\"publicClient\":false,\"clientAuthenticatorType\":\"client-secret\",\"secret\":\"$$PROV_SECRET\",\"standardFlowEnabled\":false,\"directAccessGrantsEnabled\":false,\"serviceAccountsEnabled\":true,\"attributes\":{\"access.token.lifespan\":\"600\"},\"protocolMappers\":[{\"name\":\"realm-roles\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-usermodel-realm-role-mapper\",\"config\":{\"multivalued\":\"true\",\"claim.name\":\"realm_access.roles\",\"jsonType.label\":\"String\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}},{\"name\":\"audience\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-audience-mapper\",\"config\":{\"included.client.audience\":\"openshell-cli\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}}]}" \
+		-w " %{http_code}\n" -o /dev/null; \
+	echo "Assigning roles to service accounts..."; \
+	KC_ADMIN_ID=$$(curl -sk "$$BASE/clients?clientId=saw-keycloak-admin" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])"); \
+	PROV_ID=$$(curl -sk "$$BASE/clients?clientId=saw-provisioner" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])"); \
+	KC_ADMIN_SA=$$(curl -sk "$$BASE/clients/$$KC_ADMIN_ID/service-account-user" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])"); \
+	PROV_SA=$$(curl -sk "$$BASE/clients/$$PROV_ID/service-account-user" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])"); \
+	USER_ROLE=$$(curl -sk "$$BASE/roles/openshell-user" -H "Authorization: Bearer $$ADMIN_TOKEN"); \
+	PLATFORM_ROLE=$$(curl -sk "$$BASE/roles/saw-session-platform-admin" -H "Authorization: Bearer $$ADMIN_TOKEN"); \
+	curl -sk -X POST "$$BASE/users/$$KC_ADMIN_SA/role-mappings/realm" -H "Authorization: Bearer $$ADMIN_TOKEN" -H "Content-Type: application/json" -d "[$$USER_ROLE]" -o /dev/null; \
+	curl -sk -X POST "$$BASE/users/$$PROV_SA/role-mappings/realm" -H "Authorization: Bearer $$ADMIN_TOKEN" -H "Content-Type: application/json" -d "[$$PLATFORM_ROLE, $$USER_ROLE]" -o /dev/null; \
+	RM_ID=$$(curl -sk "$$BASE/clients?clientId=realm-management" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])"); \
+	for ROLE_NAME in manage-clients view-clients view-realm manage-users; do \
+		ROLE=$$(curl -sk "$$BASE/clients/$$RM_ID/roles/$$ROLE_NAME" -H "Authorization: Bearer $$ADMIN_TOKEN"); \
+		curl -sk -X POST "$$BASE/users/$$KC_ADMIN_SA/role-mappings/clients/$$RM_ID" -H "Authorization: Bearer $$ADMIN_TOKEN" -H "Content-Type: application/json" -d "[$$ROLE]" -o /dev/null; \
+	done; \
+	echo "Storing client secrets on controller..."; \
+	oc set env deployment/saw-codex-api-controller -n $(NS) \
+		KEYCLOAK_ADMIN_URL="https://$$KC_HOST" \
+		KEYCLOAK_ADMIN_CLIENT_ID=saw-keycloak-admin \
+		KEYCLOAK_ADMIN_CLIENT_SECRET="$$KC_ADMIN_SECRET" \
+		PROVISIONER_CLIENT_ID=saw-provisioner \
+		PROVISIONER_CLIENT_SECRET="$$PROV_SECRET"; \
+	echo "Keycloak machine clients configured."
 
 codex-install-sandbox-controller: ## Install Agent Sandbox controller v1.0.2 (required for K8s backend)
 	@if oc get crd sandboxes.agents.x-k8s.io >/dev/null 2>&1; then \
