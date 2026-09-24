@@ -326,10 +326,17 @@ kubectl create secret generic inference -n openshell-agents \
   --from-literal=api_key=sk-YOUR-OPENAI-KEY
 ```
 
-#### Install the TUI client
+#### Install the TUI and CLI tools
 
 ```bash
+# Install the TUI + CLI
 cd cli && pip3 install -e '.[codex]'
+
+# Make codex-saw available system-wide
+ln -sf $(python3 -c "import sysconfig; print(sysconfig.get_path('scripts'))")/codex-saw ~/bin/codex-saw
+
+# Install the OpenShell CLI (required for shell/SSH access)
+curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/v0.0.116/openshell-$(uname -m | sed 's/arm64/aarch64/')-apple-darwin.tar.gz" | tar -xz -C ~/bin
 ```
 
 #### Launch the TUI
@@ -340,12 +347,48 @@ codex-saw
 
 Keybindings:
 - **n** — Create new sandbox
-- **Enter** — Connect to sandbox (resumes last session)
+- **Enter** — Connect to sandbox (resumes last Codex session)
+- **s** — Shell into sandbox (SSH)
+- **D** — Set up ChatGPT Desktop connection
 - **d** — Delete sandbox
 - **/** — Search/filter by name
-- **s** — Toggle sort (newest first / alphabetical)
 - **l** — Logout
 - **q** — Quit
+
+#### Shell access (SSH)
+
+Connect to a sandbox shell using your existing Keycloak login:
+
+```bash
+# Generate SSH config for a session
+codex-saw ssh-config codex-ab12
+
+# Add it to your SSH config
+codex-saw desktop register codex-ab12
+
+# Connect via SSH
+ssh saw-codex-codex-ab12-<uid>
+```
+
+#### ChatGPT Desktop integration
+
+```bash
+# Register SSH host for Desktop
+codex-saw desktop register codex-ab12
+
+# Verify everything works
+codex-saw desktop doctor codex-ab12
+```
+
+Then in ChatGPT Desktop:
+1. Settings → Connections → SSH → add the generated host
+2. Start a new Codex project → select the SSH host as Location
+3. Set project folder to `/sandbox/<your-repo>`
+
+```bash
+# Remove registration when done
+codex-saw desktop unregister codex-ab12
+```
 
 #### Backend selection
 
@@ -382,7 +425,9 @@ codex-saw TUI → saw-codex-api (OIDC auth) → CodexSession CR
 
 | Target | Description |
 |--------|-------------|
-| `make codex-setup` | Full end-to-end deployment |
+| `make codex-setup` | Full end-to-end deployment (11 steps) |
+| `make codex-deploy-api` | Build + deploy saw-codex-api service |
+| `make codex-setup-keycloak-clients` | Create Keycloak machine clients for OIDC |
 | `make codex-deploy-sandbox OPENSHELL_SAW_NAME=...` | Create a sandbox via CR |
 | `make codex-delete OPENSHELL_SAW_NAME=...` | Delete a sandbox via CR |
 | `make codex-configure-client` | Generate `~/.config/codex-saw/config.yaml` |
