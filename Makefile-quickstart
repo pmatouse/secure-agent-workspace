@@ -640,18 +640,30 @@ codex-setup-keycloak-clients: ## Create Keycloak machine clients for K8s backend
 	KC_ADMIN_SECRET=$$(openssl rand -hex 16); \
 	PROV_SECRET=$$(openssl rand -hex 16); \
 	echo "Creating saw-keycloak-admin client..."; \
-	curl -sk -X POST "$$BASE/clients" -H "Authorization: Bearer $$ADMIN_TOKEN" \
+	KC_ADMIN_HTTP=$$(curl -sk -X POST "$$BASE/clients" -H "Authorization: Bearer $$ADMIN_TOKEN" \
 		-H "Content-Type: application/json" \
 		-d "{\"clientId\":\"saw-keycloak-admin\",\"enabled\":true,\"publicClient\":false,\"clientAuthenticatorType\":\"client-secret\",\"secret\":\"$$KC_ADMIN_SECRET\",\"standardFlowEnabled\":false,\"directAccessGrantsEnabled\":false,\"serviceAccountsEnabled\":true,\"protocolMappers\":[{\"name\":\"audience\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-audience-mapper\",\"config\":{\"included.client.audience\":\"openshell-cli\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}}]}" \
-		-w " %{http_code}\n" -o /dev/null; \
+		-w "%{http_code}" -o /dev/null); \
+	echo " $$KC_ADMIN_HTTP"; \
 	echo "Creating saw-provisioner client..."; \
-	curl -sk -X POST "$$BASE/clients" -H "Authorization: Bearer $$ADMIN_TOKEN" \
+	PROV_HTTP=$$(curl -sk -X POST "$$BASE/clients" -H "Authorization: Bearer $$ADMIN_TOKEN" \
 		-H "Content-Type: application/json" \
 		-d "{\"clientId\":\"saw-provisioner\",\"enabled\":true,\"publicClient\":false,\"clientAuthenticatorType\":\"client-secret\",\"secret\":\"$$PROV_SECRET\",\"standardFlowEnabled\":false,\"directAccessGrantsEnabled\":false,\"serviceAccountsEnabled\":true,\"attributes\":{\"access.token.lifespan\":\"600\"},\"protocolMappers\":[{\"name\":\"realm-roles\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-usermodel-realm-role-mapper\",\"config\":{\"multivalued\":\"true\",\"claim.name\":\"realm_access.roles\",\"jsonType.label\":\"String\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}},{\"name\":\"audience\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-audience-mapper\",\"config\":{\"included.client.audience\":\"openshell-cli\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}}]}" \
-		-w " %{http_code}\n" -o /dev/null; \
-	echo "Assigning roles to service accounts..."; \
+		-w "%{http_code}" -o /dev/null); \
+	echo " $$PROV_HTTP"; \
 	KC_ADMIN_ID=$$(curl -sk "$$BASE/clients?clientId=saw-keycloak-admin" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])"); \
 	PROV_ID=$$(curl -sk "$$BASE/clients?clientId=saw-provisioner" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])"); \
+	if [ "$$KC_ADMIN_HTTP" = "409" ]; then \
+		echo "  saw-keycloak-admin already exists, regenerating secret..."; \
+		KC_ADMIN_SECRET=$$(curl -sk -X POST "$$BASE/clients/$$KC_ADMIN_ID/client-secret" \
+			-H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])"); \
+	fi; \
+	if [ "$$PROV_HTTP" = "409" ]; then \
+		echo "  saw-provisioner already exists, regenerating secret..."; \
+		PROV_SECRET=$$(curl -sk -X POST "$$BASE/clients/$$PROV_ID/client-secret" \
+			-H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])"); \
+	fi; \
+	echo "Assigning roles to service accounts..."; \
 	KC_ADMIN_SA=$$(curl -sk "$$BASE/clients/$$KC_ADMIN_ID/service-account-user" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])"); \
 	PROV_SA=$$(curl -sk "$$BASE/clients/$$PROV_ID/service-account-user" -H "Authorization: Bearer $$ADMIN_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])"); \
 	USER_ROLE=$$(curl -sk "$$BASE/roles/openshell-user" -H "Authorization: Bearer $$ADMIN_TOKEN"); \
