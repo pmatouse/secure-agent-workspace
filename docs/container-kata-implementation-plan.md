@@ -1,6 +1,6 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **VM inference/model recovery verified; portal update acceptance in progress; container dependency lifecycle verified; Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
+Status: **VM inference/model recovery verified; portal model update verified through the documented restart; portal status/deletion gaps remain; container dependency lifecycle verified; Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
 Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
 
@@ -13,7 +13,7 @@ history, including failed attempts):
 |---|---|
 | VM baseline | Both retained VMs passed owner inference, undeclared-egress denial and restart/persistence; first VM also passed real OpenClaw browser/tool tests |
 | Portal create | Recovery run passed; separate portal VM returned `SAW_PORTAL_VM_OK` in authenticated OpenClaw chat |
-| Portal model update | Vault/ESO contain the new model; boot-time input disks require the documented restart. Guest verification remains pending. Portal HTTP-status task failed separately; Tekton success is insufficient |
+| Portal model update | Vault/ESO contain the new model; boot-time input disks require the documented restart. Guest selected the new model and its authenticated browser returned `SAW_MODEL_UPDATE_OK`. Portal HTTP-status task failed separately; Tekton success is insufficient |
 | Agent Sandbox dependency | Stock controller Available, CRD Established; isolated nonroot `restricted-v2` probe Ready with retained PVC, no token and deny-all network policy; GitOps suspend/resume passed with a fresh Pod and unchanged canary/PVC |
 | Retained identity | First bootstrap and second Argo sync passed; six immutable Secret UIDs and public CA fingerprints unchanged |
 | Native policies | Installed by Argo; no CEL warnings, OVN SetupSucceeded. Dry-run ordinary Pod admitted, forged workload/supervisor roles denied. Packet tests still required |
@@ -179,7 +179,7 @@ and an actual OpenClaw browser reply `SAW_PORTAL_VM_OK`.
 A model-update request reached Vault/ESO but the guest retained its old model:
 this baseline uses `vm.liveInputs: false`, so its input disks change on restart.
 The documented restart was requested for only the disposable portal VM; its
-post-restart model check remains pending. The UI task separately failed a status
+post-restart model check passed. The UI task separately failed a status
 HTTP request despite Tekton success. Route readiness does not attest the applied
 model generation. Update/delete acceptance remains open. This recovery is not
 clean-replay proof.
