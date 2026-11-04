@@ -1,0 +1,31 @@
+{
+  "scope": "Portal VM model update via standard Vault/ESO inputs and documented restart; UI status task failure retained",
+  "verifiedAt": "2026-11-04T22:10:37.347311+00:00",
+  "namespace": "saw-sawportalvm",
+  "oldVMIUID": "bc975372-4877-4950-aa82-be8cc240f07a",
+  "newVMIUID": "e2a61224-2d50-48a5-ac64-fb35b88a4ea1",
+  "retainedRootPVCUID": "d4c9442f-efcc-49fd-b242-c16df200fbfb",
+  "desiredModel": "gpt-4.1-mini-2025-04-14",
+  "guestMountedModelInputMatched": true,
+  "openClawSelectedModelMatched": true,
+  "modelRegistered": true,
+  "browserExpectedReply": "SAW_MODEL_UPDATE_OK",
+  "browserActualReply": "SAW_MODEL_UPDATE_OK",
+  "guestInstall": "Done",
+  "guestApply": "Done",
+  "ownerAuthentication": "passed",
+  "providerInference": [
+    "default/notebook",
+    "cuda-dev/cuda-sandbox"
+  ],
+  "undeclaredEgressDenied": [
+    "default/notebook",
+    "cuda-dev/cuda-sandbox"
+  ],
+  "baselineVMIUIDsUnchanged": true,
+  "portalPipelineRun": "saw-create-6h7ms",
+  "portalTask": "d9ee885d-071f-4454-950e-a221d9a65515",
+  "portalTaskResult": "HTTP status request failed; not a clean end-to-end portal update pass",
+  "automaticLiveUpdate": false,
+  "runtimeImagesChanged": false
+}

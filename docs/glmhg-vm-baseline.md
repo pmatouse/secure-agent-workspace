@@ -327,5 +327,16 @@ reported the old one. This baseline uses `vm.liveInputs: false`: configuration
 disks are refreshed on boot. A green route/pipeline is therefore not proof that
 a model update has reached the guest. The documented `make saw-restart` was
 requested for **only** `sawportalvm`, preserving its root PVC. Guest model and
-inference verification after this restart remain pending; neither baseline VM
-was restarted for this update. Portal deletion acceptance also remains pending.
+inference verification after this restart **passed**. The fresh VMI is
+`e2a61224-2d50-48a5-ac64-fb35b88a4ea1`; the root PVC UID is unchanged. The guest's
+mounted model input and OpenClaw's registered/selected model both matched
+`gpt-4.1-mini-2025-04-14`. After install/apply reached Done, the authenticated
+browser selected that model and returned exactly `SAW_MODEL_UPDATE_OK`.
+Ordinary-owner exec/provider inference and undeclared-egress denial passed in
+both sandboxes. Neither baseline VM was restarted; both retained their original
+running VMI UIDs. [Machine-readable receipt](evidence/glmhg-vm-model-update-2026-11-04.json).
+
+This proves the model update through the supported restart workflow. It does not
+turn the failed RHDH status task into a successful automatic portal update:
+that HTTP failure and the missing applied-generation readiness check remain
+open. Portal deletion acceptance also remains pending.
