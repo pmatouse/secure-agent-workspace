@@ -1,7 +1,7 @@
 {
   "apiVersion": "v1",
   "data": {
-    "intent.json": "{\"bindings\":{\"approvedCredentialFreeProviders\":[],\"bindings\":{\"toolbox/shell\":{\"resources\":{\"limits\":{\"cpu\":\"1\",\"memory\":\"1Gi\"},\"requests\":{\"cpu\":\"250m\",\"memory\":\"256Mi\"}},\"workspace\":{\"claimName\":\"toolbox-workspace\",\"readOnly\":false,\"uid\":\"ed781919-e5b8-4300-b5e0-e4d33a6a1d7c\"}}},\"gatewayVersion\":\"0.1.2-rhaiv.6\",\"mode\":\"container\",\"namespace\":\"saw-k8s-test\",\"namespaceUID\":\"dba0ef06-69ad-4014-bbd1-e3755d615386\",\"ownerID\":\"d8ac361b-9898-4b16-ac35-2d15f86db76b\",\"ownerSubject\":\"478fdd1f-8db9-41e8-97ad-b563215c89e9\"},\"desiredState\":\"Running\",\"generation\":7,\"profileRef\":{\"name\":\"toolbox-profile\",\"sha256\":\"c1e00787fa5f3480f6738c877b206a446f7c751b59241708a82a39145337864b\",\"uid\":\"7bb6c528-d2b6-4ac8-9e29-110613dd7d8e\"},\"schemaVersion\":1}"
+    "intent.json": "{\"bindings\":{\"approvedCredentialFreeProviders\":[],\"bindings\":{\"toolbox/shell\":{\"resources\":{\"limits\":{\"cpu\":\"1\",\"memory\":\"1Gi\"},\"requests\":{\"cpu\":\"250m\",\"memory\":\"256Mi\"}},\"workspace\":{\"claimName\":\"toolbox-workspace\",\"readOnly\":false,\"uid\":\"ed781919-e5b8-4300-b5e0-e4d33a6a1d7c\"}}},\"gatewayVersion\":\"0.1.2-rhaiv.6\",\"mode\":\"container\",\"namespace\":\"saw-k8s-test\",\"namespaceUID\":\"dba0ef06-69ad-4014-bbd1-e3755d615386\",\"ownerID\":\"d8ac361b-9898-4b16-ac35-2d15f86db76b\",\"ownerSubject\":\"478fdd1f-8db9-41e8-97ad-b563215c89e9\"},\"desiredState\":\"Stopped\",\"generation\":8,\"profileRef\":{\"name\":\"toolbox-profile\",\"sha256\":\"c1e00787fa5f3480f6738c877b206a446f7c751b59241708a82a39145337864b\",\"uid\":\"7bb6c528-d2b6-4ac8-9e29-110613dd7d8e\"},\"schemaVersion\":1}"
   },
   "kind": "ConfigMap",
   "metadata": {
