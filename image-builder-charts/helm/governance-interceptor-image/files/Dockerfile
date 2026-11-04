@@ -148,7 +148,7 @@ RUN printf '%s\n' \
 '            || m.get("read_only").and_then(Value::as_bool) != Some(read_only) { return false; }' \
 '        let Some(path) = m.get("mount_path").and_then(Value::as_str) else { return false; };' \
 '        if index == 0 {' \
-'            if path != "/sandbox" || read_only { return false; }' \
+'            if path != "/sandbox/workspace" || read_only { return false; }' \
 '        } else if !(path == "/data" || path.starts_with("/data/"))' \
 '            || path[1..].split("/").any(|p| p.is_empty() || p == "." || p == "..")' \
 '            || path.chars().any(|c| c.is_control()) { return false; }' \
@@ -268,7 +268,7 @@ RUN printf '%s\n' \
 '    fn k8s() -> Value {' \
 '        json!({"kubernetes":{' \
 '            "volumes":[{"name":"saw-workspace","persistent_volume_claim":{"claim_name":"alice-workspace","read_only":false}}],' \
-'            "containers":{"agent":{"volume_mounts":[{"name":"saw-workspace","mount_path":"/sandbox","read_only":false}],"resources":{"requests":{"cpu":"250m","memory":"512Mi"}}}}' \
+'            "containers":{"agent":{"volume_mounts":[{"name":"saw-workspace","mount_path":"/sandbox/workspace","read_only":false}],"resources":{"requests":{"cpu":"250m","memory":"512Mi"}}}}' \
 '        }})' \
 '    }' \
 '    #[test]' \
@@ -299,7 +299,7 @@ RUN printf '%s\n' \
 '            ("/kubernetes/containers/agent", json!({"volume_mounts":[],"resources":{},"security_context":{"privileged":true}})),' \
 '            ("/kubernetes/containers", json!({"agent":{},"extra":{}})),' \
 '            ("/kubernetes/volumes", json!([])),' \
-'            ("/kubernetes/containers/agent/volume_mounts/0/mount_path", json!("/")),' \
+'            ("/kubernetes/containers/agent/volume_mounts/0/mount_path", json!("/sandbox")),' \
 '            ("/kubernetes/volumes/0/persistent_volume_claim/claim_name", json!("../secret")),' \
 '            ("/kubernetes/containers/agent/resources", json!({"requests":{"cpu":"0"}})),' \
 '            ("/kubernetes/containers/agent/resources", json!({"requests":{"gpu":"1"}})),' \

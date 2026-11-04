@@ -58,7 +58,7 @@ def test_compiler_is_deterministic_and_uses_stock_driver_envelope(source):
     assert driver["volumes"][0]["persistent_volume_claim"] == {
         "claim_name": "workspace-toolbox", "read_only": False}
     assert driver["containers"]["agent"]["volume_mounts"] == [
-        {"name": "saw-workspace", "mount_path": "/sandbox", "read_only": False}]
+        {"name": "saw-workspace", "mount_path": "/sandbox/workspace", "read_only": False}]
     assert first["claims"] == [{"name": "workspace-toolbox", "uid": "pvc-uid", "workspace": "default"}]
 
 

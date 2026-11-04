@@ -84,7 +84,7 @@ layout: `workspace.yaml`, `providers.yaml`, `sandbox.yaml`.
 - Optional **credential-free**, administrator-approved provider types. At apply,
   each must resolve to a credential-free platform profile from the governance
   interceptor. Workspace-local replacements are insufficient.
-- One pre-existing, writable filesystem PVC mounted at `/sandbox`, plus approved
+- One pre-existing, writable filesystem PVC mounted at `/sandbox/workspace`, plus approved
   additional non-overlapping mounts at `/data` or below it. Both mount and PVC
   `read_only` fields are explicit in the stock driver configuration.
 - `container`: ordinary workload runtime. `kata`: the administrator-selected stock
@@ -269,8 +269,9 @@ outside the controller. Verify packet-level isolation independently.
 
 ## Persistence and remaining gaps
 
-The stock driver skips its native workspace PVC when an explicit `/sandbox`
-attachment exists. This avoids making the claim a child of the Sandbox CR, but
+The stock driver skips its native workspace PVC when an explicit mount below `/sandbox` exists. The stock driver reserves the root
+mount and its internal volume name. SAW binds `saw-workspace` at
+`/sandbox/workspace`; only that subtree persists on the retained claim. This avoids making the claim a child of the Sandbox CR, but
 also skips native image-content seeding. The initial generic example must work
 with a blank workspace. Image seeding, versioned migrations, harness/tool-gate
 population and audit collection remain unimplemented.

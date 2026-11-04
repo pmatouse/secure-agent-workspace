@@ -15,7 +15,7 @@ case "$action" in
 from pathlib import Path
 import sys
 action, nonce = sys.argv[1:]
-path = Path("/sandbox") / (".saw-test-" + nonce)
+path = Path("/sandbox/workspace") / (".saw-test-" + nonce)
 if action == "write":
     with path.open("x") as f:
         f.write(nonce)

@@ -70,9 +70,9 @@ def _claim(binding, workspace, mount_path, volume_name):
 
 def _storage(binding, workspace):
     mapping(binding, {"workspace", "mounts", "resources"}, {"workspace"}, "sandbox binding")
-    volume, mount, reference = _claim(binding["workspace"], workspace, "/sandbox", "saw-workspace")
+    volume, mount, reference = _claim(binding["workspace"], workspace, "/sandbox/workspace", "saw-workspace")
     if binding["workspace"]["readOnly"]:
-        raise ContractError("/sandbox must be writable")
+        raise ContractError("/sandbox/workspace must be writable")
     volumes, mounts, refs = [volume], [mount], [reference]
     extra = binding.get("mounts", [])
     if not isinstance(extra, list) or len(extra) > 16:
@@ -81,7 +81,7 @@ def _storage(binding, workspace):
         mapping(item, {"claimName", "uid", "readOnly", "mountPath"},
                 {"claimName", "uid", "readOnly", "mountPath"}, "mount")
         path = item["mountPath"]
-        # Reserve /sandbox for the one retained workspace. Additional data may
+        # The driver reserves /sandbox itself. Mount the retained workspace below it. Additional data may
         # only mount under /data, never over trusted/runtime/configuration trees.
         if not isinstance(path, str) or not (path == "/data" or path.startswith("/data/")):
             raise ContractError("additional mounts must be at /data or below it")
