@@ -104,3 +104,12 @@ This verifies full compilation and publication, not live policy behavior; the
 existing VM policy Deployment remains unchanged. The container dependency probe
 reached Ready under `restricted-v2`, a nonzero UID and no service-account token.
 Its first canary/PVC identities were captured before the GitOps suspend phase.
+
+
+`governance.yaml` deploys that exact candidate digest with the existing policy
+catalog in `saw-k8s-build`. Only the test gateway selector is enabled for remote
+Kubernetes ingress; its endpoint is
+`http://governance-interceptor.saw-k8s-build.svc:18081`. No provider keys are
+mounted. This separate service must pass stock protocol/positive/negative tests
+before it qualifies the gateway; Deployment availability alone is insufficient.
+The baseline VM governance service and its clients retain their original config.

@@ -1,0 +1,35 @@
+# Isolated candidate service: baseline VM endpoints/images remain unchanged.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-governance
+  namespace: vp-gitops
+spec:
+  project: default
+  sources:
+  - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    path: charts/governance-policy
+    helm:
+      releaseName: saw-k8s-governance
+  - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    path: charts/governance-interceptor
+    helm:
+      releaseName: saw-k8s-governance
+      valuesObject:
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/governance-interceptor@sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97
+        gatewayEndpoint: ''
+        sawNamespaceLabel:
+          key: saw.redhat.com/unused-vm-selector
+          value: no-vm-qualification
+        kubernetesGateways:
+        - namespace: saw-k8s-test
+          gatewayId: saw-k8s-test
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-build
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true

@@ -5,3 +5,4 @@ resources:
   - policy-build.yaml
   - runtime-policies.yaml
   - dependency-smoke.yaml
+  - governance.yaml
