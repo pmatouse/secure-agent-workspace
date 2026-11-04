@@ -1,7 +1,9 @@
 # Stock Kubernetes runtime dependencies
 
-Status: source-pinned and locally render-tested; **live OpenShift/Kata qualification
-is pending**. Installing this dependency does not enable the portal's container or
+Status: stock controller/CRD installed on glmhg; retained identity resync passed;
+**isolated container persistence testing is in progress and full SAW/Kata
+qualification remains pending**. Both lab workers boot in BIOS, which fails
+OSC 1.13's documented UEFI prerequisite. Installing this dependency does not enable the portal's container or
 Kata provisioning gate. VM remains the default.
 
 The first Kubernetes topology uses an ordinary supervisor Pod and a separate
