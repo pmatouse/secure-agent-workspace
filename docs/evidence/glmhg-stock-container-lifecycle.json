@@ -1,0 +1,89 @@
+{
+  "scope": "Generic OpenShell Kubernetes workspace on glmhg, OpenShift 4.22.20",
+  "verifiedAt": "2026-11-04 23:43:37 UTC",
+  "mode": "container",
+  "gatewayVersion": "0.1.2-rhaiv.6",
+  "controllerImage": "sha256:e479b64190d96d91932036f068ff8c2e776f64d9570e8352f5a9e9c18729c472",
+  "governanceImage": "sha256:701a715e83cf7801c2f29d61b68028eeee1e608bcfcfe26290cdb52745d6fa13",
+  "runtimeSource": "a5d65cbaa75b6bf1e00b704424707e42a2d8a942",
+  "workspace": {
+    "name": "toolbox",
+    "id": "fc4cd7a6-d0fe-4275-afdb-56cae896d1e1"
+  },
+  "sandbox": {
+    "name": "shell",
+    "id": "9dd06635-9d01-49f8-8b53-d5692e7b606a"
+  },
+  "storage": {
+    "name": "toolbox-workspace",
+    "uid": "ed781919-e5b8-4300-b5e0-e4d33a6a1d7c",
+    "pv": "pvc-ed781919-e5b8-4300-b5e0-e4d33a6a1d7c",
+    "mount": "/sandbox/workspace",
+    "class": "ocs-external-storagecluster-ceph-rbd",
+    "claimRetainedWhileStopped": true
+  },
+  "before": [
+    {
+      "role": "supervisor",
+      "uid": "1547893b-b25d-4716-b46b-4f71e84e1903",
+      "node": "worker-cluster-glmhg-2",
+      "scc": "restricted-v2",
+      "mounts": []
+    },
+    {
+      "role": "workload",
+      "uid": "c5db25ff-4717-42d6-93a0-d31eb89e2011",
+      "node": "worker-cluster-glmhg-1",
+      "scc": "restricted-v2",
+      "mounts": [
+        "/sandbox/workspace"
+      ]
+    }
+  ],
+  "after": [
+    {
+      "role": "workload",
+      "uid": "602c323e-3a27-49f6-90f1-98004779c1c3",
+      "node": "worker-cluster-glmhg-1",
+      "scc": "restricted-v2"
+    },
+    {
+      "role": "supervisor",
+      "uid": "58a109c3-94d1-4dc6-9efe-20302b265f20",
+      "node": "worker-cluster-glmhg-2",
+      "scc": "restricted-v2"
+    }
+  ],
+  "generations": [
+    {
+      "generation": 7,
+      "phase": "GenericReady",
+      "checks": [
+        "PVC_WRITE_OK",
+        "DIRECT_API_BLOCKED",
+        "NONMEMBER_DENIED"
+      ]
+    },
+    {
+      "generation": 8,
+      "phase": "Stopped",
+      "runtimePodCount": 0
+    },
+    {
+      "generation": 9,
+      "phase": "GenericReady",
+      "checks": [
+        "PVC_READ_OK",
+        "DIRECT_API_BLOCKED",
+        "NONMEMBER_DENIED"
+      ]
+    }
+  ],
+  "testMethod": "Ordinary owner OIDC login, verified TLS, stock openshell sandbox exec. Fresh random file created exclusively, exact nonce checked and file removed after resume. Direct TCP test targets the cluster API service IP on port 443. Separate ordinary OIDC user was denied workspace membership.",
+  "open": [
+    "Container OpenClaw, model inference through the workload, tool gate, audit and RHDH parity",
+    "Kata execution pending UEFI-qualified worker",
+    "Periodic kube client SendRequest list warnings observed while live lifecycle completed",
+    "Runtime reports unlimited cgroup pids.max on workload; production PID limit qualification pending"
+  ]
+}

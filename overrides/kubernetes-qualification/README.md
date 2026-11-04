@@ -1,12 +1,11 @@
 # glmhg Kubernetes foundation qualification
 
-Site foundation manifests, activated by `values-cluster-glmhg.yaml`.
-They install the stock Agent Sandbox dependency, retained identity bootstrap,
-and an isolated build of the SAW governance policy service. They do not create a gateway, reconciler, agent workspace, provider
-credential, KataConfig or RuntimeClass, and do not enable portal backend choices.
+The site overlay installs the stock Agent Sandbox controller, an isolated stock
+OpenShell gateway, its retained identities, a SAW credential proxy and governance
+service, and a SAW reconciler for an ordinary container workspace. Argo owns the
+manifests and pinned image builds. The RHDH VM deployment is separate.
 
-The two child Applications pin the reviewed integration commit rather than a
-moving branch. The Agent Sandbox binary/CRD and gateway certificate generator are
+The Agent Sandbox binary/CRD and the gateway certificate generator are
 stock. The bootstrap retains admin identity in `saw-k8s-trusted`; runtime leaf
 identities go to `saw-k8s-test`. Both namespaces bind one installation UUID and
 are retained on Argo prune/application deletion. The bootstrap network policy
@@ -164,3 +163,30 @@ controlling StatefulSet. The updated `test-admission.py` passed all six server
 dry runs: ordinary Pod admitted, forged workload/supervisor rejected, forged
 gateway label and forged owner rejected, approved StatefulSet controller admitted.
 No test Pod was persisted. CEL type checking reported no warnings.
+
+## OpenShell workspace lifecycle
+
+Argo installs the trusted reconciler from `controller.yaml`. It watches the
+profile and generation-numbered intent, validates live policy and storage
+identities, and uses mTLS to manage the owner's workspace through OpenShell.
+The stock Kubernetes driver creates the supervisor and a Sandbox CR. The stock
+Agent Sandbox controller creates the workload Pod. The driver reserves
+`/sandbox` and the internal volume name `workspace`. The pre-existing RBD
+claim mounts as `saw-workspace` at `/sandbox/workspace` in the workload.
+
+| Git intent | Observed result |
+| --- | --- |
+| 7, Running | Owner CLI wrote a unique file through OpenShell. A direct TCP connection to the cluster API was blocked. A second OIDC user was denied access. |
+| 8, Stopped | Both runtime Pods disappeared and the original PVC remained Bound. |
+| 9, Running | Both Pods received new UIDs on separate workers under restricted-v2. The sandbox ID and PVC/PV identity were preserved. The owner read and removed the original file. Both denial tests passed again. |
+
+Use the controller source branch's `kubernetes-runtime/check-toolbox.sh` with the
+ordinary user's verified gateway login. The Python test uses the UBI system
+interpreter because this profile permits reads under `/usr` and denies the
+image's default virtual environment under `/opt/app-root`.
+
+The generic workload has no model provider. Container OpenClaw and RHDH parity
+have separate acceptance gates. The original VM model test and all three VMIs
+remain separate. The gateway occasionally logged a Kubernetes list transport
+warning, and the workload reported an unlimited PID cgroup. Both merit production
+qualification. [Lifecycle receipt](../../docs/evidence/glmhg-stock-container-lifecycle.json).
