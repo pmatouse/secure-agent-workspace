@@ -1,0 +1,34 @@
+# Build only: no existing VM policy Deployment references this candidate tag.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-policy-build
+  namespace: vp-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    path: image-builder-charts/helm/governance-interceptor-image
+    helm:
+      releaseName: saw-k8s-policy-build
+      valuesObject:
+        source:
+          git:
+            uri: https://github.com/NVIDIA/OpenShell.git
+            ref: 6648bd0c290efbc41ba131ee9831ee45cd431f94
+        build:
+          configChangeTrigger: true
+          builderImage: docker.io/library/rust@sha256:4ec71e955e6c08aeb238885083222ddff79d82eb87654a96c76e38e94da1a53b
+          runtimeImage: registry.access.redhat.com/ubi9-micro@sha256:7325ffb45d8401b227033dc26c567e138c919731ed2f8119e921ddba71835f87
+        output:
+          imageStreamTag: governance-interceptor:kubernetes-004b234
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-build
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

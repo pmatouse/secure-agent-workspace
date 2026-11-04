@@ -280,7 +280,7 @@ computation was tested: inference used the approved external OpenAI API. The
 first VM also has actual OpenClaw tool execution and browser-policy evidence
 above; the second VM's checks here cover owner exec, provider inference and egress.
 
-### Portal create timeout and recovery in progress
+### Portal create recovery and model-update acceptance
 
 The ordinary `sawportalvm` user submitted the corrected RHDH form. Task
 `50cbc1c7-1875-42a4-b707-2106eeecce66` created PipelineRun `saw-create-27v4p`.
@@ -315,7 +315,17 @@ CLI login, exec and real provider inference passed in both `default/notebook`
 and `cuda-dev/cuda-sandbox`; both denied undeclared `https://example.org` egress.
 The notebook's authenticated browser chat selected `gpt-4.1-mini (Custom Provider)`
 and returned exactly `SAW_PORTAL_VM_OK`. No guest configuration was edited to
-obtain these results. The create pipeline still waits for the separate OpenShell
-web UI: its systemd unit is active while Podman downloads the stock oauth2-proxy
-image. Backend dashboard health alone does not prove proxy readiness. Model
-update and disposable-workspace deletion acceptance remain pending.
+obtain these results. The separate OpenShell web UI finished its stock
+proxy image pull, and recovery PipelineRun `saw-create-qx55p` succeeded at about
+21:29 UTC. The ordinary browser displayed Ready with all stages complete.
+
+The next normal portal request selected `gpt-4.1-mini-2025-04-14` for notebook,
+leaving CUDA at `gpt-4.1-mini`. PipelineRun `saw-create-6h7ms` succeeded, but RHDH
+task `d9ee885d-071f-4454-950e-a221d9a65515` failed its status HTTP request. The
+cluster's `inference-meta` Secret contained the new model while the guest still
+reported the old one. This baseline uses `vm.liveInputs: false`: configuration
+disks are refreshed on boot. A green route/pipeline is therefore not proof that
+a model update has reached the guest. The documented `make saw-restart` was
+requested for **only** `sawportalvm`, preserving its root PVC. Guest model and
+inference verification after this restart remain pending; neither baseline VM
+was restarted for this update. Portal deletion acceptance also remains pending.
