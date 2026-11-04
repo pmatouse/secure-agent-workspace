@@ -18,7 +18,7 @@ spec:
     helm:
       releaseName: saw-k8s-governance
       valuesObject:
-        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/governance-interceptor@sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/governance-interceptor@sha256:57e478900d978edc14896a953f8dca2b6943f01161e4f08f20eddde9c6a1d811
         gatewayEndpoint: ''
         sawNamespaceLabel:
           key: saw.redhat.com/unused-vm-selector

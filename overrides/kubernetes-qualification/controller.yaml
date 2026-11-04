@@ -53,7 +53,7 @@ spec:
               sha256: f4c2676e6e9db170096db05c200cd15e6d7e5f05255feb1771dbad22edddddda
             governance:
               uid: e72b776d-501b-4712-9cfd-6fa417152669
-              sha256: ca2d2a49cb4fe193cc716f81ef3685dd8565ea85f682f5e86c508c422d3b7640
+              sha256: 6f00409a60d2ac83f312deacda48dd175e6ce0b1225800148d4f4228d88d5d72
             governanceService:
               uid: 57b1b15f-faea-40b5-baba-7a1febc31c57
               sha256: ea86f6d4b7cf245aea3737a2da867e3b2903548e720704decfe5e822ec021d03
