@@ -1,0 +1,109 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-reconciler
+  namespace: vp-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 92b43c38f3041981e4f1db3b16509eb5e4dd8cad
+    path: charts/saw-kubernetes-controller
+    helm:
+      releaseName: saw-k8s-test
+      valuesObject:
+        enabled: true
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:806d8b8e8333d9226ea3058990e6a45741c6c24eeb33f01d56e3b67a518e1777
+        configuration:
+          gateway: saw-k8s-test
+          namespace: saw-k8s-test
+          trustedNamespace: saw-k8s-trusted
+          governanceNamespace: saw-k8s-build
+          proxyPolicy: saw-k8s-test-proxy-policy
+          ownerID: d8ac361b-9898-4b16-ac35-2d15f86db76b
+          namespaceUID: dba0ef06-69ad-4014-bbd1-e3755d615386
+          mode: container
+          intent: toolbox-intent
+          profile: toolbox-profile
+          status: toolbox-status
+          approved:
+            validation:
+              uid: 0393e9f9-803e-43a4-9ca9-924e3d096ae2
+              sha256: d85471b8dcb8f5ac1d65321b7066a014574b15f1ddc0413875dddadb3917c024
+            binding:
+              uid: 44aa9f1c-fe9d-4d32-881d-2f22a658240b
+              sha256: 554de008b0dc93f2030352a849908b5c32ad77c7a307bf0ceac46b2ef083afd9
+            network:
+              uid: 47fc3d9d-e752-4184-8d62-cb93362fbb47
+              sha256: fcaeaf8e1d1a2a219e23145fd94d4a38f4a5acd69ebcc657a830d950b9ed6512
+            deny:
+              uid: c1f2fc0f-12e9-4056-9221-2dc81dde14de
+              sha256: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+            gatewayNetwork:
+              uid: 3550ec5d-e390-4dd6-b162-3fb978d59072
+              sha256: 449d73e0e411518f1b188faeee781b1008f7b8243f6943c9b5ae333f70c1f28a
+            gateway:
+              uid: 69b44211-2966-4afd-8dce-5b4ac3605ef3
+              sha256: fcee8bac5494e6f9dd88f93919d139fd5971c284ec292511adf0a2caaef1d727
+            gatewayService:
+              uid: b3332346-8fc6-4099-bdf7-62720e72162a
+              sha256: f31e1a7a424434702fda733e62635e9010ba16d76c756cccbf6cf36791bf75f9
+            gatewayConfig:
+              uid: 5c4ae94c-5a58-4bae-92f9-9b77aac0f193
+              sha256: f4c2676e6e9db170096db05c200cd15e6d7e5f05255feb1771dbad22edddddda
+            governance:
+              uid: e72b776d-501b-4712-9cfd-6fa417152669
+              sha256: ca2d2a49cb4fe193cc716f81ef3685dd8565ea85f682f5e86c508c422d3b7640
+            governanceService:
+              uid: 57b1b15f-faea-40b5-baba-7a1febc31c57
+              sha256: ea86f6d4b7cf245aea3737a2da867e3b2903548e720704decfe5e822ec021d03
+            governancePolicy:
+              uid: 9ed4c1c3-c8a0-4b16-8799-4b958c6a5c83
+              sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+            governanceProfiles:
+              uid: 1b213f52-e115-434e-916b-cfa888b8aacd
+              sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+            proxy:
+              uid: 57f1e841-735e-4aaa-aecd-5784e8436fe4
+              sha256: 9b2b28b964cf4e7cbd02842485e7ca98d1aaedb29cf16ce73764180fd89b8785
+            proxyNetwork:
+              uid: 712fc462-1108-48fe-b419-b824a42a109d
+              sha256: df5cc6c60e0e3f0984e4a7fae718a4eeb57eb89d606e4da3a06c1d3e834d1598
+            proxyPolicy:
+              uid: 1a1adcac-b623-44bc-a122-c1a72611a69b
+              sha256: 994c67a07d21e9f8e81849ba56cee59a977885a3106313bb19346826b44e81d0
+            publicCA:
+              uid: 54b3d39d-9496-416b-9fa3-36ab64da664c
+              sha256: 980421631319b94f2da57ce1d9d87d685a834e72fcf8a589130486c9139ac671
+        stateClaim: controller-ledger
+        claimNames:
+        - toolbox-workspace
+        imageBuildNamespace: saw-k8s-build
+        trustedEgress:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: saw-k8s-test
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/instance: saw-k8s-test
+                openshell.pattern/role: gateway
+          ports:
+          - protocol: TCP
+            port: 17670
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-trusted
+  ignoreDifferences:
+  - group: ''
+    kind: ConfigMap
+    namespace: saw-k8s-test
+    name: toolbox-status
+    jsonPointers:
+    - /data
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - RespectIgnoreDifferences=true

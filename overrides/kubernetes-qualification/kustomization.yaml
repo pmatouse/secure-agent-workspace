@@ -10,3 +10,4 @@ resources:
   - gateway.yaml
   - gateway-network-check.yaml
   - controller-inputs.yaml
+  - controller.yaml
