@@ -27,6 +27,10 @@ spec:
       # form pre-fills it; each sandbox has its own field).
       inference:
         providerRef: openai
+        # Register the selected model explicitly: the pinned OpenClaw image's
+        # local native catalog does not resolve this model during onboarding.
+        protocol: openai
+        baseUrl: https://api.openai.com/v1
         model:
           secretKeyRef:
             name: inference

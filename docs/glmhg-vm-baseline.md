@@ -9,6 +9,10 @@ This branch is upstream `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` plus site con
 - API: `https://api.cluster-glmhg.dyn.redhatworkshops.io:6443`.
 - Topology and image selections: `overrides/saw-users.yaml`.
 - Both data-science workspaces use the official OpenAI API and `gpt-4.1-mini`; no NVIDIA credential is needed. Their supported profile YAML and generated RHDH catalog describe that selection.
+- Both sandbox `inference` blocks explicitly set `protocol: openai` and
+  `baseUrl: https://api.openai.com/v1`. SAW's existing custom-endpoint onboarding
+  registers the selected model with OpenClaw. This still uses the official API
+  through the credential proxy; no OpenClaw/OpenShell image is changed.
 - Web search is off because no search credential was supplied. Web-search qualification remains pending.
 - Provider keys enter through the private Validated Patterns secret-loader input and Vault. Credential-proxy mode remains enabled. No credential belongs in Git.
 - Initial `users: []` intentionally allows the platform to converge before adding VM accounts through Git.
@@ -154,3 +158,31 @@ The private values file must supply `inference.provider=openai`, the private API
   pending. No container/Kata qualification is claimed.
 
 Operator channels and external chart ranges remain upstream defaults. This freezes workload image selections, not every future dependency resolution. Record the installed CSV/chart versions when the platform converges before claiming deterministic replay.
+
+### VM model-selection recovery (qualification pending)
+
+Both root disks imported successfully and both VMs reached Running. The first
+guest completed component installation, but profile apply failed when OpenClaw
+validated `agents.entries.main.model` for `openai/gpt-4.1-mini`. Its pinned
+`2026.9.6` image reported an empty local OpenAI catalog before its gateway started.
+The configured wildcard already selected the `openclaw` runtime; no missing
+runtime setting was demonstrated. The provider's live API had independently
+listed this model. Tool-gate configuration follows model selection, so its
+absence in this failed apply is a downstream failure, not a passed security test.
+
+The recovery uses the existing explicit-endpoint profile inputs above. Native
+onboarding depends on catalog resolution; explicit onboarding writes the model
+definition for the requested endpoint. The installer still validates the model
+and tool gate. After Argo sync, apply changed disk-backed inputs using the
+documented restart, retaining the root PVC:
+
+```bash
+make saw-restart OPENSHELL_SAW_NAME=sawvmowner SAW_NS=saw-sawvmowner
+make saw-status OPENSHELL_SAW_NAME=sawvmowner SAW_NS=saw-sawvmowner \
+  SSH_KEY_PATH=/home/lab-user/.saw-private/glmhg/sandbox-ssh
+```
+
+Qualify the first VM before restarting `sawvmother` in the same way. Require
+both `install.phase` and `apply.phase` to be `Done`, then run real inference,
+cross-owner denial, credential isolation, persistence and portal tests. This is
+a GitOps configuration recovery, not evidence of a clean first-pass VM install.
