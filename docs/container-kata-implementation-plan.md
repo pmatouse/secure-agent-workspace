@@ -633,11 +633,16 @@ boundary against a user who can mutate these objects.
 
 **Design requirement: implement SAW feature semantics once.** Keep the controller,
 but make it a thin execution frontend around a shared SAW engine. The VM
-`apply_bom.py` entry point must call that same engine. The current Kubernetes
-compiler/reconciler duplicates a limited subset of the VM profile/apply logic;
-this is temporary foundation code, not a second installer to extend independently.
-Shared-core extraction is the next implementation priority before adding further
-controller profile features.
+`apply_bom.py` entry point calls the same canonical `saw_core.py` as the
+Kubernetes compiler/reconciler. Implemented offline: profile dataclasses, parsing,
+shared semantic validation, credential-reference helpers and the workspace →
+providers → sandboxes readiness sequence. Strict parsing and backend capability
+checks reject fields that Kubernetes cannot yet implement. Existing VM parsing
+remains compatible. The shared-core tests cover every shipped profile.
+
+The remaining engine extraction below is still a target architecture: provider
+mutation, onboarding, migration, pruning and observation semantics are not yet
+fully shared. Do not extend either frontend with a second copy of feature logic.
 
 ```mermaid
 flowchart TB
@@ -675,8 +680,8 @@ mount, process or exposure capability still needs an adapter implementation and
 qualification. Unsupported capabilities must fail preflight, not be silently
 omitted. Shared implementation does not imply identical isolation properties.
 
-Use one source package (proposed name `saw_core`), not copied helper files or a
-periodic synchronization script. Keep VM host installation, systemd, privilege
+Use the canonical `charts/openshell-saw/files/installer/saw_core.py`, not copied
+helper files or a periodic synchronization script. Keep VM host installation, systemd, privilege
 transitions, local PKI/bootstrap and binary installation in the VM adapter. Keep
 PVC/RuntimeClass identity checks and native policy realization in the Kubernetes
 adapter. Share their policy intent and results where semantics agree.
@@ -690,7 +695,8 @@ object or recreate storage as a side effect of this refactor.
 
 ### Controller inputs: reuse current SAW; defer a new CRD
 
-No SAW controller CRD or watch loop is installed yet. The current `Workspace`,
+No SAW controller CRD is introduced. A ConfigMap watch/status loop is implemented
+and offline-tested, but is not installed or fully wired to the portal. The current `Workspace`,
 `Providers` and `Sandboxes` documents are **SAW profile YAML**, not Kubernetes
 custom resources. The existing runtime CRD is stock Agent Sandbox's
 `agents.x-k8s.io/v1beta1/Sandbox`, owned through OpenShell's driver.
@@ -701,13 +707,14 @@ input paths: Git-owned user values, and the RHDH registry's `saw-ws-<user>`
 ConfigMaps feeding an ApplicationSet. Both render `saw-users`, Argo applications
 and the existing BOM/profile ConfigMaps. Reuse that intent and ownership model.
 
-The new runtime controller should watch its explicitly selected rendered
-profile/configuration/binding inputs and run the shared SAW engine. Validate a
-complete, coherent input revision before applying it. Record input identity and
-content revision; do not assume ConfigMaps provide CRD-style spec generation.
-Publish observed revision, phase, conditions and endpoints in a separate,
-controller-owned status object/ConfigMap. Never write status into Argo-owned
-desired-state ConfigMaps. Adapt RHDH readiness to that output.
+The implemented runtime frontend watches its explicitly selected administrator
+intent ConfigMap and periodically re-reads the profile ConfigMap. A double read,
+profile UID/content hash and monotonic intent generation prevent mixed GitOps
+revisions. It retains input identity before invoking the core and publishes a
+separate controller-owned status ConfigMap using resourceVersion concurrency.
+Missing inputs block further apply; they do not authorize stop or purge. See the
+[exact contract and wiring](kubernetes-controller-inputs.md). RHDH readiness,
+endpoints and production boundary verification still need integration.
 
 Argo/portal retain their declared infrastructure and workspace-deletion ownership;
 the runtime controller owns OpenShell application of the selected profile. Do not
@@ -909,6 +916,10 @@ Refactor `apply_bom.py` into the shared engine described above and VM/Podman ver
 Kubernetes adapters; preserve existing VM behavior. Do this before expanding the
 current Kubernetes-only profile compiler. Use these concrete extraction steps:
 
+**Progress:** steps 1 and the ConfigMap frontend in step 6 are implemented; step
+3 shares stage sequencing only. Typed intent, transports and the full feature
+adapters remain. The following list remains the complete work breakdown.
+
 1. Extract `Provider`, `Sandbox`, `Workspace`, `Profile`, `parse_profiles`,
    `validate_profiles` and enabled-profile selection. Both frontends consume the
    same models and schema; retain stricter validation and test compatibility.
@@ -927,11 +938,16 @@ current Kubernetes-only profile compiler. Use these concrete extraction steps:
 6. Add the thin ConfigMap-watch/status controller frontend and complete missing
    provider, agent, harness, tool-gate, audit, UI and lifecycle capabilities.
 
-Package the **same pinned core revision** in the controller image and the verified
-VM installer bundle. Today `build-installer-manifest.py` and guest `verify-bundle`
-cover a fixed file set. Extend both signing and staging contracts for all extracted
-code and its required modules; importing unsigned Python from a live mount is not
-an acceptable refactor. No runtime download of an unpinned Python package.
+Implemented packaging: Helm embeds the canonical core bytes into the already
+signed `apply_bom.py`. `build-installer-manifest.py` rejects missing, malformed or
+noncanonical embeddings; the existing fixed manifest and golden-image verifier
+remain compatible. Tests cover embedded-code tampering, hostile adjacent modules
+and copied runtime-user installers. No unsigned module is loaded from a live
+mount, and this extraction alone requires no golden-image rebuild.
+
+The future controller image must package those same pinned source bytes at the
+repository layout consumed by its loader. No runtime package downloads or copied
+alternate core. The image/deployment assembly remains pending.
 
 Run shared feature/conformance fixtures through VM and Kubernetes adapters,
 including equivalent normalized OpenShell intent, credentials redaction, ownership,

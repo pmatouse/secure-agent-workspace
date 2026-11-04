@@ -5,7 +5,7 @@ import uuid
 import pytest
 import yaml
 
-from saw_kubernetes import ContractError, Reconciler, RpcError, compile_profile
+from saw_kubernetes import ContractError, Reconciler, RpcError, compile_profile, compile_profile_files
 from saw_kubernetes.adapters import GrpcGateway, KubernetesResourceVerifier, OcReader
 from saw_kubernetes.compiler import MANAGED, OWNER, canonical, digest
 from saw_kubernetes.reconcile import Busy, StateStore
@@ -59,6 +59,63 @@ def test_compiler_is_deterministic_and_uses_stock_driver_envelope(source):
     assert driver["containers"]["agent"]["volume_mounts"] == [
         {"name": "workspace", "mount_path": "/sandbox", "read_only": False}]
     assert first["claims"] == [{"name": "workspace-toolbox", "uid": "pvc-uid", "workspace": "default"}]
+
+
+def flat_profile(source):
+    return {f"profiles__developer__default__{path.name}": path.read_text()
+            for path in (source[0] / "default").iterdir()}
+
+
+def test_configmap_frontend_and_directory_frontend_have_identical_plans(source):
+    assert compile_profile_files(flat_profile(source), source[1]) == compile_profile(*source)
+
+
+def test_profiles_cannot_claim_the_same_workspace_across_configmap_directories(source):
+    files = flat_profile(source)
+    files.update({key.replace("developer", "another"): value for key, value in list(files.items())})
+    with pytest.raises(ContractError, match="shared SAW"):
+        compile_profile_files(files, source[1])
+
+
+@pytest.mark.parametrize("setting", [
+    {"model": "model-that-would-be-ignored"}, {"agent": "custom-agent"},
+    {"env": {"PROJECT": {"value": "example"}}},
+    {"ui": {"route": False}}, {"harnessRequired": True},
+])
+def test_shared_valid_fields_still_require_backend_capability(source, setting):
+    sandbox(source, lambda sb: sb.update(setting))
+    with pytest.raises(ContractError, match="capability"):
+        compile_profile(*source)
+
+
+def test_invalid_yaml_does_not_echo_input_contents(source):
+    files = flat_profile(source)
+    files["profiles__developer__default__sandbox.yaml"] = "secret-input: [NEVER-ECHO,"
+    with pytest.raises(ContractError) as exc:
+        compile_profile_files(files, source[1])
+    assert "NEVER-ECHO" not in str(exc.value)
+
+
+@pytest.mark.parametrize("kind", ["workspace", "sandbox", "provider"])
+def test_dns_name_must_match_the_whole_string(source, kind):
+    if kind == "workspace":
+        mutate(source, "workspace.yaml", lambda d: d["metadata"].update(name="default\n"))
+    elif kind == "sandbox":
+        sandbox(source, lambda sb: sb.update(name="toolbox\n"))
+    else:
+        mutate(source, "providers.yaml", lambda d: d["spec"]["providers"].append(
+            {"name": "tools\n", "type": "tools\n", "credentialFree": True}))
+    with pytest.raises(ContractError):
+        compile_profile(*source)
+
+
+def test_profile_source_cannot_redirect_to_another_file(source, tmp_path):
+    path = source[0] / "default" / "sandbox.yaml"
+    moved = tmp_path / "outside.yaml"
+    path.rename(moved)
+    path.symlink_to(moved)
+    with pytest.raises(ContractError, match="symlinks"):
+        compile_profile(*source)
 
 
 @pytest.mark.parametrize("extra", [

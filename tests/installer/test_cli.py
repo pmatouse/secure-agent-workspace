@@ -82,6 +82,11 @@ def test_install_then_apply_reaches_ready(world, credential_mode):
     copy = world.state / "installer" / "apply_bom.py"
     assert copy.read_text() == (world.inputs / "installer" / "apply_bom.py").read_text()
     assert oct(copy.stat().st_mode & 0o777) == "0o644"
+    # Raw source fixtures carry the exact shared source beside the copy. The
+    # signed chart-rendered installer embeds it instead (packaging tests).
+    core_copy = copy.with_name("saw_core.py")
+    assert core_copy.read_bytes() == (world.inputs / "installer/saw_core.py").read_bytes()
+    assert oct(core_copy.stat().st_mode & 0o777) == "0o644"
     # Metadata-only inputs produce markers, and argv names only credential variables.
     credential_args = [call[i + 1] for call in world.fake.openshell_calls()
                        for i, arg in enumerate(call[:-1]) if arg == "--credential"]

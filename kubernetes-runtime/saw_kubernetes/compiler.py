@@ -12,7 +12,7 @@ import re
 import uuid
 from pathlib import Path, PurePosixPath
 
-import yaml
+from .core import shared
 
 SOURCE_REVISION = "305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f"
 OWNER = "saw.redhat.com/runtime-owner"
@@ -51,27 +51,6 @@ def name(value, where, max_length=19):
     if not isinstance(value, str) or len(value) > max_length or not NAME.fullmatch(value):
         raise ContractError(f"{where} must be a DNS label of at most {max_length} characters")
     return value
-
-
-def enabled(value, where):
-    if type(value) is not bool:
-        raise ContractError(f"{where}.enabled must be boolean")
-    return value
-
-
-def document(path, kind, spec_fields):
-    if path.is_symlink():
-        raise ContractError("profile documents must not be symlinks")
-    try:
-        raw = yaml.safe_load(path.read_text())
-    except (OSError, ValueError, yaml.YAMLError):
-        raise ContractError(f"cannot load {path.name}") from None
-    mapping(raw, {"apiVersion", "kind", "metadata", "spec"}, {"apiVersion", "kind"}, path.name)
-    if raw["apiVersion"] != "saw.redhat.com/v1alpha1" or raw["kind"] != kind:
-        raise ContractError(f"{path.name} has unsupported apiVersion/kind")
-    mapping(raw.get("metadata", {}), {"name", "description", "profile"}, set(), "metadata")
-    mapping(raw.get("spec", {}), spec_fields, set(), "spec")
-    return raw
 
 
 def _claim(binding, workspace, mount_path, volume_name):
@@ -128,11 +107,43 @@ def _storage(binding, workspace):
 
 
 def compile_profile(profile_dir, config):
-    """Compile existing SAW YAML with separately approved administrator bindings.
+    """Directory frontend for the same flat ConfigMap compiler used by the controller."""
+    root = Path(profile_dir)
+    if not root.is_dir() or root.is_symlink():
+        raise ContractError("profile path must be a real directory")
+    files = {}
+    for directory in sorted(root.iterdir()):
+        if not directory.is_dir() or directory.is_symlink():
+            raise ContractError("profile must contain workspace directories only")
+        if "__" in directory.name:
+            raise ContractError("workspace directory cannot contain a flat-key separator")
+        for path in sorted(directory.iterdir()):
+            if path.is_symlink() or not path.is_file():
+                raise ContractError("profile documents must be regular files, not symlinks")
+            try:
+                files[f"profiles__input__{directory.name}__{path.name}"] = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                raise ContractError("cannot read profile document") from None
+    return compile_profile_files(files, config)
 
-    All inputs are validated before returning any requests. Unsupported active
-    profiles fail as a whole; an empty/incomplete plan is never a successful port.
+
+def compile_profile_files(files, config):
+    """Compile stock SAW ConfigMap data with administrator-approved bindings.
+
+    The shared VM/Kubernetes core owns document parsing, models and semantic
+    validation. This adapter adds only backend capabilities, attachment approval
+    inputs and the pinned Kubernetes driver envelope. No credentials are read.
     """
+    if not isinstance(files, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                                          for k, v in files.items()):
+        raise ContractError("profile data must be a mapping of flat file names to YAML text")
+    try:
+        profiles = shared.parse_profiles(files, strict=True, document_check=_check_document_capabilities)
+        shared.validate_profiles(profiles, governed=True)
+    except shared.InstallerError:
+        # Parser errors may contain input snippets. The controller publishes
+        # status; do not accidentally turn that into a profile/secret echo.
+        raise ContractError("profile documents fail shared SAW schema or semantic validation") from None
     mapping(config, {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode",
                      "workloadRuntimeClass", "workloadRuntimeClassUID", "bindings",
                      "approvedCredentialFreeProviders", "gatewayVersion"},
@@ -150,7 +161,7 @@ def compile_profile(profile_dir, config):
             raise ContractError(f"{key} must be a nonempty string")
     mode = config["mode"]
     runtime = config.get("workloadRuntimeClass", "")
-    if mode not in {"container", "kata"}:
+    if not isinstance(mode, str) or mode not in {"container", "kata"}:
         raise ContractError("this adapter only accepts container or kata; confidential is unimplemented")
     if mode == "container" and (runtime or config.get("workloadRuntimeClassUID")):
         raise ContractError("container mode must not select a RuntimeClass")
@@ -164,80 +175,51 @@ def compile_profile(profile_dir, config):
     bindings = config["bindings"]
     if not isinstance(bindings, dict):
         raise ContractError("bindings must be an object")
-    root = Path(profile_dir)
-    if not root.is_dir() or root.is_symlink():
-        raise ContractError("profile path must be a real directory")
-    workspaces, all_refs, used_bindings, seen = [], [], set(), set()
-    for directory in sorted(root.iterdir()):
-        if not directory.is_dir() or directory.is_symlink():
-            raise ContractError("profile must contain workspace directories only")
-        files = {p.name for p in directory.iterdir()}
-        if files - {"workspace.yaml", "providers.yaml", "sandbox.yaml"} or "workspace.yaml" not in files:
-            raise ContractError("workspace contains unsupported files or lacks workspace.yaml")
-        ws = document(directory / "workspace.yaml", "Workspace", {"enabled"})
-        if not enabled(ws.get("spec", {}).get("enabled", True), "workspace"):
-            continue
-        ws_name = name(ws.get("metadata", {}).get("name"), "workspace")
-        if ws_name in seen:
-            raise ContractError("duplicate workspace name")
-        seen.add(ws_name)
+    workspaces, all_refs, used_bindings = [], [], set()
+    for _, workspace in shared.enabled_workspaces(profiles):
+        ws_name = name(workspace.name, "workspace")
         providers = []
-        if "providers.yaml" in files:
-            doc = document(directory / "providers.yaml", "Providers", {"providers"})
-            entries = doc.get("spec", {}).get("providers", [])
-            if not isinstance(entries, list):
-                raise ContractError("providers must be a list")
-            for item in entries:
-                if not isinstance(item, dict):
-                    raise ContractError("provider must be an object")
-                if not enabled(item.get("enabled", True), "provider"):
-                    continue
-                mapping(item, {"name", "type", "enabled", "credentialFree"},
-                        {"name", "type", "credentialFree"}, "credential-free provider")
-                pname = name(item["name"], "provider")
-                if item["credentialFree"] is not True or item["type"] not in approved or pname != item["type"]:
-                    raise ContractError("provider must be a named administrator-approved credential-free profile")
-                if any(p["metadata"]["name"] == pname for p in providers):
-                    raise ContractError("duplicate provider name")
-                providers.append({"metadata": {"name": pname, "labels": {MANAGED: "kubernetes-runtime", OWNER: owner}},
-                                  "type": item["type"]})
+        for provider in workspace.providers:
+            if not provider.enabled:
+                continue
+            name(provider.name, "provider")
+            name(provider.type, "provider type")
+            # All semantic checks (references, credentialFree, governed names)
+            # live in the common core. This backend has no private provider
+            # materialization or OAuth refresh adapter yet.
+            if (not provider.credential_free or provider.type not in approved
+                    or provider.refresh_strategy or provider.credentials_spec
+                    or provider.credential_secret_key != "api_key"):
+                raise ContractError("provider requires an unported credential/refresh capability or approval")
+            providers.append({"metadata": {"name": provider.name, "labels": {
+                MANAGED: "kubernetes-runtime", OWNER: owner}}, "type": provider.type})
         sandboxes = []
-        if "sandbox.yaml" in files:
-            doc = document(directory / "sandbox.yaml", "Sandboxes", {"sandboxes"})
-            entries = doc.get("spec", {}).get("sandboxes", [])
-            if not isinstance(entries, list):
-                raise ContractError("sandboxes must be a list")
-            for item in entries:
-                if not isinstance(item, dict):
-                    raise ContractError("sandbox must be an object")
-                if not enabled(item.get("enabled", True), "sandbox"):
-                    continue
-                if item.get("type", "generic") != "generic":
-                    raise ContractError("agent profiles (including openclaw/nemoclaw) are not yet ported to Kubernetes")
-                mapping(item, {"name", "type", "enabled", "image", "providers"},
-                        {"name", "image"}, "generic sandbox (harness/UI/inference/env are not yet ported)")
-                sname = name(item["name"], "sandbox")
-                if any(s["name"] == sname for s in sandboxes):
-                    raise ContractError("duplicate sandbox name")
-                if not isinstance(item["image"], str) or not IMAGE.fullmatch(item["image"]):
-                    raise ContractError("sandbox image must be pinned by sha256 digest")
-                references = item.get("providers", [])
-                if not isinstance(references, list) or any(not isinstance(p, str) for p in references):
-                    raise ContractError("sandbox providers must be a list of names")
-                if len(set(references)) != len(references) or not set(references) <= {p["metadata"]["name"] for p in providers}:
-                    raise ContractError("sandbox provider references must be unique and enabled")
-                key = f"{ws_name}/{sname}"
-                if key not in bindings:
-                    raise ContractError(f"{key} requires an administrator-approved retained workspace PVC")
-                used_bindings.add(key)
-                driver, refs = _storage(bindings[key], ws_name)
-                all_refs.extend(refs)
-                if runtime:
-                    driver["pod"] = {"runtime_class_name": runtime}
-                spec = {"template": {"image": item["image"], "driver_config": {"kubernetes": driver}},
-                        "providers": sorted(references), "command": ["sh", "-c", "sleep infinity"], "tty": False}
-                sandboxes.append({"name": sname, "spec": spec, "annotations": {REVISION: digest(spec)},
-                                  "labels": {MANAGED: "kubernetes-runtime", OWNER: owner}})
+        for sandbox in workspace.sandboxes:
+            if not sandbox.enabled:
+                continue
+            name(sandbox.name, "sandbox")
+            if sandbox.type != "generic":
+                raise ContractError("agent profiles (including openclaw/nemoclaw) are not yet ported to Kubernetes")
+            if (sandbox.harness_ref or sandbox.env or sandbox.inference or sandbox.model
+                    or sandbox.agent != "openclaw"):
+                raise ContractError("harness/UI/inference/env capability is not yet ported to Kubernetes")
+            if not IMAGE.fullmatch(sandbox.image):
+                raise ContractError("sandbox image must be pinned by sha256 digest")
+            references = sandbox.providers
+            if len(set(references)) != len(references):
+                raise ContractError("sandbox provider references must be unique")
+            key = f"{ws_name}/{sandbox.name}"
+            if key not in bindings:
+                raise ContractError(f"{key} requires an administrator-approved retained workspace PVC")
+            used_bindings.add(key)
+            driver, refs = _storage(bindings[key], ws_name)
+            all_refs.extend(refs)
+            if runtime:
+                driver["pod"] = {"runtime_class_name": runtime}
+            spec = {"template": {"image": sandbox.image, "driver_config": {"kubernetes": driver}},
+                    "providers": sorted(references), "command": ["sh", "-c", "sleep infinity"], "tty": False}
+            sandboxes.append({"name": sandbox.name, "spec": spec, "annotations": {REVISION: digest(spec)},
+                              "labels": {MANAGED: "kubernetes-runtime", OWNER: owner}})
         workspaces.append({"name": ws_name, "providers": sorted(providers, key=lambda p: p["metadata"]["name"]),
                            "sandboxes": sorted(sandboxes, key=lambda s: s["name"])})
     if not workspaces or not any(w["sandboxes"] for w in workspaces):
@@ -255,3 +237,13 @@ def compile_profile(profile_dir, config):
             "claims": sorted(all_refs, key=lambda r: (r["workspace"], r["name"])),
             "workspaces": sorted(workspaces, key=lambda w: w["name"])}
     return {**plan, "revision": digest(plan)}
+
+
+def _check_document_capabilities(document, kind):
+    # These fields belong to SAW's common language but are consumed by the VM
+    # chart, not its normalized installer models. Reject before normalization
+    # so the Kubernetes path cannot silently drop UI/harness requirements.
+    if kind == "Sandboxes":
+        for entry in document.get("spec", {}).get("sandboxes", []):
+            if entry.get("enabled", True) and set(entry) & {"ui", "harnessRequired"}:
+                raise ContractError("UI/harness capability is not yet ported to Kubernetes")

@@ -1,21 +1,23 @@
 # Stock OpenShell Kubernetes reconciliation foundation
 
 Status: **offline-tested foundation; not installed, not full SAW parity, not a
-qualified container/Kata deployment**. Existing VM installer code is unchanged.
+qualified container/Kata deployment**. VM profile code has been extracted into a
+shared core while preserving the VM install/apply behavior and signed-bundle format.
 
-Next architectural step: [one shared SAW implementation](../docs/container-kata-implementation-plan.md#one-shared-saw-implementation-across-deployment-options).
-This foundation currently duplicates a subset of `apply_bom.py` profile and apply
-logic. Replace that duplication with a shared core used by both the VM entry point
-and this controller frontend before expanding profile features. Container and Kata
-share the Kubernetes adapter. This extraction has **not** been implemented yet.
+Both frontends now use the canonical
+[`saw_core.py`](../charts/openshell-saw/files/installer/saw_core.py): profile models,
+parsing, semantic validation, credential-reference helpers and workspace apply
+sequencing. Container and Kata use the same Kubernetes adapter. Provider mutation,
+agent onboarding, migration and retention semantics are **not yet fully unified**;
+the unsupported Kubernetes capabilities below still fail compilation.
 
-No SAW controller CRD/watch loop exists yet; `Workspace`, `Providers` and
-`Sandboxes` inputs here are profile documents, not installed Kubernetes API kinds.
-The initial controller will consume existing SAW rendered ConfigMap inputs and
-publish observed status separately; **a new SAW CRD is deferred**. The shared
-engine must be independent of input resource kind. A future unified workspace API
-could use a CRD after an explicit ownership/migration design; the stock Agent
-Sandbox CR remains OpenShell-driver-owned.
+[`controller.py`](saw_kubernetes/controller.py) adds the ConfigMap watch/status
+frontend. It consumes a coherent profile plus administrator-intent revision, fences
+input identities/generations, invokes the compiler/reconciler and writes a separate
+status ConfigMap. See the [input and lifecycle contract](../docs/kubernetes-controller-inputs.md).
+A new SAW CRD is deferred. `Workspace`, `Providers` and `Sandboxes` remain profile
+documents; OpenShell owns the stock Agent Sandbox CRs. The frontend is implemented,
+but its production deployment, boundary verifier and portal wiring remain pending.
 
 This integration uses the stock OpenShell API and Kubernetes driver from
 [`305c8b3`](https://github.com/opendatahub-io/openshell/tree/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f)
@@ -25,28 +27,48 @@ This integration uses the stock OpenShell API and Kubernetes driver from
 
 ```mermaid
 flowchart LR
-  Profile[SAW Workspace / Providers / Sandboxes YAML] --> Compiler
-  Admin[Admin PVC UIDs, owner, runtime and resource bindings] --> Compiler
-  Compiler --> Plan[Deterministic nonsecret plan + revision]
+  Argo[Argo-owned profile + intent ConfigMaps] --> Front[Watch / coherent snapshot / generation fence]
+  Front --> Compiler[Kubernetes compiler + capability checks]
+  Core[Shared SAW core] --> Compiler
+  Core --> VM[VM apply_bom adapter]
+  Core --> Reconciler[Kubernetes RPC adapter]
+  Compiler --> Plan[Nonsecret plan + revision]
   Plan --> Reconciler
   Checks[Live resource and boundary verifier] --> Reconciler
-  State[Retained identity ledger + local lock] <--> Reconciler
+  State[Retained identity ledger + lock] <--> Reconciler
+  Reconciler --> Status[Controller-owned status ConfigMap]
   Reconciler -->|mTLS / stock RPCs| Gateway[Stock OpenShell gateway]
-  Gateway --> Driver[Stock Kubernetes driver]
-  Driver --> Supervisor[Ordinary supervisor Pod]
-  Driver --> Sandbox[Agent Sandbox CR]
+  Gateway --> Supervisor[Ordinary supervisor Pod]
+  Gateway --> Sandbox[Driver-owned Agent Sandbox CR]
   Sandbox --> Workload[Container or Kata workload Pod]
   PVC[Admin-owned retained PVC] --> Workload
 ```
 
 | Component | Responsibility |
 | --- | --- |
-| `compiler.py` | Validate the complete profile before any mutation; resolve only administrator-selected attachments; emit stock protobuf request dictionaries and a stable desired revision |
+| `saw_core.py` | Canonical profile models/schema, common validation and workspace → provider → sandbox sequencing, used by VM and Kubernetes |
+| `controller.py` | Read/watch allowlisted ConfigMaps, check coherent input hashes/UIDs, fence generations, publish sanitized status with optimistic concurrency |
+| `intent.py` | Validate local profile/administrator inputs and generate the exact intent ConfigMap with a content hash; no API calls or apply |
+| `compiler.py` | Use the shared core and validate backend capabilities before any mutation; resolve only administrator-selected attachments; emit stock protobuf request dictionaries and a stable desired revision |
 | `reconcile.py` | Observe before writing; serialize apply; retain object IDs; reconcile owner membership, providers and sandboxes; handle bounded retries and generation-aware stop/start |
 | `GrpcGateway` | Send the allowlisted stock RPCs using generated Python stubs, verified TLS and an explicit client identity; no insecure channel or credential logging |
 | `KubernetesResourceVerifier` | Re-read namespace/PVC/RuntimeClass identities and approval labels before every apply; reject deleting/replaced/unapproved attachments |
 | `OcReader` | Read only Namespace, PVC and RuntimeClass JSON through the caller's existing authenticated `oc` configuration |
 | External boundary verifier | Mandatory integration callback: verify native admission/network enforcement, gateway-to-namespace identity and platform governance/policy; approval labels alone are insufficient |
+
+The shared sequencer waits for workspace preparation before providers and for all
+providers before sandboxes. It visits all peers at each stage, so one pending
+provider does not starve another. VM-specific preparation, credential handling,
+error aggregation and pruning remain in its adapter; Kubernetes observations,
+request IDs and requeue behavior remain in its adapter. This is shared stage
+ordering, not a claim that all lifecycle decisions are already common.
+
+The VM chart embeds the exact core bytes into the existing signed `apply_bom.py`.
+The fixed signed-file list and existing golden-image verifier remain compatible;
+there is no adjacent unsigned module import in the rendered installer. The signer
+rejects an unrendered, malformed or noncanonical embedding. Local source uses the
+exact repository module, never a profile-selected import. No golden-image rebuild
+is required solely for this extraction.
 
 The reconciler does not create Pods, patch the driver's objects, format storage,
 read Kubernetes Secrets, delete PVCs or install dependencies. Gateway/provider
@@ -148,6 +170,12 @@ The first command prints a nonsecret compiled plan and performs **no mutations**
 Do not interpret a compiled plan as proof that its PVC UIDs, admission policy,
 image digest or kernel capabilities have been checked against a live cluster.
 
+For the ConfigMap frontend, `python3 -m saw_kubernetes.intent` builds the intent
+from an observed profile ConfigMap JSON and local administrator bindings. Its
+optional `--previous-intent` catches stale/conflicting generations before
+publication. It emits JSON only; Argo still owns applying desired configuration.
+See the [commands and required inputs](../docs/kubernetes-controller-inputs.md).
+
 Unit tests exercise fake gateway observations, including ambiguous create timeouts,
 process restart, stop/start cycles, stale generations, cross-owner objects,
 same-name replacement, spec drift, revoked PVC approval, WFFC Pending claims and
@@ -210,10 +238,11 @@ UUID request IDs, bounded deadlines and no automatic mutation replay. An ambiguo
 result is resolved by a fresh GET on the next pass; matching owned objects are
 adopted, foreign objects and same-name replacements are refused.
 
-Return states are `Pending`, `Retry`, `GenericReady` and `Stopped`.
+Core return states are `Pending`, `Retry`, `GenericReady` and `Stopped`. The
+ConfigMap frontend additionally reports sanitized `Blocked` reasons and API retries.
 `GenericReady` means the stock gateway reports the configured generic sandboxes
 Ready. It does not mean an agent, inference request, RHDH flow or real runtime
-boundary passed acceptance. The caller schedules bounded retries using
+boundary passed acceptance. The ConfigMap frontend schedules bounded retries using
 `retry_after_seconds`; authentication/authorization/precondition failures remain
 errors. Error strings do not include RPC bodies or gateway-provided error details.
 
@@ -251,8 +280,10 @@ purge workflow.
 
 Remaining before full B5/B6/D1 delivery: credential-proxy marker adapter and
 rotation, all agent launch/harness/tool/audit adapters, provider-update readiness,
-profile migrations, retained-volume initialization, UI/relay integration, lifecycle
-status wiring, build/deployment manifests, and live positive/negative tests.
+profile migrations, retained-volume initialization, UI/relay integration, portal lifecycle
+status wiring, production controller assembly/build/deployment manifests, and live
+positive/negative tests. The ConfigMap watcher and status publisher themselves are
+implemented and tested against simulated Kubernetes/gateway APIs.
 The current verifier also runs for `Stopped` intent: revoked attachment approval
 or a failed boundary check prevents the stop RPC. Before live lifecycle delivery,
 add an identity-checked recovery/shutdown path that can stop already owned

@@ -799,7 +799,13 @@ def test_rendered_proxies_verify_issuer_tls_by_default(settings, skip):
 
 def test_installer_configmap_ships_the_real_files(default_docs, ab):
     data = installer_data(default_docs)
-    assert data["apply_bom.py"] == (CHART / "files" / "installer" / "apply_bom.py").read_text()
+    source = (CHART / "files" / "installer" / "apply_bom.py").read_text()
+    core = (CHART / "files" / "installer" / "saw_core.py").read_bytes()
+    marker = '_SAW_CORE_EMBEDDED_B64 = "__SAW_CORE_SOURCE_BASE64__"'
+    assert source.count(marker) == 1
+    assert data["apply_bom.py"] == source.replace(
+        marker, '_SAW_CORE_EMBEDDED_B64 = "' + base64.b64encode(core).decode("ascii") + '"')
+    assert "saw_core.py" not in data  # no unsigned adjacent module for older golden images
     assert data["setup-dashboard.sh"] == (CHART / "files" / "installer" / "setup-dashboard.sh").read_text()
     bom = yaml.safe_load(data["installer-bom.yaml"])
     assert ab.validate_bom(bom)

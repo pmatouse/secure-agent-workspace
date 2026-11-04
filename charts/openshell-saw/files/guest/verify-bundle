@@ -136,6 +136,9 @@ fi
 # scripts/build-installer-manifest.py exactly (same file set, same line
 # format, including the mandatory tool-gate and gateway PKI files), or a genuine,
 # unmodified installer fails enforce.
+# saw_core.py is embedded in rendered apply_bom.py, not imported from an
+# adjacent file. Its bytes are covered by the existing apply_bom.py hash:
+# keep this fixed file set compatible with already-installed golden images.
 manifest_text() {
   local dir="$1" files=(installer-bom.yaml apply_bom.py setup-dashboard.sh) extra f hash
   shopt -s nullglob

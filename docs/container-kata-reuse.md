@@ -94,7 +94,7 @@ Kubernetes backend or patch OpenShell/Kata/Agent Sandbox:
 | [`charts/openshell-saw-kubernetes`](../charts/openshell-saw-kubernetes/README.md) | Stock gateway configuration, retained state references, restricted RBAC, explicit network/trust inputs | Identity bootstrap, trusted namespace/proxy and reconciler integration, live runtime |
 | [`charts/agent-sandbox`](container-runtime-dependencies.md) | Pinned stock core dependency and optional GitOps application | Live API/lifecycle/SCC qualification |
 | [`charts/saw-runtime-policies`](../charts/saw-runtime-policies/README.md) | Native VAP runtime/identity constraints and supervisor ANP | CEL validation, policy realization and negative traffic tests |
-| [`kubernetes-runtime`](../kubernetes-runtime/README.md) | Generic profile compiler, retained attachment verification, serialized/recoverable API reconciliation, generated protobuf tests | Full agent/harness/tool/UI/provider adapters and deployed controller |
+| [`kubernetes-runtime`](../kubernetes-runtime/README.md) | Shared profile core/sequencing, generic compiler, ConfigMap watch/status frontend, retained attachment verification, recoverable API reconciliation | Full agent/harness/tool/UI/provider adapters and deployed controller |
 | RHDH portal, templates and profile generator | Admin mode allowlist, VM default, immutable mode, reject unsupported creation before Vault writes | New backend readiness/lifecycle wiring and qualification before enabling choices |
 
 Initial `kata` means **ordinary supervisor plus Kata workload**. The native
@@ -107,12 +107,17 @@ Parent provisioning still refuses new modes while integration is incomplete.
 Live qualification begins with the unchanged stock SAW VM baseline. An offline
 render, generic Ready response or portal selector does not establish full parity.
 
-Next implementation priority is the [shared SAW engine](container-kata-implementation-plan.md#one-shared-saw-implementation-across-deployment-options):
-extract existing VM profile/lifecycle semantics and replace the duplicate subset
-in this foundation. The VM entry point and controller must use the same core;
-container/Kata share one platform adapter. Shared extraction and the
-ConfigMap-driven controller remain planned, not delivered by the verification
-receipts below. A new SAW CRD is deferred; it is not required for this integration.
+The first [shared SAW engine](container-kata-implementation-plan.md#one-shared-saw-implementation-across-deployment-options)
+extraction and [ConfigMap controller frontend](kubernetes-controller-inputs.md) are
+now implemented. Both VM and Kubernetes use the same profile models, parser,
+semantic checks and workspace/provider/sandbox stage sequence. The VM signed
+installer embeds the canonical source; no new golden-image verifier is needed.
+The controller checks coherent UID/hash-bound revisions, retains generation and
+identity state, and publishes separate status. A new SAW CRD remains deferred.
+
+This is partial engine unification: provider mutation, agent/harness/tool/UI
+adapters, migration and full lifecycle parity remain. None of these source tests
+qualifies a deployed controller or the stock runtime boundary.
 
 ### Foundation verification receipt
 

@@ -13,6 +13,9 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
+
+from .core import shared
 
 from .compiler import ContractError, MANAGED, OWNER, REVISION, SOURCE_REVISION, digest, request_id
 
@@ -210,80 +213,95 @@ class Reconciler:
                     or not profile.get("source", "").startswith("interceptor/")):
                 raise ContractError("provider profile is not a governed credential-free platform profile")
         pending = []
+        adapter = SimpleNamespace(
+            prepare_workspace=lambda ws: self._prepare_workspace(ws, plan, state, generation, pending),
+            apply_provider=lambda ws, provider: self._apply_provider(ws, provider, plan, state, generation, pending),
+            apply_sandbox=lambda ws, sandbox: self._apply_sandbox(
+                ws, sandbox, plan, state, generation, desired_state, pending))
         for ws in plan["workspaces"]:
-            scope = {"workspace_scope": {"workspace": ws["name"]}}
-            obj = self._get("GetWorkspace", {"name": ws["name"]}, "workspace")
-            if obj is None:
-                if ws["name"] == "default":
-                    raise ContractError("gateway default workspace is missing")
-                self._mutate("CreateWorkspace", {"name": ws["name"], "labels": {
-                    MANAGED: "kubernetes-runtime", OWNER: plan["ownerID"]}}, plan, generation)
-                pending.append(f"workspace/{ws['name']}")
-                continue
-            self._identity("workspace", "", ws["name"], obj, plan, state, default=ws["name"] == "default")
-            if obj.get("status", {}).get("phase") != "WORKSPACE_PHASE_ACTIVE":
-                pending.append(f"workspace/{ws['name']}"); continue
-            members, token, tokens = [], "", set()
-            while True:
-                response = self.rpc.call("ListWorkspaceMembers", {**scope, "page_size": 100, "page_token": token})
-                members.extend(response.get("members", []))
-                token = response.get("next_page_token", "")
-                if not token:
-                    break
-                if token in tokens or len(tokens) >= 100:
-                    raise ContractError("invalid membership pagination")
-                tokens.add(token)
-            member = next((m for m in members if m.get("principal_subject") == plan["ownerSubject"]), None)
-            if member is None:
-                self._mutate("AddWorkspaceMember", {**scope, "principal_subject": plan["ownerSubject"],
-                    "role": "WORKSPACE_ROLE_ADMIN"}, plan, generation)
-                pending.append(f"membership/{ws['name']}"); continue
-            if member.get("role") != "WORKSPACE_ROLE_ADMIN":
-                raise ContractError("existing owner membership has unexpected role")
-            providers_ready = True
-            for provider in ws["providers"]:
-                pname = provider["metadata"]["name"]
-                existing = self._get("GetProvider", {**scope, "name": pname}, "provider")
-                if existing is None:
-                    self._mutate("CreateProvider", {**scope, "provider": provider}, plan, generation)
-                    providers_ready = False; pending.append(f"provider/{ws['name']}/{pname}"); continue
-                self._identity("provider", ws["name"], pname, existing, plan, state)
-                if existing.get("type") != provider["type"] or existing.get("config") or existing.get("credentials") or existing.get("credential_handles"):
-                    raise ContractError("provider drift or unexpected credential state requires explicit recovery")
-            if not providers_ready:
-                continue
-            for sandbox in ws["sandboxes"]:
-                sname = sandbox["name"]
-                ref = f"sandbox/{ws['name']}/{sname}"
-                existing = self._get("GetSandbox", {**scope, "name": sname}, "sandbox")
-                if existing is None:
-                    if ref in state.get("objectIDs", {}):
-                        raise ContractError("managed sandbox disappeared; refuse implicit recreation")
-                    if desired_state == "Stopped":
-                        # A stopped new intent must never start a workload merely
-                        # to stop it afterward. It remains unapplied until Running.
-                        pending.append(ref); continue
-                    self._mutate("CreateSandbox", {**scope, **sandbox}, plan, generation)
-                    pending.append(ref); continue
-                self._identity("sandbox", ws["name"], sname, existing, plan, state)
-                spec = existing.get("spec", {})
-                if not self._sandbox_spec_matches(spec, sandbox["spec"]):
-                    raise ContractError("sandbox configuration drift; migration is not implemented")
-                if existing.get("metadata", {}).get("annotations", {}).get(REVISION) != sandbox["annotations"][REVISION]:
-                    raise ContractError("sandbox desired revision mismatch")
-                phase = existing.get("status", {}).get("phase")
-                if phase == "SANDBOX_PHASE_ERROR":
-                    raise ContractError("sandbox reports an error; inspect through authorized diagnostics")
-                target = "SANDBOX_PHASE_READY" if desired_state == "Running" else "SANDBOX_PHASE_STOPPED"
-                if phase == target:
-                    continue
-                if desired_state == "Running" and phase == "SANDBOX_PHASE_STOPPED":
-                    self._mutate("StartSandbox", {**scope, "name": sname}, plan, generation)
-                elif desired_state == "Stopped" and phase == "SANDBOX_PHASE_READY":
-                    self._mutate("StopSandbox", {**scope, "name": sname}, plan, generation)
-                pending.append(ref)
+            shared.apply_workspace_sequence(ws, ws["providers"], ws["sandboxes"], adapter)
         state["transientAttempts"] = 0
         self.store.save(state)
         return self._status(plan, generation, "Pending" if pending else
                             ("GenericReady" if desired_state == "Running" else "Stopped"),
                             pending=pending, retry_after_seconds=5 if pending else 0)
+
+    def _prepare_workspace(self, ws, plan, state, generation, pending):
+        scope = {"workspace_scope": {"workspace": ws["name"]}}
+        obj = self._get("GetWorkspace", {"name": ws["name"]}, "workspace")
+        if obj is None:
+            if ws["name"] == "default":
+                raise ContractError("gateway default workspace is missing")
+            self._mutate("CreateWorkspace", {"name": ws["name"], "labels": {
+                MANAGED: "kubernetes-runtime", OWNER: plan["ownerID"]}}, plan, generation)
+            pending.append(f"workspace/{ws['name']}")
+            return False
+        self._identity("workspace", "", ws["name"], obj, plan, state, default=ws["name"] == "default")
+        if obj.get("status", {}).get("phase") != "WORKSPACE_PHASE_ACTIVE":
+            pending.append(f"workspace/{ws['name']}")
+            return False
+        members, token, tokens = [], "", set()
+        while True:
+            response = self.rpc.call("ListWorkspaceMembers", {**scope, "page_size": 100, "page_token": token})
+            members.extend(response.get("members", []))
+            token = response.get("next_page_token", "")
+            if not token:
+                break
+            if token in tokens or len(tokens) >= 100:
+                raise ContractError("invalid membership pagination")
+            tokens.add(token)
+        member = next((m for m in members if m.get("principal_subject") == plan["ownerSubject"]), None)
+        if member is None:
+            self._mutate("AddWorkspaceMember", {**scope, "principal_subject": plan["ownerSubject"],
+                "role": "WORKSPACE_ROLE_ADMIN"}, plan, generation)
+            pending.append(f"membership/{ws['name']}")
+            return False
+        if member.get("role") != "WORKSPACE_ROLE_ADMIN":
+            raise ContractError("existing owner membership has unexpected role")
+        return True
+
+    def _apply_provider(self, ws, provider, plan, state, generation, pending):
+        scope = {"workspace_scope": {"workspace": ws["name"]}}
+        pname = provider["metadata"]["name"]
+        existing = self._get("GetProvider", {**scope, "name": pname}, "provider")
+        if existing is None:
+            self._mutate("CreateProvider", {**scope, "provider": provider}, plan, generation)
+            pending.append(f"provider/{ws['name']}/{pname}")
+            return False
+        self._identity("provider", ws["name"], pname, existing, plan, state)
+        if existing.get("type") != provider["type"] or existing.get("config") or existing.get("credentials") or existing.get("credential_handles"):
+            raise ContractError("provider drift or unexpected credential state requires explicit recovery")
+        return True
+
+    def _apply_sandbox(self, ws, sandbox, plan, state, generation, desired_state, pending):
+        scope = {"workspace_scope": {"workspace": ws["name"]}}
+        sname = sandbox["name"]
+        ref = f"sandbox/{ws['name']}/{sname}"
+        existing = self._get("GetSandbox", {**scope, "name": sname}, "sandbox")
+        if existing is None:
+            if ref in state.get("objectIDs", {}):
+                raise ContractError("managed sandbox disappeared; refuse implicit recreation")
+            if desired_state == "Stopped":
+                # A stopped new intent never starts a workload to stop it again.
+                pending.append(ref)
+                return False
+            self._mutate("CreateSandbox", {**scope, **sandbox}, plan, generation)
+            pending.append(ref)
+            return False
+        self._identity("sandbox", ws["name"], sname, existing, plan, state)
+        if not self._sandbox_spec_matches(existing.get("spec", {}), sandbox["spec"]):
+            raise ContractError("sandbox configuration drift; migration is not implemented")
+        if existing.get("metadata", {}).get("annotations", {}).get(REVISION) != sandbox["annotations"][REVISION]:
+            raise ContractError("sandbox desired revision mismatch")
+        phase = existing.get("status", {}).get("phase")
+        if phase == "SANDBOX_PHASE_ERROR":
+            raise ContractError("sandbox reports an error; inspect through authorized diagnostics")
+        target = "SANDBOX_PHASE_READY" if desired_state == "Running" else "SANDBOX_PHASE_STOPPED"
+        if phase == target:
+            return True
+        if desired_state == "Running" and phase == "SANDBOX_PHASE_STOPPED":
+            self._mutate("StartSandbox", {**scope, "name": sname}, plan, generation)
+        elif desired_state == "Stopped" and phase == "SANDBOX_PHASE_READY":
+            self._mutate("StopSandbox", {**scope, "name": sname}, plan, generation)
+        pending.append(ref)
+        return False
