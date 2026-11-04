@@ -38,4 +38,9 @@ spec:
   resources:
     limits:
       memory: 4Gi
+  {{- if .Values.build.configChangeTrigger }}
+  triggers:
+    - type: ConfigChange
+  {{- else }}
   triggers: []
+  {{- end }}

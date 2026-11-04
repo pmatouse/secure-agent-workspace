@@ -35,6 +35,16 @@ def inline_dockerfile():
     return bc["spec"]["source"]["dockerfile"]
 
 
+@pytest.mark.skipif(not HELM, reason="helm is not installed")
+@pytest.mark.parametrize("enabled", [False, True])
+def test_gitops_build_trigger_is_explicit_opt_in(enabled):
+    out = run_helm([HELM, "template", "img", str(CHART), "--set",
+                    f"build.configChangeTrigger={str(enabled).lower()}"],
+                   capture_output=True, text=True, check=True).stdout
+    bc = next(d for d in yaml.safe_load_all(out) if d and d["kind"] == "BuildConfig")
+    assert bc["spec"]["triggers"] == ([{"type": "ConfigChange"}] if enabled else [])
+
+
 @pytest.mark.ci_external
 @pytest.mark.parametrize("line", PATCH_LINES)
 def test_dockerfile_carries_every_source_patch(line):

@@ -4,6 +4,9 @@ source:
     ref: "v0.1.2"
 
 build:
+  # Opt-in GitOps build: OpenShift starts a build when this recipe changes.
+  # Default preserves the existing explicit Make build command.
+  configChangeTrigger: false
   contextDir: "examples/governance-interceptor"
   # OpenShell 0.1.x needs Rust 1.94 (rust-version in its Cargo.toml).
   builderImage: "rust:1.94-bookworm"
