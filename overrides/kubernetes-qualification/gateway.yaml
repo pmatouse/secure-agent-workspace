@@ -1,0 +1,121 @@
+# Generic stock gateway qualification; no workspace or agent profile is activated.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-gateway
+  namespace: vp-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: '20'
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 7eb8463cdea3c5803ab5ab84322b9163ac6c1c55
+    path: charts/openshell-saw-kubernetes
+    helm:
+      releaseName: saw-k8s-test
+      valuesObject:
+        deployment:
+          mode: container
+        kubernetes:
+          experimental: true
+          workload:
+            image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+          identity:
+            serverTlsSecret: saw-k8s-test-server
+            clientCaSecret: saw-k8s-test-client-ca
+            jwtSecret: saw-k8s-test-jwt
+            credentialKeySecret: saw-k8s-test-kek
+          storage:
+            className: ocs-external-storagecluster-ceph-rbd
+            gatewaySize: 1Gi
+            workspaceSize: 1Gi
+          proxy:
+            url: http://saw-k8s-test-credential-proxy.saw-k8s-trusted.svc:3128
+            caConfigMap: saw-k8s-test-proxy-ca
+          governance:
+            endpoint: http://governance-interceptor.saw-k8s-build.svc:18081
+          network:
+            reconcilerNamespace: saw-k8s-trusted
+            reconcilerLabels:
+              app.kubernetes.io/instance: saw-k8s-test
+              openshell.pattern/role: reconciler
+            gatewayEgress:
+            - to:
+              - ipBlock:
+                  cidr: 172.231.0.1/32
+              - ipBlock:
+                  cidr: 10.10.10.10/32
+              - ipBlock:
+                  cidr: 10.10.10.11/32
+              - ipBlock:
+                  cidr: 10.10.10.12/32
+              ports:
+              - protocol: TCP
+                port: 443
+              - protocol: TCP
+                port: 6443
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: openshift-dns
+                podSelector:
+                  matchLabels:
+                    dns.operator.openshift.io/daemonset-dns: default
+              ports:
+              - protocol: UDP
+                port: 53
+              - protocol: UDP
+                port: 5353
+              - protocol: TCP
+                port: 53
+              - protocol: TCP
+                port: 5353
+            - to:
+              - ipBlock:
+                  cidr: 10.10.10.10/32
+              - ipBlock:
+                  cidr: 10.10.10.11/32
+              - ipBlock:
+                  cidr: 10.10.10.12/32
+              - ipBlock:
+                  cidr: 10.10.10.30/32
+              - ipBlock:
+                  cidr: 10.10.10.31/32
+              ports:
+              - protocol: TCP
+                port: 443
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: saw-k8s-build
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: governance-interceptor
+              ports:
+              - protocol: TCP
+                port: 18081
+            - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: saw-k8s-trusted
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: saw-k8s-test
+                    openshell.pattern/role: credential-proxy
+              ports:
+              - protocol: TCP
+                port: 3128
+        oidc:
+          issuerUrl: https://openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io/realms/openshell
+        route:
+          host: saw-k8s-test-gateway.saw-k8s-test.apps.cluster-glmhg.dyn.redhatworkshops.io
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-test
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: 3

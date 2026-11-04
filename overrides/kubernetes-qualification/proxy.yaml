@@ -1,5 +1,4 @@
-# Isolated qualification: existing approved OpenAI key, reference only.
-# Provider and endpoint are fixed in the reviewed proxy policy, not optional Vault fields.
+# Approved key reference only; HTTPS hosts fixed in proxy policy.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -105,6 +104,7 @@ spec:
                 - 192.168.0.0/16
                 - 224.0.0.0/4
                 - 240.0.0.0/4
+                - 172.231.0.0/16
             ports:
             - protocol: TCP
               port: 443
