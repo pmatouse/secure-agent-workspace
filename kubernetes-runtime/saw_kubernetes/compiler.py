@@ -75,8 +75,8 @@ def _storage(binding, workspace):
         raise ContractError("/sandbox must be writable")
     volumes, mounts, refs = [volume], [mount], [reference]
     extra = binding.get("mounts", [])
-    if not isinstance(extra, list):
-        raise ContractError("mounts must be a list")
+    if not isinstance(extra, list) or len(extra) > 16:
+        raise ContractError("mounts must be a list of at most 16 additional PVCs")
     for i, item in enumerate(extra):
         mapping(item, {"claimName", "uid", "readOnly", "mountPath"},
                 {"claimName", "uid", "readOnly", "mountPath"}, "mount")

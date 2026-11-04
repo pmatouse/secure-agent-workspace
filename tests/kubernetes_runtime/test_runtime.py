@@ -61,6 +61,17 @@ def test_compiler_is_deterministic_and_uses_stock_driver_envelope(source):
     assert first["claims"] == [{"name": "workspace-toolbox", "uid": "pvc-uid", "workspace": "default"}]
 
 
+def test_mount_count_respects_governance_envelope(source):
+    binding = source[1]["bindings"]["default/toolbox"]
+    binding["mounts"] = [{"claimName": f"data-{i}", "uid": f"uid-{i}",
+                          "readOnly": True, "mountPath": f"/data/model-{i}"}
+                         for i in range(17)]
+    with pytest.raises(ContractError, match="at most 16"):
+        compile_profile(*source)
+    binding["mounts"].pop()
+    assert len(compile_profile(*source)["claims"]) == 17
+
+
 def flat_profile(source):
     return {f"profiles__developer__default__{path.name}": path.read_text()
             for path in (source[0] / "default").iterdir()}

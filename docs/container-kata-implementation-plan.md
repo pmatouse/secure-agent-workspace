@@ -1112,11 +1112,16 @@ Sources: [OpenShift policy precedence](https://docs.redhat.com/en/documentation/
 NetworkPolicy previously selected only KubeVirt launchers. Its new opt-in
 `kubernetesGateways: [{namespace: saw-k8s-test, gatewayId: saw-k8s-test}]`
 adds an exact namespace AND gateway-role/instance selector; defaults preserve
-VM ingress. This changes connectivity only. The existing SAW-built governance
+VM ingress. This changes connectivity only. The deployed SAW-built governance
 interceptor's driver-config guard still accepts only exact Podman gate/audit
-mounts. Before a Kubernetes workload is admitted, extend that SAW policy guard
-for the reviewed, administrator-only Kubernetes PVC/runtime/resource envelope,
-build and pin the policy image, and test rejected alternatives. Do not disable
+mounts. Its build recipe now additionally validates the administrator-only
+Kubernetes envelope: one writable `/sandbox` PVC, at most 16 distinct additional
+PVCs under `/data`, matched read-only flags, an optional RuntimeClass and bounded
+resource field names. Host paths, extra containers, security overrides, unknown
+driver fields and non-admin requests are refused. Eight embedded Rust tests
+passed on the Linux bastion using Rust 1.94; the Helm/recipe tests also passed.
+The complete policy image still needs building, pinning and live qualification.
+This does not yet add Kubernetes agent gate/audit/harness mounts. Do not disable
 governance or drop PVC bindings to make a test pass. This is SAW policy integration;
 OpenShell gateway/driver, Agent Sandbox and Kata images remain stock.
 

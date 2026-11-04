@@ -72,6 +72,10 @@ RUN printf '%s\n' \
 '    if !is_admin {' \
 '        return deny("driver config may only be submitted by a platform admin mTLS identity");' \
 '    }' \
+'    if let Some(kubernetes) = drivers.get("kubernetes") {' \
+'        return if drivers.len() == 1 && valid_kubernetes_driver(kubernetes) { allow() }' \
+'            else { deny("Kubernetes driver config must use the approved retained-PVC envelope") };' \
+'    }' \
 '    let Some(podman) = drivers.get("podman").and_then(Value::as_object) else {' \
 '        return deny("driver config must contain only podman agent mounts");' \
 '    };' \
@@ -95,6 +99,65 @@ RUN printf '%s\n' \
 '    allow()' \
 '}' \
 '' \
+'// SAW integration policy: only a platform mTLS admin may select retained PVCs.' \
+'// Live namespace/PVC UID and attachment approval stay in the reconciler/driver.' \
+'fn k8s_name(value: &str) -> bool {' \
+'    !value.is_empty() && value.len() <= 63' \
+'        && value.as_bytes()[0].is_ascii_alphanumeric()' \
+'        && value.as_bytes()[value.len()-1].is_ascii_alphanumeric()' \
+'        && value.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == 45)' \
+'}' \
+'fn k8s_quantity(value: &Value) -> bool {' \
+'    let Some(text) = value.as_str() else { return false; };' \
+'    let digits = text.bytes().take_while(|b| b.is_ascii_digit()).count();' \
+'    digits > 0 && text.as_bytes()[0] != 48' \
+'        && ["", "m", "Ki", "Mi", "Gi", "Ti"].contains(&&text[digits..])' \
+'}' \
+'fn valid_kubernetes_driver(config: &Value) -> bool {' \
+'    let Some(driver) = config.as_object() else { return false; };' \
+'    if driver.keys().any(|k| !["volumes", "containers", "pod"].contains(&k.as_str())) { return false; }' \
+'    if let Some(pod) = driver.get("pod") {' \
+'        let Some(pod) = pod.as_object() else { return false; };' \
+'        if pod.len() != 1 || !pod.get("runtime_class_name").and_then(Value::as_str).is_some_and(k8s_name) { return false; }' \
+'    }' \
+'    let Some(volumes) = driver.get("volumes").and_then(Value::as_array) else { return false; };' \
+'    let Some(containers) = driver.get("containers").and_then(Value::as_object) else { return false; };' \
+'    let Some(agent) = containers.get("agent").and_then(Value::as_object) else { return false; };' \
+'    if containers.len() != 1 || agent.len() != 2 { return false; }' \
+'    let Some(mounts) = agent.get("volume_mounts").and_then(Value::as_array) else { return false; };' \
+'    let Some(resources) = agent.get("resources").and_then(Value::as_object) else { return false; };' \
+'    for (group, values) in resources {' \
+'        if !["requests", "limits"].contains(&group.as_str()) { return false; }' \
+'        let Some(values) = values.as_object() else { return false; };' \
+'        if values.iter().any(|(k,v)| !["cpu", "memory", "ephemeral-storage"].contains(&k.as_str()) || !k8s_quantity(v)) { return false; }' \
+'    }' \
+'    if volumes.is_empty() || volumes.len() > 17 || volumes.len() != mounts.len() { return false; }' \
+'    let mut paths: Vec<String> = Vec::new();' \
+'    let mut claims: Vec<String> = Vec::new();' \
+'    for (index, (volume, mount)) in volumes.iter().zip(mounts.iter()).enumerate() {' \
+'        let Some(v) = volume.as_object() else { return false; };' \
+'        let Some(m) = mount.as_object() else { return false; };' \
+'        let name = if index == 0 { "workspace".to_string() } else { format!("data-{}", index-1) };' \
+'        if v.len() != 2 || m.len() != 3 || v.get("name").and_then(Value::as_str) != Some(name.as_str())' \
+'            || m.get("name").and_then(Value::as_str) != Some(name.as_str()) { return false; }' \
+'        let Some(pvc) = v.get("persistent_volume_claim").and_then(Value::as_object) else { return false; };' \
+'        if pvc.len() != 2 { return false; }' \
+'        let Some(claim) = pvc.get("claim_name").and_then(Value::as_str) else { return false; };' \
+'        let Some(read_only) = pvc.get("read_only").and_then(Value::as_bool) else { return false; };' \
+'        if !k8s_name(claim) || claims.iter().any(|c| c == claim)' \
+'            || m.get("read_only").and_then(Value::as_bool) != Some(read_only) { return false; }' \
+'        let Some(path) = m.get("mount_path").and_then(Value::as_str) else { return false; };' \
+'        if index == 0 {' \
+'            if path != "/sandbox" || read_only { return false; }' \
+'        } else if !(path == "/data" || path.starts_with("/data/"))' \
+'            || path[1..].split("/").any(|p| p.is_empty() || p == "." || p == "..")' \
+'            || path.chars().any(|c| c.is_control()) { return false; }' \
+'        if paths.iter().any(|p| p == path || path.starts_with(&format!("{p}/")) || p.starts_with(&format!("{path}/"))) { return false; }' \
+'        paths.push(path.to_string());' \
+'        claims.push(claim.to_string());' \
+'    }' \
+'    true' \
+'}' \
 '#[cfg(test)]' \
 'mod agent_driver_tests {' \
 '    use super::*;' \
@@ -201,6 +264,56 @@ RUN printf '%s\n' \
 '            json!({"podman":{"mounts":[null]}})] {' \
 '            assert!(!validate_driver_config(Some(&config), &admin()).allowed, "accepted {config}");' \
 '        }' \
+'    }' \
+'    fn k8s() -> Value {' \
+'        json!({"kubernetes":{' \
+'            "volumes":[{"name":"workspace","persistent_volume_claim":{"claim_name":"alice-workspace","read_only":false}}],' \
+'            "containers":{"agent":{"volume_mounts":[{"name":"workspace","mount_path":"/sandbox","read_only":false}],"resources":{"requests":{"cpu":"250m","memory":"512Mi"}}}}' \
+'        }})' \
+'    }' \
+'    #[test]' \
+'    fn kubernetes_requires_admin_and_allows_only_pvc_shape() {' \
+'        let mut config = k8s();' \
+'        assert!(validate_driver_config(Some(&config), &admin()).allowed);' \
+'        assert!(!validate_driver_config(Some(&config), &HashMap::new()).allowed);' \
+'        let mut oidc = admin(); oidc.insert("provider".into(), "oidc".into());' \
+'        assert!(!validate_driver_config(Some(&config), &oidc).allowed);' \
+'        config["kubernetes"]["pod"] = json!({"runtime_class_name":"kata"});' \
+'        assert!(validate_driver_config(Some(&config), &admin()).allowed);' \
+'        config["kubernetes"]["volumes"].as_array_mut().unwrap().push(json!({"name":"data-0","persistent_volume_claim":{"claim_name":"alice-data","read_only":true}}));' \
+'        config["kubernetes"]["containers"]["agent"]["volume_mounts"].as_array_mut().unwrap().push(json!({"name":"data-0","mount_path":"/data/models","read_only":true}));' \
+'        assert!(validate_driver_config(Some(&config), &admin()).allowed);' \
+'        for path in ["/etc", "/sandbox/plugin", "/data/../etc", "/data//bad", "/data/x/", "/data/./x", "/data/x\n"] {' \
+'            let mut bad = config.clone();' \
+'            bad["kubernetes"]["containers"]["agent"]["volume_mounts"][1]["mount_path"] = json!(path);' \
+'            assert!(!validate_driver_config(Some(&bad), &admin()).allowed);' \
+'        }' \
+'        config["kubernetes"]["containers"]["agent"]["volume_mounts"][1]["read_only"] = json!(false);' \
+'        assert!(!validate_driver_config(Some(&config), &admin()).allowed);' \
+'    }' \
+'    #[test]' \
+'    fn kubernetes_rejects_privilege_paths_and_malformed_options() {' \
+'        for (pointer, value) in [' \
+'            ("/kubernetes/volumes/0", json!({"name":"workspace","host_path":{"path":"/"}})),' \
+'            ("/kubernetes/volumes/0/persistent_volume_claim", json!({"claim_name":"alice-workspace"})),' \
+'            ("/kubernetes/containers/agent", json!({"volume_mounts":[],"resources":{},"security_context":{"privileged":true}})),' \
+'            ("/kubernetes/containers", json!({"agent":{},"extra":{}})),' \
+'            ("/kubernetes/volumes", json!([])),' \
+'            ("/kubernetes/containers/agent/volume_mounts/0/mount_path", json!("/")),' \
+'            ("/kubernetes/volumes/0/persistent_volume_claim/claim_name", json!("../secret")),' \
+'            ("/kubernetes/containers/agent/resources", json!({"requests":{"cpu":"0"}})),' \
+'            ("/kubernetes/containers/agent/resources", json!({"requests":{"gpu":"1"}})),' \
+'            ("/kubernetes/containers/agent/resources", json!({"requests":{"cpu":1}}))' \
+'        ] {' \
+'            let mut bad=k8s(); *bad.pointer_mut(pointer).unwrap()=value;' \
+'            assert!(!validate_driver_config(Some(&bad), &admin()).allowed, "accepted {bad}");' \
+'        }' \
+'        for pod in [json!({}),json!({"runtime_class_name":""}),json!({"host_network":true}),json!({"runtime_class_name":"kata","host_pid":true})] {' \
+'            let mut bad=k8s(); bad["kubernetes"]["pod"]=pod;' \
+'            assert!(!validate_driver_config(Some(&bad), &admin()).allowed);' \
+'        }' \
+'        let mut bad=k8s(); bad["podman"]=json!({});' \
+'        assert!(!validate_driver_config(Some(&bad), &admin()).allowed);' \
 '    }' \
 '}' \
 >> src/main.rs
