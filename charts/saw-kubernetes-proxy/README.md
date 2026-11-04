@@ -82,3 +82,15 @@ fingerprint and runtime ConfigMap UID. With a disposable approved client, verify
 real provider request using only the marker, rejection of an unapproved host,
 rejection of a marker for the wrong host and runtime namespace credential absence.
 Do not report container SAW parity until the full workspace/agent/portal tests pass.
+
+The opt-in live transport probe uses only a marker and public CA:
+
+```sh
+python3 tests/acceptance/kubernetes_proxy.py \
+  --trusted-namespace TRUSTED --runtime-namespace RUNTIME --gateway GATEWAY
+```
+
+It creates a temporary loopback-only port-forward, performs one small OpenAI chat
+request, rejects an unapproved host and unknown marker, then closes the tunnel.
+`--trust-only` compares public trust/metadata without making an inference call.
+The port-forward bypasses client-side ingress policy; it cannot qualify CNI.

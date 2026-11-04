@@ -165,6 +165,8 @@ Source evidence: [release artifacts](https://github.com/kubernetes-sigs/agent-sa
 existing SAW proxy in a separate trusted namespace. ESO supplies provider keys;
 only the immutable public proxy CA is projected to the runtime namespace.
 The bootstrap reuses the existing CA and rejects conflicting projections.
-Gateway and supervisor use credential markers. This integration has local chart
-and trust-projection tests; live transport and full workspace qualification are
-separate gates.
+Gateway and supervisor use credential markers. Chart and trust-projection tests pass. The isolated live proxy returned
+`SAW_PROXY_OK` through verified TLS using only a credential marker, rejected an
+unapproved host and unknown marker, and retained CA identity across a second Argo
+sync. The loopback port-forward used by this test bypasses client-side ingress;
+CNI and full workspace qualification remain separate gates.
