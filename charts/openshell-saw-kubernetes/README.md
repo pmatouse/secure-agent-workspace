@@ -1,7 +1,9 @@
 # Stock OpenShell Kubernetes gateway foundation
 
-**Experimental, offline-tested integration.** This chart renders the gateway
-foundation; it does not yet install a complete SAW workspace. The parent
+**Experimental; stock gateway and ordinary-user read-only RPC verified on
+OpenShift 4.22.20.** The GitOps gateway reached Ready under `restricted-v2`,
+connected its Kubernetes driver and passed `openshell workspace list` over
+verified TLS/OIDC. This chart does not yet install a complete SAW workspace. The parent
 `saw-users` and RHDH provisioning gates still reject container/Kata creation.
 Do not interpret gateway readiness as agent, inference or policy qualification.
 
@@ -74,6 +76,12 @@ Provide these values explicitly; the chart neither discovers nor generates them:
 | `kubernetes.network.gatewayEgress` | Actual DNS/API Service and backend addresses, issuer/governance/proxy destinations and ports |
 | `kubernetes.network.reconcilerNamespace`, `reconcilerLabels` | Exact trusted caller selector, separate from the runtime namespace |
 | `route.host` | Optional assigned hostname; certificate must cover the chosen host |
+
+Resolve the issuer **from a Pod** when building `gatewayEgress`: a bastion can
+resolve the same hostname to a different ingress VIP. A restricted diagnostic
+should verify HTTPS discovery and the exact issuer before gateway rollout.
+In-cluster HTTP governance does not authenticate the caller at the transport
+layer; the qualification installation relies on network/admission isolation.
 
 Names and certificate material are installation inputs. Secret values must not
 enter Git. A retained owner must supply:

@@ -16,14 +16,17 @@ history, including failed attempts):
 | Portal model update | Vault/ESO contain the new model; boot-time input disks require the documented restart. Guest selected the new model and its authenticated browser returned `SAW_MODEL_UPDATE_OK`. Portal HTTP-status task failed separately; Tekton success is insufficient |
 | Agent Sandbox dependency | Stock controller Available, CRD Established; isolated nonroot `restricted-v2` probe Ready with retained PVC, no token and deny-all network policy; GitOps suspend/resume passed with a fresh Pod and unchanged canary/PVC |
 | Retained identity | First bootstrap and second Argo sync passed; six immutable Secret UIDs and public CA fingerprints unchanged |
-| Native policies | Installed by Argo; no CEL warnings, OVN SetupSucceeded. Dry-run ordinary Pod admitted, forged workload/supervisor roles denied. Packet tests still required |
+| Native policies | Installed by Argo; no CEL warnings, OVN SetupSucceeded. Six server dry runs: ordinary Pod and legitimate StatefulSet controller admitted; forged workload, supervisor, gateway label and gateway owner rejected. Packet tests still required |
 | SAW policy image | Full build/push passed: `sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97`; existing VM service unchanged; isolated service 1/1 Available; protocol/policy qualification pending |
-| Trusted proxy | Existing SAW binary deployed separately with ESO; real marker-only OpenAI chat returned `SAW_PROXY_OK`; unapproved host and unknown marker denied; repeat sync preserved CA/PVC-independent trust identities. Port-forward test does not qualify client-side CNI |
+| Trusted proxy | Existing SAW binary deployed separately with ESO; real marker-only OpenAI chat returned `SAW_PROXY_OK`; unapproved host and unknown marker denied; repeat sync preserved CA fingerprint and both CA resource UIDs. Port-forward test does not qualify client-side CNI |
+| Stock Kubernetes gateway | 1/1 Ready under `restricted-v2`, driver connected, eight governance bindings initialized; ordinary owner passed stock CLI `workspace list` through verified TLS/OIDC. In-cluster issuer uses the internal ingress VIP; no supervisor/workload or agent qualification yet |
 | Kata prerequisite | Both worker nodes have KVM/CPU virtualization, but boot in BIOS. OSC 1.13 documents UEFI. Stock operator installation is separate; no KataConfig, forced eligibility or reboot requested |
 
-The trusted credential proxy is now wired and transport-tested. Stock gateway
-qualification is in progress; next are the concrete boundary verifier and
-production reconciler assembly, supervisor tests and agent/UI/RHDH parity. The dependency probe bypasses
+The trusted credential proxy is now wired and transport-tested. The stock gateway now passes
+startup and authenticated read-only RPC. Next are the concrete boundary verifier,
+production reconciler assembly, actual sandbox/supervisor lifecycle, packet tests
+and agent/UI/RHDH parity. The qualification governance endpoint uses network-
+isolated HTTP, so transport-level caller authentication is still a production gap. The dependency probe bypasses
 OpenShell intentionally to test Agent Sandbox alone; it must never be reported
 as a working SAW container workspace. The documented Kata path needs a
 UEFI-provisioned worker before runtime activation. See the
