@@ -68,3 +68,18 @@ worker (the control-plane nodes also carry the worker label), and inventory its
 workloads. Do not select all workers: that would include the preserved VM hosts.
 The lab is nested; a functional test is not a vendor support certification.
 See the [stock installation procedure](https://docs.redhat.com/en/documentation/openshift_sandboxed_containers/1.13/html/deploying_openshift_sandboxed_containers_on_bare-metal_servers/install-osc-overview_metal-osc).
+
+
+`dependency-smoke.yaml` is a separate, credential-free **Agent Sandbox dependency**
+test. Argo owns its Sandbox and retained 1Gi PVC. The stock controller starts an
+unprivileged, digest-pinned UBI Python container with no service-account token,
+no network access and a persistent canary. Changing `operatingMode` in Git to
+`Suspended`, then `Running`, must produce a fresh Pod with the same PVC UID and
+canary hash. This exercises controller/CRD/storage lifecycle only; it is not
+OpenShell supervisor, governance, inference, UI or SAW parity evidence.
+
+Both actual worker probes reported BIOS boot, `/dev/kvm` present and VMX/SVM
+present. OSC 1.13's documented UEFI prerequisite is not met. Do not enable a
+`KataConfig` or override eligibility to label this a supported Kata test. A
+UEFI-provisioned worker is required for the documented path; no existing cluster
+or workload disk is reformatted by this qualification.

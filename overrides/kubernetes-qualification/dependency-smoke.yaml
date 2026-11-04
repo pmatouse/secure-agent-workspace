@@ -1,0 +1,95 @@
+# Dependency-only lifecycle test: no OpenShell gateway, credentials, inference or UI.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: saw-runtime-smoke
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []
+  egress: []
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: ocs-external-storagecluster-ceph-rbd
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: container-smoke
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  operatingMode: Running
+  podTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: saw-runtime-smoke
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: worker-cluster-glmhg-2
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: probe
+        image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+        command:
+        - python3
+        - -c
+        - "import hashlib,json,os,pathlib,time,uuid\np=pathlib.Path('/workspace/canary')\n\
+          try:\n    with p.open('x') as f:\n        f.write(str(uuid.uuid4())+'\\\
+          n'); f.flush(); os.fsync(f.fileno())\n    initialized=True\nexcept FileExistsError:\n\
+          \    initialized=False\nprint(json.dumps({'event':'workspace-ready','initialized':initialized,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'uid':os.getuid()}),flush=True)\n\
+          while True: time.sleep(60)\n"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        readinessProbe:
+          exec:
+            command:
+            - test
+            - -s
+            - /workspace/canary
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: workspace

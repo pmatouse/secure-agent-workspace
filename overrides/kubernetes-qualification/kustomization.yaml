@@ -4,3 +4,4 @@ resources:
   - foundation.yaml
   - policy-build.yaml
   - runtime-policies.yaml
+  - dependency-smoke.yaml
