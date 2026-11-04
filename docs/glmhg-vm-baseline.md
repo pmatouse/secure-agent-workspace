@@ -280,23 +280,32 @@ computation was tested: inference used the approved external OpenAI API. The
 first VM also has actual OpenClaw tool execution and browser-policy evidence
 above; the second VM's checks here cover owner exec, provider inference and egress.
 
-### Portal create acceptance in progress
+### Portal create timeout and recovery in progress
 
 The ordinary `sawportalvm` user submitted the corrected RHDH form. Task
 `50cbc1c7-1875-42a4-b707-2106eeecce66` created PipelineRun `saw-create-27v4p`.
 Request validation, Vault registration, Argo applications, VM creation and VM
 Running gates passed without manual Kubernetes/Vault workload changes.
-Guest provisioning is still running. VMI UID is
+The original sandbox-readiness gate failed at `2026-11-04T21:00:55Z` after its
+30-minute timeout; guest provisioning continued. VMI UID is
 `bc975372-4877-4950-aa82-be8cc240f07a` on `control-plane-cluster-glmhg-2`.
 
 The same ordinary portal user was denied the second baseline owner's notebook
 route with HTTP 403. This browser check complements the earlier cross-owner
 gateway gRPC denial. The temporary local form credential files were removed.
 
-Cold sandbox image pulls and nested-CPU agent configuration approached the
+Cold sandbox image pulls and nested-CPU agent configuration exceeded the
 portal's fixed 30-minute readiness wait while the guest continued progressing.
 The shared chart now exposes `portal.sandboxReadyTimeoutMinutes` (1–60, default
 30); this site selects 60 for subsequent runs. The Task allows two additional
 minutes for setup; readiness still requires every expected route. The original
 PipelineRun keeps its original deadline and result. This is not a health-check
 bypass, active-run patch or guest restart.
+
+Site revision `9914e0f` is `Synced/Healthy`. The chart renders the canonical
+Tekton duration `1h2m0s` to avoid permanent drift against its normalized API
+representation. A normal portal resubmission created task
+`3ea28214-9a63-40b2-941d-fc94a4508adc` / PipelineRun `saw-create-qx55p` with
+the new wait. Root PVC `sawportalvm-root` retains UID
+`d4c9442f-efcc-49fd-b242-c16df200fbfb`. This is recovery evidence, not a clean
+first-pass installation. Update, inference and delete acceptance remain pending.
