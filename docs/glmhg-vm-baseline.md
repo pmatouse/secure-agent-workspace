@@ -159,7 +159,7 @@ The private values file must supply `inference.provider=openai`, the private API
 
 Operator channels and external chart ranges remain upstream defaults. This freezes workload image selections, not every future dependency resolution. Record the installed CSV/chart versions when the platform converges before claiming deterministic replay.
 
-### VM model-selection recovery (qualification pending)
+### VM model-selection recovery and live checks
 
 Both root disks imported successfully and both VMs reached Running. The first
 guest completed component installation, but profile apply failed when OpenClaw
@@ -186,3 +186,38 @@ Qualify the first VM before restarting `sawvmother` in the same way. Require
 both `install.phase` and `apply.phase` to be `Done`, then run real inference,
 cross-owner denial, credential isolation, persistence and portal tests. This is
 a GitOps configuration recovery, not evidence of a clean first-pass VM install.
+
+
+Site revision `9a15f37` reached Argo Synced and both projected profile files
+contained the explicit endpoint before the documented restart. The first VM's
+VMI changed from `69d4e6b4-d38c-41a7-ac49-065a0a9a6a66` to
+`5c1465a1-184a-40b3-81a7-c4384ad4c444`; root PVC UID
+`90f11b7f-dc4f-4658-aa7a-fbe269305e4b` was retained. Installation completed at
+19:13:21 UTC and profile apply at 19:30:44 UTC. Both strict model setters passed;
+the stock installer reported all workspaces, providers and sandboxes present.
+
+| First-VM check | Observed result |
+|---|---|
+| Ordinary owner authentication | Keycloak login, verified gateway TLS and owner CLI access passed |
+| Both profile sandboxes | Real OpenAI completion through the credential proxy passed; undeclared `example.org` egress blocked |
+| Actual agent, both sandboxes | Gateway-backed OpenClaw ran `read`, returned the synthetic canary and reported effective model `gpt-4.1-mini-2025-04-14` |
+| Cross-owner gateway access | Second ordinary user denied: HTTP 200 with gRPC status 7 |
+| Notebook browser chat | Authenticated owner received `SAW_UI_OK` |
+| Notebook tool gate | Browser-requested `write` denied; owner-attributed audit has `decision=deny`; target file absent |
+| CUDA-profile browser chat | Returned `SAW_CUDA_UI_OK`; UI also showed failed-attempt messages, so clean single-attempt UI behavior is not yet qualified |
+| Credential isolation | Full provider Secrets absent from VM attachments; guest CA-key/admin cleanup passed; full file-hash scan still pending |
+| Persistent user work | Separate canaries written in both workspaces; post-restart hash verification pending |
+
+The CUDA agent receipt reports `rerouted=true`; its final read and inference
+succeeded, but this is not evidence that every internal attempt succeeded.
+`credentialSource.kind=direct` in OpenClaw describes its environment credential
+input; SAW still supplies a replacement marker and routes upstream credentials
+through the external proxy. It is not evidence that the real API key entered
+the VM. The separate credential-isolation test checks that boundary.
+
+Stock artifact signing remains **warn/unsigned**, not enforced signature
+verification. Web search is disabled. Second-VM recovery, full credential scan,
+restart persistence and RHDH create/update/delete remain acceptance gates;
+container and Kata have not been deployed. Regression coverage for the explicit
+OpenAI endpoint passed, with all 42 official-provider tests passing on the generic
+development branch (its default profiles remain unchanged).
