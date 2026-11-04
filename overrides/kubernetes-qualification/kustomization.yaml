@@ -6,3 +6,4 @@ resources:
   - runtime-policies.yaml
   - dependency-smoke.yaml
   - governance.yaml
+  - proxy.yaml

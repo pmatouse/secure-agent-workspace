@@ -1,0 +1,126 @@
+# Isolated qualification: existing approved OpenAI credential, references only.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: inference
+  namespace: saw-k8s-trusted
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: inference
+    creationPolicy: Owner
+  data:
+  - secretKey: api_key
+    remoteRef:
+      key: secret/data/hub/saw-sawportalvm/e15add265d9013b1/inference
+      property: api_key
+  - secretKey: provider
+    remoteRef:
+      key: secret/data/hub/saw-sawportalvm/e15add265d9013b1/inference
+      property: provider
+  - secretKey: url
+    remoteRef:
+      key: secret/data/hub/saw-sawportalvm/e15add265d9013b1/inference
+      property: url
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: saw-k8s-test-proxy-policy
+  namespace: saw-k8s-trusted
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+data:
+  config.json: '{"allowHosts":["api.openai.com"],"bindings":[{"key":"api_key","providers":["openai"],"secret":"inference"}],"markerPrefix":"saw-cred","profiles":{"openai":["api.openai.com"]}}
+
+    '
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-proxy
+  namespace: vp-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: '10'
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 7eb8463cdea3c5803ab5ab84322b9163ac6c1c55
+    path: charts/saw-kubernetes-proxy
+    helm:
+      releaseName: saw-k8s-test
+      valuesObject:
+        enabled: true
+        ownerID: d8ac361b-9898-4b16-ac35-2d15f86db76b
+        gateway: saw-k8s-test
+        targetNamespace: saw-k8s-test
+        policyConfigMap: saw-k8s-test-proxy-policy
+        policyDigest: 3601c933b11c60e7d693c4635ed14c626e32c29c9a9e8920a144f852dcba184d
+        credentialSecretNames:
+        - inference
+        network:
+          bootstrapEgress:
+          - to:
+            - ipBlock:
+                cidr: 172.231.0.1/32
+            - ipBlock:
+                cidr: 10.10.10.10/32
+            - ipBlock:
+                cidr: 10.10.10.11/32
+            - ipBlock:
+                cidr: 10.10.10.12/32
+            ports:
+            - protocol: TCP
+              port: 443
+            - protocol: TCP
+              port: 6443
+          - &id001
+            to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: openshift-dns
+              podSelector:
+                matchLabels:
+                  dns.operator.openshift.io/daemonset-dns: default
+            ports:
+            - protocol: UDP
+              port: 53
+            - protocol: UDP
+              port: 5353
+            - protocol: TCP
+              port: 53
+            - protocol: TCP
+              port: 5353
+          proxyEgress:
+          - *id001
+          - to:
+            - ipBlock:
+                cidr: 0.0.0.0/0
+                except:
+                - 0.0.0.0/8
+                - 10.0.0.0/8
+                - 100.64.0.0/10
+                - 127.0.0.0/8
+                - 169.254.0.0/16
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 224.0.0.0/4
+                - 240.0.0.0/4
+            ports:
+            - protocol: TCP
+              port: 443
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-trusted
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: 3
