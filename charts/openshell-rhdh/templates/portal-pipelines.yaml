@@ -2,6 +2,10 @@
 first task of each verifies the request and hands the user to the others as
 the result `user`; each later task is one stage the workspace goes through,
 so RHDH's Tekton tab draws a workspace's create and delete as a pipeline. */ -}}
+{{- $readyMinutes := .Values.portal.sandboxReadyTimeoutMinutes -}}
+{{- if or (not (regexMatch "^[0-9]+$" (toString $readyMinutes))) (lt (int $readyMinutes) 1) (gt (int $readyMinutes) 60) -}}
+{{- fail "portal.sandboxReadyTimeoutMinutes must be an integer from 1 to 60" -}}
+{{- end -}}
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
@@ -108,7 +112,7 @@ spec:
     (dict "name" "argo-cd-apps" "action" "wait-apps" "seconds" "600" "timeout" "12m0s")
     (dict "name" "vm" "action" "wait-vm" "seconds" "600" "timeout" "12m0s")
     (dict "name" "vm-running" "action" "wait-running" "seconds" "900" "timeout" "17m0s")
-    (dict "name" "sandboxes" "action" "wait-ready" "seconds" "1800" "timeout" "32m0s"))
+    (dict "name" "sandboxes" "action" "wait-ready" "seconds" (printf "%d" (mul (int $readyMinutes) 60)) "timeout" (printf "%dm0s" (add (int $readyMinutes) 2))))
   "delete" (list
     (dict "name" "unregister" "action" "delete" "timeout" "5m0s")
     (dict "name" "argo-cd-removes" "action" "wait-gone" "seconds" "1200" "timeout" "22m0s")

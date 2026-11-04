@@ -224,6 +224,14 @@ The installer inside the VM cannot report to the cluster, so a failure there
 30-minute limit. The installer's log says why (next section:
 `make saw-logs`).
 
+For measured slow cold starts, an administrator can set
+`portal.sandboxReadyTimeoutMinutes` (integer 1–60; default 30) in site values.
+The readiness task gets that wait plus two minutes for Task setup. It still
+requires every expected route; expiration remains a failure. This changes new
+PipelineRuns only and does not extend or retry an active run. The form's overall
+pipeline deadline remains 90 minutes. Inspect guest progress before increasing
+the wait; an unhealthy guest must be fixed at its source.
+
 ### Check what happened
 
 ```bash
