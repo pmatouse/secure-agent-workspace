@@ -1,8 +1,9 @@
 # Stock OpenShell Kubernetes reconciliation foundation
 
-Status: **offline-tested foundation; not installed, not full SAW parity, not a
-qualified container/Kata deployment**. VM profile code has been extracted into a
-shared core while preserving the VM install/apply behavior and signed-bundle format.
+The controller runs in a dedicated OpenShift qualification namespace. The VM
+baseline has passed OpenClaw inference. Container agent and Kata parity remain
+separate acceptance gates. The shared core preserves VM profile installation,
+application order and the signed-bundle format.
 
 Both frontends now use the canonical
 [`saw_core.py`](../charts/openshell-saw/files/installer/saw_core.py): profile models,
@@ -16,8 +17,8 @@ frontend. It consumes a coherent profile plus administrator-intent revision, fen
 input identities/generations, invokes the compiler/reconciler and writes a separate
 status ConfigMap. See the [input and lifecycle contract](../docs/kubernetes-controller-inputs.md).
 A new SAW CRD is deferred. `Workspace`, `Providers` and `Sandboxes` remain profile
-documents; OpenShell owns the stock Agent Sandbox CRs. The frontend is implemented,
-but its production deployment, boundary verifier and portal wiring remain pending.
+documents; OpenShell owns the stock Agent Sandbox CRs. The [controller chart](../charts/saw-kubernetes-controller) installs the frontend,
+retained ledger and boundary verifier. RHDH backend selection remains a future step.
 
 This integration uses the stock OpenShell API and Kubernetes driver from
 [`305c8b3`](https://github.com/opendatahub-io/openshell/tree/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f)

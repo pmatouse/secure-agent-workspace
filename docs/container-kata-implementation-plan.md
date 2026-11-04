@@ -23,9 +23,14 @@ history, including failed attempts):
 | Kata prerequisite | Both worker nodes have KVM/CPU virtualization, but boot in BIOS. OSC 1.13 documents UEFI. Stock operator installation is separate; no KataConfig, forced eligibility or reboot requested |
 
 The trusted credential proxy is now wired and transport-tested. The stock gateway now passes
-startup and authenticated read-only RPC. Next are the concrete boundary verifier,
-production reconciler assembly, actual sandbox/supervisor lifecycle, packet tests
-and agent/UI/RHDH parity. The qualification governance endpoint uses network-
+startup and authenticated read-only RPC. The reconciler runs under Argo with retained state and validates live boundary
+objects against reviewed UID/spec pins. It created the `toolbox` workspace.
+An ordinary OIDC owner read it and the second user received a membership denial.
+Sandbox creation additionally needs matching compiler, governance and stock
+driver mount contracts. The pinned driver reserves both the volume name
+`workspace` and the mount root `/sandbox`. The external PVC uses
+`saw-workspace` at `/sandbox/workspace`. Test workload lifecycle, packet
+behavior, persistent data and agent/UI/RHDH parity separately. The qualification governance endpoint uses network-
 isolated HTTP, so transport-level caller authentication is still a production gap. The dependency probe bypasses
 OpenShell intentionally to test Agent Sandbox alone; it must never be reported
 as a working SAW container workspace. The documented Kata path needs a
@@ -1158,7 +1163,7 @@ adds an exact namespace AND gateway-role/instance selector; defaults preserve
 VM ingress. This changes connectivity only. The deployed SAW-built governance
 interceptor's driver-config guard still accepts only exact Podman gate/audit
 mounts. Its build recipe now additionally validates the administrator-only
-Kubernetes envelope: one writable `/sandbox` PVC, at most 16 distinct additional
+Kubernetes envelope: one writable `/sandbox/workspace` PVC, at most 16 distinct additional
 PVCs under `/data`, matched read-only flags, an optional RuntimeClass and bounded
 resource field names. Host paths, extra containers, security overrides, unknown
 driver fields and non-admin requests are refused. Eight embedded Rust tests
@@ -1247,7 +1252,7 @@ Translate Podman mounts into typed, approved Kubernetes mounts:
 
 | Data | Mount intent | Persistence/update rule |
 | --- | --- | --- |
-| Agent `/sandbox` | Writable workspace | Keep across stop/restart/reschedule; explicit purge only |
+| Agent `/sandbox/workspace` | Retained writable PVC subtree | Keep across stop/restart/reschedule; explicit purge only |
 | Harness | Read-only to agent | Verified digest/signature; publish revision atomically; explicit restart if required |
 | Trusted tool gate | Read-only to agent | Admin-owned and bound to approved profile; user cannot replace it |
 | Audit | Writable dedicated data | Preserve and collect; define tamper limitations and ownership |

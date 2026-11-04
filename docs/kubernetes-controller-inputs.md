@@ -1,8 +1,8 @@
 # ConfigMap-driven Kubernetes runtime controller
 
-**Offline-tested integration foundation; not a deployment procedure, qualified
-container/Kata runtime, or full SAW feature parity.** VM remains the supported
-default. The controller reuses the SAW profile compiler and stock OpenShell RPCs;
+The controller runs on the qualification cluster. The VM backend remains the
+supported default. See the [controller chart](../charts/saw-kubernetes-controller)
+and [backend acceptance status](container-kata-implementation-plan.md). The controller reuses the SAW profile compiler and stock OpenShell RPCs;
 it keeps OpenShell, Kata and Agent Sandbox stock, and introduces no CRD.
 
 Implementation:
