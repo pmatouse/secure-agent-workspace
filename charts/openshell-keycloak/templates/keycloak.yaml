@@ -5,6 +5,10 @@ metadata:
   name: {{ .Values.keycloak.name }}
 spec:
   instances: {{ .Values.keycloak.instances }}
+  {{- with .Values.keycloak.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   db:
     vendor: postgres
     host: keycloak-db

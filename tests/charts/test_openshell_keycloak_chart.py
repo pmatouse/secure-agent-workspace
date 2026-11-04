@@ -41,6 +41,23 @@ def test_default_deploys_keycloak_database_and_realm():
 
 
 @pytest.mark.ci_external
+def test_resource_override_preserves_other_objects_and_existing_server():
+    baseline = render()
+    args = ("--set", "keycloak.resources.requests.cpu=500m",
+            "--set", "keycloak.resources.requests.memory=1700Mi",
+            "--set", "keycloak.resources.limits.memory=2Gi")
+    tuned = render(*args)
+    (server,) = [d for d in tuned if d["kind"] == "Keycloak"]
+    assert server["spec"].pop("resources") == {
+        "requests": {"cpu": "500m", "memory": "1700Mi"},
+        "limits": {"memory": "2Gi"},
+    }
+    assert tuned == baseline
+    assert render("--set", "keycloak.existing=shared", *args) == render(
+        "--set", "keycloak.existing=shared")
+
+
+@pytest.mark.ci_external
 def test_existing_mode_imports_only_the_realm_into_that_keycloak():
     docs = render("--set", "keycloak.existing=keycloak", "--set", "keycloak.realm=openshell")
     assert not {"Keycloak", "StatefulSet", "Service", "PersistentVolumeClaim"} & {d["kind"] for d in docs}

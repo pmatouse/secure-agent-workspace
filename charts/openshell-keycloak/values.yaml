@@ -8,6 +8,9 @@ postgres:
 keycloak:
   name: openshell-keycloak
   instances: 1
+  # Optional supported Keycloak CR resources. Empty preserves operator defaults.
+  # Set requests.cpu on contended nodes; keep explicit memory sizing when used.
+  resources: {}
   # Name of a Keycloak CR already running in this namespace. When set, the
   # chart only imports the OpenShell realm into that server (no Keycloak or
   # PostgreSQL of its own); other realms on it are not touched.
