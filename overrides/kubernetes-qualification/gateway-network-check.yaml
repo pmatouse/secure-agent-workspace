@@ -1,0 +1,132 @@
+# Read-only diagnostic: fixed public OIDC URL, no credentials or API token.
+# Job completion means the diagnostic ran; inspect issuerMatches for the result.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-network-check
+  namespace: saw-k8s-test
+spec:
+  podSelector:
+    matchLabels:
+      saw.redhat.com/qualification: gateway-network
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 172.231.0.1/32
+    - ipBlock:
+        cidr: 10.10.10.10/32
+    - ipBlock:
+        cidr: 10.10.10.11/32
+    - ipBlock:
+        cidr: 10.10.10.12/32
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-dns
+      podSelector:
+        matchLabels:
+          dns.operator.openshift.io/daemonset-dns: default
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: UDP
+      port: 5353
+    - protocol: TCP
+      port: 53
+    - protocol: TCP
+      port: 5353
+  - to:
+    - ipBlock:
+        cidr: 10.10.10.10/32
+    - ipBlock:
+        cidr: 10.10.10.11/32
+    - ipBlock:
+        cidr: 10.10.10.12/32
+    - ipBlock:
+        cidr: 10.10.10.30/32
+    - ipBlock:
+        cidr: 10.10.10.31/32
+    - ipBlock:
+        cidr: 52.118.50.101/32
+    ports:
+    - protocol: TCP
+      port: 443
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: saw-k8s-build
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: governance-interceptor
+    ports:
+    - protocol: TCP
+      port: 18081
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: saw-k8s-trusted
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/instance: saw-k8s-test
+          openshell.pattern/role: credential-proxy
+    ports:
+    - protocol: TCP
+      port: 3128
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gateway-network-check-001
+  namespace: saw-k8s-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:
+        saw.redhat.com/qualification: gateway-network
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: probe
+        image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+        command:
+        - python3
+        - -c
+        - "import json,socket,ssl,urllib.request,urllib.error\nhost=\"openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io\"\
+          \nurl=\"https://\"+host+\"/realms/openshell/.well-known/openid-configuration\"\
+          \nresult={\"test\":\"OIDC discovery transport\", \"addresses\":[]}\ntry:\n\
+          \    result[\"addresses\"]=sorted(set(x[4][0] for x in socket.getaddrinfo(host,443)))\n\
+          \    with urllib.request.urlopen(url,context=ssl.create_default_context(),timeout=20)\
+          \ as response:\n        result[\"httpStatus\"]=response.status\n       \
+          \ result[\"issuerMatches\"]=json.load(response)[\"issuer\"]==\"https://\"\
+          +host+\"/realms/openshell\"\nexcept urllib.error.URLError as exc:\n    result[\"\
+          errorType\"]=type(exc.reason).__name__\n    result[\"reason\"]=str(exc.reason)[:300]\n\
+          except Exception as exc:\n    result[\"errorType\"]=type(exc).__name__\n\
+          print(json.dumps(result,sort_keys=True))\n"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi

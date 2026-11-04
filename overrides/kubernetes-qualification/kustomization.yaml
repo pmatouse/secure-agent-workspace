@@ -8,3 +8,4 @@ resources:
   - governance.yaml
   - proxy.yaml
   - gateway.yaml
+  - gateway-network-check.yaml
