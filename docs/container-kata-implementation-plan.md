@@ -1108,6 +1108,18 @@ Sources: [OpenShift policy precedence](https://docs.redhat.com/en/documentation/
 
 ### B4. Container runtime qualification before full SAW integration
 
+**Current integration gaps found during VM qualification:** the shared governance
+NetworkPolicy previously selected only KubeVirt launchers. Its new opt-in
+`kubernetesGateways: [{namespace: saw-k8s-test, gatewayId: saw-k8s-test}]`
+adds an exact namespace AND gateway-role/instance selector; defaults preserve
+VM ingress. This changes connectivity only. The existing SAW-built governance
+interceptor's driver-config guard still accepts only exact Podman gate/audit
+mounts. Before a Kubernetes workload is admitted, extend that SAW policy guard
+for the reviewed, administrator-only Kubernetes PVC/runtime/resource envelope,
+build and pin the policy image, and test rejected alternatives. Do not disable
+governance or drop PVC bindings to make a test pass. This is SAW policy integration;
+OpenShell gateway/driver, Agent Sandbox and Kata images remain stock.
+
 Deploy a source-defined test user/gateway and minimal sandbox through GitOps and
 the trusted API reconciler. No ad hoc `openshell sandbox create` is used to supply
 missing desired state. Exercise restricted UID/GID, no added capabilities,
