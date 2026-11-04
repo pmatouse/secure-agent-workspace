@@ -4,17 +4,17 @@ metadata:
   profile: data-science
 spec:
   providers:
-    - name: openai
-      type: openai
-      credentialSecret: inference
-      credentialSecretKey: api_key
-    - name: brave
-      type: brave
-      credentialSecret: web-search
-      credentialSecretKey: api_key
-    # Optional additional API; enable it before attaching it to a sandbox.
-    - name: anthropic
-      type: anthropic
-      enabled: false
-      credentialSecret: inference-anthropic
-      credentialSecretKey: api_key
+  - credentialSecret: inference
+    credentialSecretKey: api_key
+    name: openai
+    type: openai
+  - credentialSecret: web-search
+    credentialSecretKey: api_key
+    enabled: false
+    name: brave
+    type: brave
+  - credentialSecret: inference-anthropic
+    credentialSecretKey: api_key
+    enabled: false
+    name: anthropic
+    type: anthropic

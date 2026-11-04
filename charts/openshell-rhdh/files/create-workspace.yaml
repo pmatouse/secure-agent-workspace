@@ -53,9 +53,7 @@ spec:
                 in Vault for your workspace only (provider openai)}
             inference__model: {title: 'inference: Model (notebook)', type: string, default: gpt-4.1-mini}
             inference__cuda_model: {title: 'inference: Model (cuda-sandbox)', type: string, default: gpt-4.1-mini}
-            web_search__api_key: {title: 'web-search: API key', type: string, 'ui:field': Secret, description: Stored
-                in Vault for your workspace only (provider brave)}
-          required: [inference__api_key, web_search__api_key]
+          required: [inference__api_key]
         - properties:
             profile: {const: personal-assistant}
             uiRoutes: {title: Sandbox web UIs, type: 'null', description: 'Published on their own route,

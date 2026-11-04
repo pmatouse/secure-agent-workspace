@@ -143,20 +143,6 @@
           "providers": [
             "openai"
           ]
-        },
-        "web-search": {
-          "fields": [
-            {
-              "key": "api_key",
-              "kind": "secret",
-              "required": true,
-              "title": "API key"
-            }
-          ],
-          "provider": "brave",
-          "providers": [
-            "brave"
-          ]
         }
       },
       "workspaces": [

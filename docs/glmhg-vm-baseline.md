@@ -244,3 +244,20 @@ See [the startup contract](rhdh-user-guide.md#oidc-startup-dependency).
 The separate ordinary portal account `sawportalvm` was created through stock
 `make keycloak-add-users`, outside the Git-owned VM inventory. No portal workspace
 has been created yet. Neither baseline VM nor its PVC is disposable portal state.
+
+
+The replacement RHDH Pod passed `saw-oidc-discovery` at 20:08:13 UTC and rolled
+out successfully. Its OIDC start endpoint now returns 302 to Keycloak; ordinary
+`sawportalvm` browser login reached the portal home and workspace form. The embedded
+browser's popup was not visible, so the test used Backstage's documented OIDC
+`/start?env=production` troubleshooting entry point, then the normal browser login
+and session refresh. No token injection or authentication bypass was used.
+
+The form exposed a site catalog mismatch: the source profile still declared an
+enabled Brave provider while runtime `webSearch.enabled=false` disabled it. The
+site provider document now explicitly disables Brave; `make catalog` removes the
+unused key requirement. With the correct runtime values, Helm comparison proves
+the projected BOM data is byte-for-byte unchanged; this is a form/source-input
+alignment, not another VM configuration change. Other profiles and generic
+branch defaults retain their own provider requirements. Form creation and full
+portal lifecycle validation are still pending.
