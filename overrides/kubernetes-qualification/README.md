@@ -48,3 +48,12 @@ registry under `saw-k8s-build/governance-interceptor:kubernetes-004b234`. This i
 an unqualified candidate: no existing VM policy Deployment references it. Require
 a completed build, record its output digest, then test it with the isolated
 Kubernetes gateway. A synced BuildConfig alone is not a successful build.
+
+
+`runtime-policies.yaml` installs native policies only for `saw-k8s-test`.
+Before activation, the live ANP inventory was empty; this site allocates priority
+50. Supervisor traffic may pass to exact DNS, gateway, workload-boundary and
+future trusted-proxy peers; every other IPv4/IPv6 destination is denied. The
+admission policy fixes container-mode placement and bootstrap identity. The
+render passed 56 chart tests and a server-side dry run. These results do not
+prove packet enforcement; live negative tests remain a gate before agent use.

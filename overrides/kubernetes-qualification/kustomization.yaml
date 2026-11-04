@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - foundation.yaml
   - policy-build.yaml
+  - runtime-policies.yaml

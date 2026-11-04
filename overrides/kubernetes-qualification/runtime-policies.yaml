@@ -1,0 +1,94 @@
+# Scoped only to the isolated runtime namespace; no mutation or preview feature.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-runtime-policies
+  namespace: vp-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    path: charts/saw-runtime-policies
+    helm:
+      releaseName: saw-k8s-runtime-policies
+      valuesObject:
+        enabled: true
+        targetNamespace: saw-k8s-test
+        gatewayId: saw-k8s-test
+        gatewayServiceAccount: saw-k8s-test-gateway
+        sandboxServiceAccount: saw-k8s-test-sandbox
+        mode: container
+        network:
+          priority: 50
+          egress:
+          - name: dns
+            to:
+            - pods:
+                namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: openshift-dns
+                podSelector:
+                  matchLabels:
+                    dns.operator.openshift.io/daemonset-dns: default
+            ports:
+            - portNumber:
+                protocol: UDP
+                port: 53
+            - portNumber:
+                protocol: TCP
+                port: 53
+            - portNumber:
+                protocol: UDP
+                port: 5353
+            - portNumber:
+                protocol: TCP
+                port: 5353
+          - name: gateway
+            to:
+            - pods:
+                namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: saw-k8s-test
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: saw-k8s-test
+                    openshell.pattern/role: gateway
+            ports:
+            - portNumber:
+                protocol: TCP
+                port: 17670
+          - name: workload-boundary
+            to:
+            - pods:
+                namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: saw-k8s-test
+                podSelector:
+                  matchLabels:
+                    openshell.ai/boundary-role: workload
+            ports:
+            - portNumber:
+                protocol: TCP
+                port: 5500
+          - name: credential-proxy
+            to:
+            - pods:
+                namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: saw-k8s-trusted
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: saw-k8s-test
+                    openshell.pattern/role: credential-proxy
+            ports:
+            - portNumber:
+                protocol: TCP
+                port: 3128
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-test
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
