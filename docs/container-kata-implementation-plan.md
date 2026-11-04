@@ -1,8 +1,35 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **offline preparation started; container/Kata deployment and cluster qualification remain pending**.
+Status: **offline foundations tested; glmhg VM baseline bootstrap in progress; container/Kata deployment and cluster qualification remain pending**.
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
 Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
+
+### Live baseline receipt (2026-11-04)
+
+The replacement `glmhg` cluster is OpenShift **4.22.20**. Its authentication
+operator recovered after the provisioned Keycloak realm import completed.
+Cluster identity, default RBD storage and worker `/dev/kvm`/VMX were checked.
+The separate [site/glmhg-vm-baseline branch](https://github.com/pmatouse/secure-agent-workspace/tree/site/glmhg-vm-baseline)
+starts at the researched upstream revision, with site inputs only; bootstrap
+revision is `ce84127f61726f42846084da9cfeac7528b703e6`.
+
+The user selected the official OpenAI API instead of NVIDIA. Both baseline
+workspaces use `gpt-4.1-mini`; the RHDH catalog/forms were regenerated with
+`make catalog`. A direct provider completion passed, but this does not qualify
+SAW workload inference. Web search is explicitly off pending a search credential.
+Credential-proxy mode remains enabled. The user explicitly authorized staging
+the private OpenAI input on the supplied bastion and loading it into Vault.
+
+`make prereqs-check`, catalog checks, BOM and canary-user renders passed.
+The stock golden image was mirrored by the documented in-cluster target, with
+the source index digest preserved. Stock OpenShell CLI 0.1.2 was checksum-verified.
+The standard `pattern.sh make install` runs on the Linux bastion to avoid large
+laptop downloads. Its initial rootless Podman `storage-chown-by-maps` step can
+take several minutes on this nested lab storage; do not interpret image pull
+completion as completion of container startup.
+
+Full platform convergence, VM inference, owner isolation and RHDH acceptance
+are still pending. See the [site inputs and artifact receipt](https://github.com/pmatouse/secure-agent-workspace/blob/site/glmhg-vm-baseline/docs/glmhg-vm-baseline.md).
 
 ## 1. Objective and execution rules
 
