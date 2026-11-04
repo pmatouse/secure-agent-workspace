@@ -1,0 +1,16 @@
+{
+  "namespace": "saw-runtime-smoke",
+  "sandboxUID": "891bb2c2-5b29-4165-a212-3258757c940d",
+  "pvcUID": "63c8befb-2db8-494a-a497-4821c82a8c94",
+  "initialPodUID": "df293de0-201a-4bc3-94e5-5acc6c6b2ffc",
+  "canarySHA256": "fbc366b1eb3a046a705451ae8a122918a2b14d5f27fb0afc99c50c68e352b901",
+  "uid": 1001050000,
+  "scc": "restricted-v2",
+  "tokenMounted": false,
+  "scope": "Agent Sandbox dependency only",
+  "suspendedPodAbsent": true,
+  "suspendedPVCUIDRetained": true,
+  "resumedPodUID": "ade5b96c-8c88-44b5-b9fd-5729a8c4e560",
+  "canaryPreserved": true,
+  "verifiedAt": "2026-11-04T22:05:32.090045+00:00"
+}

@@ -113,3 +113,17 @@ Kubernetes ingress; its endpoint is
 mounted. This separate service must pass stock protocol/positive/negative tests
 before it qualifies the gateway; Deployment availability alone is insufficient.
 The baseline VM governance service and its clients retain their original config.
+
+
+[Container lifecycle receipt](../../docs/evidence/glmhg-container-dependency-2026-11-04.json):
+the GitOps `Suspended` commit removed the Pod and retained its Bound claim;
+the `Running` commit created a different Pod UID with the same Sandbox/PVC UIDs,
+unchanged canary SHA-256 and `initialized=false`. The resumed workload retained
+`restricted-v2`, a nonzero UID and no service-account token. The final desired
+state is Running. This is a passed dependency/storage test, not SAW parity.
+
+The full candidate build ran its eight driver-guard tests successfully before
+release compilation. The isolated governance Deployment is now 1/1 Available at
+the pinned digest. The stock OSC `sandboxed-containers-operator.v1.13.1` CSV is
+Succeeded. No `KataConfig` was created because both worker firmware checks failed
+the documented UEFI prerequisite.
