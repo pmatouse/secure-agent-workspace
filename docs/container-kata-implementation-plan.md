@@ -10,8 +10,10 @@ The replacement `glmhg` cluster is OpenShift **4.22.20**. Its authentication
 operator recovered after the provisioned Keycloak realm import completed.
 Cluster identity, default RBD storage and worker `/dev/kvm`/VMX were checked.
 The separate [site/glmhg-vm-baseline branch](https://github.com/pmatouse/secure-agent-workspace/tree/site/glmhg-vm-baseline)
-starts at the researched upstream revision, with site inputs only; bootstrap
-revision is `ce84127f61726f42846084da9cfeac7528b703e6`.
+started at the researched upstream revision with site inputs only; initial
+bootstrap revision is `ce84127f61726f42846084da9cfeac7528b703e6`. Later recovery
+adds the optional Keycloak resource-values input described below; runtime
+component images and operator code remain stock.
 
 The user selected the official OpenAI API instead of NVIDIA. Both baseline
 workspaces use `gpt-4.1-mini`; the RHDH catalog/forms were regenerated with
@@ -60,11 +62,35 @@ manual Job deletion. CNV's missing PriorityClass also appeared through its
 controllers, and its Application reached Synced/Healthy. Operator and workload
 readiness must still be checked separately.
 
-The original installer exited at its Vault-auth wait. After ESO and the stock
-unseal job are ready, resume with the documented `pattern.sh make load-secrets`;
-do not launch a second full install or hand-create Vault auth state. Keycloak
-is still initializing its database/realm. This is a recovery run, not clean
-replay evidence, and no workspace or RHDH acceptance result is claimed yet.
+The original installer exited at its Vault-auth wait. Once ESO and the stock
+unseal job were ready, the documented `pattern.sh make load-secrets` completed
+with exit code zero. Vault's store is Ready and the RHDH ExternalSecrets report
+SecretSynced. No second full install or hand-created Vault auth state was used.
+Keycloak realm import also completed successfully; a shutdown exception in its
+log was not an import failure (Job Complete and RealmImport Done were verified).
+
+The nested control-plane VM measured 72.65% CPU steal in a five-second sample,
+with a one-minute load average of 96.25. Under this contention, both stock
+`virt-operator` Pods repeatedly failed their liveness probes. Site revision
+`127f295` raises CNV Subscription resource requests to `250m` CPU / `512Mi`
+memory per operator container through supported OLM configuration. Both
+`virt-operator` replicas then became Ready, and HyperConverged Degraded became
+False; full availability was still pending. No probes were changed.
+
+SAW's Keycloak chart did not expose the operator's supported resource field.
+The optional `keycloak.resources` input now forwards to Keycloak CR
+`spec.resources`; empty defaults preserve existing behavior and existing-server
+mode does not modify the shared server. The integration is present on both
+branches, with all 28 Keycloak chart tests passing. Site revision `033cc1b`
+requests `500m` CPU and preserves the `1700Mi` request / `2Gi` memory limit,
+with no CPU limit. The RHBK operator owns the rollout; no Keycloak code, image,
+probe, realm or authentication policy is changed. This small chart input is the
+only integration code addition to the otherwise stock VM baseline so far.
+
+Two-user VM inputs passed `make prereqs-check`, including enabled network
+policies, and remain undeployed until platform readiness. Cluster-published
+`virtctl` 1.8.4 is installed on the bastion. Full VM/RHDH acceptance is pending.
+This is a recovery run, not clean replay evidence.
 
 ## 1. Objective and execution rules
 
