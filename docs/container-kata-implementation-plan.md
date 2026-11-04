@@ -1,8 +1,8 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **planned; no container/Kata feature or cluster qualification is claimed by this document**.
+Status: **offline preparation started; container/Kata deployment and cluster qualification remain pending**.
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
-Planning branch: `plan/container-kata-deployment`.
+Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
 
 ## 1. Objective and execution rules
 
@@ -42,8 +42,10 @@ not silently counted as passing features.
   artifacts, commit/push, then reconcile through the declared owner.
 - Keep failed evidence. A repaired run is a recovery test, not clean-install proof.
   Final qualification requires another clean replay from the final revision.
-- Do not introduce experimental container/Kata overrides before the VM baseline
-  passes. Normal site configuration is allowed; backend implementation is not.
+- Do not deploy experimental container/Kata overrides before the VM baseline
+  passes. While the cluster provisions, isolated source changes, schema/render
+  tests and reuse inventory are allowed. They do not satisfy any live gate or
+  change the pinned stock-VM baseline revision used for A1–A10.
 - Do not run the full destructive Pattern E2E workflow on the retained baseline.
 - Secrets, kubeconfigs, generated private keys, bearer tokens and private test
   state never enter Git, images, public reports or command-line examples.
@@ -550,7 +552,7 @@ baseline signing mode may still be the upstream `warn` mode; do not claim enforc
 image admission or signed-bundle enforcement unless independently configured/tested.
 
 If installation fails, capture diagnostics and correct source or declared platform
-inputs. Do not proceed with backend work until the baseline is reproducible.
+inputs. Do not deploy a candidate backend until the baseline is reproducible.
 A code fix starts a new baseline attempt; preserve the failed one.
 
 ## 5. Target architecture and exact component boundaries
@@ -629,7 +631,10 @@ boundary against a user who can mutate these objects.
 
 ## 6. Proposed configuration contract
 
-This schema is **to be implemented**, not accepted by the baseline chart today:
+Only `deployment.mode` validation is implemented on the development branch:
+`vm` works, omission preserves VM behavior, and the other modes fail clearly while
+unimplemented. The Kubernetes configuration below remains **proposed**, not a
+working deployment recipe:
 
 ```yaml
 defaults:
@@ -676,6 +681,13 @@ annotations and network topology are admin inputs, not arbitrary RHDH form field
 Mode on an existing workspace is immutable until a migration workflow is designed.
 
 ## 7. Work packages and exit gates
+
+### B0. Selective reuse inventory
+
+The [commit and source-path inventory](container-kata-reuse.md) records all ten
+unique commits from the prior Kubernetes implementation and their port/adapt/drop
+decisions. No old implementation is imported wholesale. Update each candidate's
+actual destination, implementation commit and tests as it lands.
 
 ### B1. Freeze runtime interfaces and build an additive chart backend
 

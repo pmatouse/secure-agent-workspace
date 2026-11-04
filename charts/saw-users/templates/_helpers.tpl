@@ -17,6 +17,7 @@ watches, not in whatever namespace this chart happens to be released into.
 {{- $seen := dict -}}
 {{- range .Values.users | default list -}}
 {{- $name := .name | default "" | toString -}}
+{{- include "saw-users.validateDeploymentMode" (dict "root" $ "user" .) -}}
 {{- if $.Values.ownerResolution.enabled -}}
 {{- $entryValues := .values | default dict -}}
 {{- $entryAccess := index $entryValues "accessControl" | default dict -}}
@@ -423,4 +424,34 @@ spec:
     # hold 1 MiB.
     syncOptions:
       - ServerSideApply=true
+{{- end -}}
+
+{{/* Check effective backend before emitting any per-user Argo applications.
+Validate both layers' shape, then apply the same defaults/user precedence as
+openshellValues. Keep omission as vm without changing existing rendered values. */}}
+{{- define "saw-users.validateDeploymentMode" -}}
+{{- $mode := "vm" -}}
+{{- range $values := list (.root.Values.defaults.openshellSaw | default dict) (.user.values | default dict) -}}
+{{- if hasKey $values "deployment" -}}
+{{- $deployment := get $values "deployment" -}}
+{{- if not (kindIs "map" $deployment) -}}
+{{- fail "deployment must be an object with a mode" -}}
+{{- end -}}
+{{- range $key, $_ := $deployment -}}
+{{- if ne $key "mode" -}}{{- fail (printf "unknown deployment field %q" $key) -}}{{- end -}}
+{{- end -}}
+{{- if hasKey $deployment "mode" -}}
+{{- $mode = get $deployment "mode" -}}
+{{- if not (kindIs "string" $mode) -}}{{- fail "deployment.mode must be a string" -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if not (has $mode (list "vm" "container" "kata" "confidential")) -}}
+{{- fail "deployment.mode must be one of vm, container, kata, confidential" -}}
+{{- end -}}
+{{- if eq $mode "confidential" -}}
+{{- fail "deployment.mode=confidential is reserved for a later phase and is not implemented; no VM fallback" -}}
+{{- else if ne $mode "vm" -}}
+{{- fail (printf "deployment.mode=%s is not implemented in this revision; no VM fallback (see docs/container-kata-implementation-plan.md)" $mode) -}}
+{{- end -}}
 {{- end -}}

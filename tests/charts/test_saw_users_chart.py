@@ -699,3 +699,54 @@ def test_direct_rendered_values_validate_real_provider_keys(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "mode: direct" in result.stdout
     assert "direct-sentinel-key" not in result.stdout + result.stderr
+
+
+# -- deployment backend contract ----------------------------------------------
+
+@pytest.mark.ci_external
+def test_mode_omission_preserves_child_values(tmp_path):
+    docs = docs_from(render_file(tmp_path, [ALICE]))
+    assert "deployment" not in helm_values(app(docs, "saw-alice"))
+
+
+@pytest.mark.ci_external
+def test_user_mode_overrides_default_and_reaches_child_chart(tmp_path):
+    docs = docs_from(render_file(tmp_path,
+        [{"name": "alice", "values": {"deployment": {"mode": "vm"}}}],
+        {"defaults": {"openshellSaw": {"deployment": {"mode": "container"}}}}))
+    assert helm_values(app(docs, "saw-alice"))["deployment"] == {"mode": "vm"}
+
+
+@pytest.mark.ci_external
+@pytest.mark.parametrize("mode", ["container", "kata", "confidential", "typo", ""])
+@pytest.mark.parametrize("level", ["default", "user"])
+def test_unsupported_effective_mode_rejected_before_child_apps(tmp_path, mode, level):
+    users = [{"name": "alice"}]
+    extra = {}
+    if level == "default":
+        extra = {"defaults": {"openshellSaw": {"deployment": {"mode": mode}}}}
+    else:
+        users[0]["values"] = {"deployment": {"mode": mode}}
+    result = render_file(tmp_path, users, extra)
+    assert result.returncode != 0
+    assert "deployment.mode" in result.stderr
+    assert not result.stdout.strip()
+
+
+@pytest.mark.ci_external
+@pytest.mark.parametrize("level", ["default", "user"])
+@pytest.mark.parametrize("deployment", [
+    {"mode": False}, {"mode": 1}, {"mode": None}, {"mode": []},
+    {"mod": "container"}, "container", [], None,
+])
+def test_invalid_deployment_shape_rejected(tmp_path, deployment, level):
+    users = [{"name": "alice"}]
+    extra = {}
+    if level == "default":
+        extra = {"defaults": {"openshellSaw": {"deployment": deployment}}}
+    else:
+        users[0]["values"] = {"deployment": deployment}
+    result = render_file(tmp_path, users, extra)
+    assert result.returncode != 0
+    assert "deployment" in result.stderr
+    assert not result.stdout.strip()
