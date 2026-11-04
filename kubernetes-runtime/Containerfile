@@ -1,0 +1,17 @@
+FROM registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5 AS generate
+USER 0
+WORKDIR /build
+COPY kubernetes-runtime/build-sdk.py kubernetes-runtime/sdk-lock.json /build/
+RUN pip install --no-cache-dir grpcio-tools==1.80.0 grpcio==1.80.0 protobuf==6.33.5 && python3 build-sdk.py
+
+FROM registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+USER 0
+RUN pip install --no-cache-dir grpcio==1.80.0 protobuf==6.33.5 PyYAML==6.0.3
+WORKDIR /opt/saw
+COPY --from=generate /build/python/openshell/_proto /opt/saw/sdk/openshell/_proto
+COPY charts/openshell-saw/files/installer/saw_core.py charts/openshell-saw/files/installer/saw_core.py
+COPY kubernetes-runtime/saw_kubernetes kubernetes-runtime/saw_kubernetes
+ENV PYTHONPATH=/opt/saw/kubernetes-runtime:/opt/saw/sdk PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN python3 -c 'from openshell._proto import openshell_pb2_grpc; from saw_kubernetes import serve'
+USER 1001
+ENTRYPOINT ["python3", "-m", "saw_kubernetes.serve"]
