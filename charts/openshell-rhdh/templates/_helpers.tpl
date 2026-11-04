@@ -181,5 +181,5 @@ allowlist into both forms without enabling privileged form parameters. */}}
 {{- $names := list -}}
 {{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}
-{{- toYaml $template | replace "__PROVISIONER_SA__" $root.Values.portal.provisionerServiceAccount -}}
+{{- include "openshell-rhdh.readinessTemplate" (dict "root" $root "template" $template) -}}
 {{- end -}}
