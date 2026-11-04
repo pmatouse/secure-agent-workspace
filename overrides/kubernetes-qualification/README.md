@@ -57,3 +57,14 @@ future trusted-proxy peers; every other IPv4/IPv6 destination is denied. The
 admission policy fixes container-mode placement and bootstrap identity. The
 render passed 56 chart tests and a server-side dry run. These results do not
 prove packet enforcement; live negative tests remain a gate before agent use.
+
+
+The site also installs the stock OpenShift sandboxed containers Operator through
+`clusterGroup.subscriptions` (stable, starting CSV `1.13.1`). There was no existing
+OSC Subscription/OperatorGroup to adopt. This installs the operator only: no
+`KataConfig` is defined and no node reboot is requested at this stage. Before
+runtime activation, verify UEFI/KVM and node eligibility, select only an explicit
+worker (the control-plane nodes also carry the worker label), and inventory its
+workloads. Do not select all workers: that would include the preserved VM hosts.
+The lab is nested; a functional test is not a vendor support certification.
+See the [stock installation procedure](https://docs.redhat.com/en/documentation/openshift_sandboxed_containers/1.13/html/deploying_openshift_sandboxed_containers_on_bare-metal_servers/install-osc-overview_metal-osc).

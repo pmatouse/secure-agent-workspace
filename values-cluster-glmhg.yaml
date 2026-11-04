@@ -22,6 +22,12 @@ clusterGroup:
       path: overrides/kubernetes-qualification
       kustomize: true
   subscriptions:
+    sandboxed-containers:
+      name: sandboxed-containers-operator
+      namespace: openshift-sandboxed-containers-operator
+      channel: stable
+      csv: sandboxed-containers-operator.v1.13.1
+      installPlanApproval: Automatic
     openshift-virtualization:
       # OLM applies resources to every operator container in this bundle.
       # Preserve at least the largest original requests (200m / 450Mi).
@@ -33,6 +39,10 @@ clusterGroup:
             cpu: 250m
             memory: 512Mi
   namespaces:
+    openshift-sandboxed-containers-operator:
+      operatorGroup: true
+      targetNamespaces:
+        - openshift-sandboxed-containers-operator
     external-secrets-operator:
       # clustergroup 0.9.58's map-form namespace helper does not forward
       # OperatorGroup annotations. Render the same object via extraObjects.
