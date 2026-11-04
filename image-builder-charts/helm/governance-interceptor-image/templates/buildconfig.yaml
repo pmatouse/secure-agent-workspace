@@ -1,7 +1,7 @@
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
-  name: governance-interceptor
+  name: {{ .Values.build.name | quote }}
 spec:
   source:
     type: Dockerfile

@@ -137,7 +137,7 @@ RUN printf '%s\n' \
 '    for (index, (volume, mount)) in volumes.iter().zip(mounts.iter()).enumerate() {' \
 '        let Some(v) = volume.as_object() else { return false; };' \
 '        let Some(m) = mount.as_object() else { return false; };' \
-'        let name = if index == 0 { "workspace".to_string() } else { format!("data-{}", index-1) };' \
+'        let name = if index == 0 { "saw-workspace".to_string() } else { format!("data-{}", index-1) };' \
 '        if v.len() != 2 || m.len() != 3 || v.get("name").and_then(Value::as_str) != Some(name.as_str())' \
 '            || m.get("name").and_then(Value::as_str) != Some(name.as_str()) { return false; }' \
 '        let Some(pvc) = v.get("persistent_volume_claim").and_then(Value::as_object) else { return false; };' \
@@ -294,7 +294,7 @@ RUN printf '%s\n' \
 '    #[test]' \
 '    fn kubernetes_rejects_privilege_paths_and_malformed_options() {' \
 '        for (pointer, value) in [' \
-'            ("/kubernetes/volumes/0", json!({"name":"workspace","host_path":{"path":"/"}})),' \
+'            ("/kubernetes/volumes/0", json!({"name":"saw-workspace","host_path":{"path":"/"}})),' \
 '            ("/kubernetes/volumes/0/persistent_volume_claim", json!({"claim_name":"alice-workspace"})),' \
 '            ("/kubernetes/containers/agent", json!({"volume_mounts":[],"resources":{},"security_context":{"privileged":true}})),' \
 '            ("/kubernetes/containers", json!({"agent":{},"extra":{}})),' \

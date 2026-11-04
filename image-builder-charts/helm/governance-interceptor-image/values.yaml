@@ -4,7 +4,8 @@ source:
     ref: "v0.1.2"
 
 build:
-  # Opt-in GitOps build: OpenShift starts a build when this recipe changes.
+  # For GitOps, give each new build recipe its own BuildConfig name.
+  name: governance-interceptor
   # Default preserves the existing explicit Make build command.
   configChangeTrigger: false
   contextDir: "examples/governance-interceptor"
