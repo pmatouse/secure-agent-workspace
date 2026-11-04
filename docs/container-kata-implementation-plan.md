@@ -74,8 +74,9 @@ with a one-minute load average of 96.25. Under this contention, both stock
 `virt-operator` Pods repeatedly failed their liveness probes. Site revision
 `127f295` raises CNV Subscription resource requests to `250m` CPU / `512Mi`
 memory per operator container through supported OLM configuration. Both
-`virt-operator` replicas then became Ready, and HyperConverged Degraded became
-False; full availability was still pending. No probes were changed.
+`virt-operator` replicas then became Ready. HyperConverged subsequently reported
+Available=True, Progressing=False, Degraded=False and Upgradeable=True; all five
+virt-handler Pods were Ready. No probes were changed.
 
 SAW's Keycloak chart did not expose the operator's supported resource field.
 The optional `keycloak.resources` input now forwards to Keycloak CR
@@ -86,6 +87,17 @@ requests `500m` CPU and preserves the `1700Mi` request / `2Gi` memory limit,
 with no CPU limit. The RHBK operator owns the rollout; no Keycloak code, image,
 probe, realm or authentication policy is changed. This small chart input is the
 only integration code addition to the otherwise stock VM baseline so far.
+
+The unhealthy original Keycloak Pod blocked its StatefulSet's OrderedReady
+rollout. Site commits `0b7153e` and `4cef018` used the existing `keycloak.instances`
+input to scale to zero, observe the server Pod disappear, then restore one.
+The replacement Pod has the intended `500m` CPU request. PostgreSQL, its PVC and
+the completed realm import were retained; no direct Pod deletion or StatefulSet
+patch was used. Fresh installs start with one replica and the final resource
+request. The replacement server is still starting; readiness is not yet proved.
+
+RHDH's dynamic-plugin, RAG-data and CA-bundle init containers all completed with
+exit code zero. Application readiness and the Keycloak client hook remain pending.
 
 Two-user VM inputs passed `make prereqs-check`, including enabled network
 policies, and remain undeployed until platform readiness. Cluster-published
