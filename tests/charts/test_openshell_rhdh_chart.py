@@ -37,6 +37,12 @@ def test_bounded_site_guest_readiness_timeout(minutes, wait, task):
     assert stage["timeout"] == task
     assert {p["name"]: p["value"] for p in stage["params"]}["timeout"] == wait
     assert {p["name"]: p["value"] for p in stage["params"]}["action"] == "wait-ready"
+    cm = one(docs, "ConfigMap", "saw-rhdh-templates")
+    for key in ("create-workspace.yaml", "create-workspace-for-user.yaml"):
+        if key in cm["data"]:
+            form = yaml.safe_load(cm["data"][key])
+            step = next(s for s in form["spec"]["steps"] if s["id"] == "task-sandboxes")
+            assert step["each"] == list(range(1, (minutes + 2) * 3 + 1))
 
 
 @pytest.mark.parametrize("minutes", ["0", "61", "false", "1.5", "unlimited"])
