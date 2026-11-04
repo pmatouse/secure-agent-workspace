@@ -267,8 +267,8 @@ RUN printf '%s\n' \
 '    }' \
 '    fn k8s() -> Value {' \
 '        json!({"kubernetes":{' \
-'            "volumes":[{"name":"workspace","persistent_volume_claim":{"claim_name":"alice-workspace","read_only":false}}],' \
-'            "containers":{"agent":{"volume_mounts":[{"name":"workspace","mount_path":"/sandbox","read_only":false}],"resources":{"requests":{"cpu":"250m","memory":"512Mi"}}}}' \
+'            "volumes":[{"name":"saw-workspace","persistent_volume_claim":{"claim_name":"alice-workspace","read_only":false}}],' \
+'            "containers":{"agent":{"volume_mounts":[{"name":"saw-workspace","mount_path":"/sandbox","read_only":false}],"resources":{"requests":{"cpu":"250m","memory":"512Mi"}}}}' \
 '        }})' \
 '    }' \
 '    #[test]' \

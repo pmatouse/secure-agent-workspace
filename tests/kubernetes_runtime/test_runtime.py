@@ -54,10 +54,11 @@ def test_compiler_is_deterministic_and_uses_stock_driver_envelope(source):
     sb = first["workspaces"][0]["sandboxes"][0]
     assert sb["spec"]["command"] == ["sh", "-c", "sleep infinity"]
     driver = sb["spec"]["template"]["driver_config"]["kubernetes"]
+    assert driver["volumes"][0]["name"] == "saw-workspace"
     assert driver["volumes"][0]["persistent_volume_claim"] == {
         "claim_name": "workspace-toolbox", "read_only": False}
     assert driver["containers"]["agent"]["volume_mounts"] == [
-        {"name": "workspace", "mount_path": "/sandbox", "read_only": False}]
+        {"name": "saw-workspace", "mount_path": "/sandbox", "read_only": False}]
     assert first["claims"] == [{"name": "workspace-toolbox", "uid": "pvc-uid", "workspace": "default"}]
 
 

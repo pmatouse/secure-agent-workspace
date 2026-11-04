@@ -70,7 +70,7 @@ def _claim(binding, workspace, mount_path, volume_name):
 
 def _storage(binding, workspace):
     mapping(binding, {"workspace", "mounts", "resources"}, {"workspace"}, "sandbox binding")
-    volume, mount, reference = _claim(binding["workspace"], workspace, "/sandbox", "workspace")
+    volume, mount, reference = _claim(binding["workspace"], workspace, "/sandbox", "saw-workspace")
     if binding["workspace"]["readOnly"]:
         raise ContractError("/sandbox must be writable")
     volumes, mounts, refs = [volume], [mount], [reference]
