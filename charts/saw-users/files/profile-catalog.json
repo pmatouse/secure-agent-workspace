@@ -113,7 +113,7 @@
       ]
     },
     "data-science": {
-      "description": "Data science workspace with NVIDIA inference and web search; CUDA development workspace with NVIDIA inference",
+      "description": "Data science workspace with OpenAI inference; CUDA development workspace with OpenAI inference",
       "harnessRequired": false,
       "secrets": {
         "inference": {
@@ -125,23 +125,23 @@
               "title": "API key"
             },
             {
-              "default": "nvidia/nemotron-3.5-lightning-30b-a3b",
+              "default": "gpt-4.1-mini",
               "key": "model",
               "kind": "text",
               "required": false,
               "title": "Model (notebook)"
             },
             {
-              "default": "nvidia/nemotron-3.5-lightning-30b-a3b",
+              "default": "gpt-4.1-mini",
               "key": "cuda_model",
               "kind": "text",
               "required": false,
               "title": "Model (cuda-sandbox)"
             }
           ],
-          "provider": "nvidia",
+          "provider": "openai",
           "providers": [
-            "nvidia"
+            "openai"
           ]
         },
         "web-search": {
@@ -161,7 +161,7 @@
       },
       "workspaces": [
         {
-          "description": "Data science workspace with NVIDIA inference and web search",
+          "description": "Data science workspace with OpenAI inference",
           "enabled": true,
           "name": "default",
           "sandboxes": [
@@ -189,7 +189,7 @@
           ]
         },
         {
-          "description": "CUDA development workspace with NVIDIA inference",
+          "description": "CUDA development workspace with OpenAI inference",
           "enabled": true,
           "name": "cuda-dev",
           "sandboxes": [

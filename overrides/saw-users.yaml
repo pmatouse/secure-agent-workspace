@@ -1,3 +1,31 @@
-# Add real account names here after creating them with keycloak-add-users.
-# Each entry creates saw-<name>. Demo entries are in saw-users-demo.yaml.
+# glmhg VM baseline. Add accounts only after platform health checks.
 users: []
+defaults:
+  openshellSaw:
+    containerRuntime: podman
+    source:
+      registryURL: docker://image-registry.openshift-image-registry.svc:5000/openshell-agents/openshell-gateway@sha256:eaf603d12d763c7154c04fcb78b8cae8cebfc3bdf25a155c63adfa6f74e7d31d
+    credentialProxy:
+      enabled: true
+      image: ghcr.io/validatedpatterns-sandbox/saw-credential-proxy@sha256:73f271de2eb6166315603fbb72c800b939a14770a69c86debaabbd29a46a0f93
+    bom:
+      spec:
+        nemoclaw:
+          cliImage: ghcr.io/validatedpatterns-sandbox/nemoclaw-cli@sha256:3283cf580e8187a53371c5cabc0557abf9845066a871cbd6596a500a9bcd04a0
+    dashboard:
+      image: quay.io/gkrumbach07/openshell-dashboard@sha256:873d4379edfa42a7ff56451a98d4f448c2b3a7085c7beb74d1368606addced80
+    networkPolicy:
+      enabled: false
+      clusterNetworkCIDRs:
+      - 10.232.0.0/14
+      serviceNetworkCIDRs:
+      - 172.231.0.0/16
+    cleanupApi:
+      serviceIP: 172.231.0.1
+      endpoints:
+      - ip: 10.10.10.10
+        port: 6443
+      - ip: 10.10.10.11
+        port: 6443
+      - ip: 10.10.10.12
+        port: 6443
