@@ -1,0 +1,1043 @@
+# SAW container and Kata backends: implementation and qualification plan
+
+Status: **planned; no container/Kata feature or cluster qualification is claimed by this document**.
+Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
+Planning branch: `plan/container-kata-deployment`.
+
+## 1. Objective and execution rules
+
+Install the current Secure Agent Workspace (SAW) through its documented **Validated
+Pattern / Option A** procedure. Establish and retain a working VM deployment,
+including RHDH, real agent inference, credentials, governance and persistent user
+work. Extend that same installation with selectable container and Kata backends.
+A fresh installation using the final code must reproduce the result without live
+repairs. Existing VM users must continue working throughout.
+
+Deployment modes:
+
+| Mode | Implementation | Delivery status |
+| --- | --- | --- |
+| `vm` | Existing KubeVirt VM, gateway and Podman-managed sandboxes | Existing; default and regression reference |
+| `container` | Kubernetes gateway, separate supervisor and agent workload Pods | First new backend |
+| `kata` | Same Kubernetes backend; independently selected Kata supervisor/workload Pods | Second new backend |
+| `confidential` | Confidential Kata, attestation, measured policy and protected secret/storage paths | Reserved; reject until separately implemented and qualified |
+
+Functional parity means the supported SAW workflows work through the same public
+interfaces. It does not mean equal security properties: ordinary containers share
+a host kernel, ordinary Kata provides VM isolation, and neither by itself supplies
+confidential-computing attestation. Existing documented limitations are recorded,
+not silently counted as passing features.
+
+### Meaning of “no shortcuts, no manual changes”
+
+- Use existing version-controlled SAW installation commands with reviewed inputs.
+  Those commands intentionally perform some imperative bootstrap operations.
+- No ad hoc `oc patch/edit`, console configuration, direct Helm updates of
+  Argo-owned releases, guest package installation, manually copied binaries,
+  injected shell fixes, deleted PVCs, forced policy bypasses or hand-created
+  sandboxes to repair a failed acceptance run.
+- No disabled OIDC, credential proxy, governance, TLS verification, Landlock,
+  seccomp or network enforcement to make a failing backend pass.
+- Diagnose with read-only tools. Fix source/configuration, test, publish immutable
+  artifacts, commit/push, then reconcile through the declared owner.
+- Keep failed evidence. A repaired run is a recovery test, not clean-install proof.
+  Final qualification requires another clean replay from the final revision.
+- Do not introduce experimental container/Kata overrides before the VM baseline
+  passes. Normal site configuration is allowed; backend implementation is not.
+- Do not run the full destructive Pattern E2E workflow on the retained baseline.
+- Secrets, kubeconfigs, generated private keys, bearer tokens and private test
+  state never enter Git, images, public reports or command-line examples.
+
+The current upstream install is **not entirely declarative**. Image mirroring
+updates registry configuration; account provisioning calls Keycloak; the framework
+loads secrets and runs imperative Jobs. These are explicit supported bootstrap
+steps below. Eliminating all imperative bootstrap is a separate implementation
+item, not something this plan pretends stock SAW already does.
+
+### Source and command notation
+
+- **Existing:** verified in the research revision; can be used after supplying
+  the required inputs and prerequisites.
+- **Proposed:** to be implemented and tested; not an executable feature today.
+- Placeholder values such as `<published-sha-tag>` are required inputs, never
+  values to run verbatim. Do not infer a missing registry digest or cluster UID.
+- Freeze one pushed branch head for each acceptance run. Later source changes
+  start a new run record; do not change the tested branch underneath a run.
+
+## 2. Research locks and source map
+
+| Repository | Researched revision | Purpose |
+| --- | --- | --- |
+| `validatedpatterns-sandbox/secure-agent-workspace` | `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` | Exact current VM functionality and install flow |
+| `opendatahub-io/openshell` | `305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f`, tag `v0.1.2-rhaiv.6` | SAW-pinned driver, supervisor and runtime semantics |
+| `pmatouse/coco-pattern`, `rhoai-confidential-qwen` | `8193b8759e813d643fdf50829c192e1826335a5e` | Optional future inference integration, not an installation prerequisite |
+
+Before implementing on a newer revision, explicitly recheck the following files
+and refresh the lock. Do not mix the latest NVIDIA documentation with the pinned
+Red Hat OpenShell implementation; newer code changes the boundary connection
+initiator and adds other supervisor topologies.
+
+| Area | Source in SAW unless otherwise marked |
+| --- | --- |
+| Official install | `README.md`, Option A; `Makefile`, `Makefile-common`, `pattern.sh` |
+| Platform resources | `values-global.yaml`, `values-prod.yaml` |
+| User desired state | `overrides/saw-users.yaml`, `charts/saw-users` |
+| Workspace implementation | `charts/openshell-saw/values.yaml`, `templates/_helpers.tpl`, `templates/virtualmachine.yaml` |
+| Profile reconciliation | `charts/openshell-saw/files/installer/apply_bom.py` |
+| Profiles/harnesses | `charts/saw-bom/profiles`, `harness-bundles`, `scripts/saw-profile-catalog.py` |
+| RHDH | `charts/openshell-rhdh/files/portal.py`, generated forms and pipeline templates |
+| Governance/credentials | `charts/governance-interceptor`, `charts/governance-policy`, `credential-proxy` |
+| Tests | `docs/testing.md`, `docs/deployment-validation-ci.md`, `scripts/ci/pattern_e2e.py` |
+| OpenShell runtime | OpenShell `crates/openshell-driver-kubernetes/{README.md,src/driver.rs,src/config.rs,src/sandbox_runtime.rs,src/isolation.rs}` |
+| OpenShell gateway install | OpenShell `deploy/helm/openshell`, including credential-storage KEK and certificate hooks |
+
+Pinned upstream links: [SAW source](https://github.com/validatedpatterns-sandbox/secure-agent-workspace/tree/c9691be3ff0a9a2dde4fee91514b5215bbcb9275),
+[OpenShell Kubernetes driver](https://github.com/opendatahub-io/openshell/tree/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f/crates/openshell-driver-kubernetes),
+[selected CoCo source](https://github.com/pmatouse/coco-pattern/tree/8193b8759e813d643fdf50829c192e1826335a5e).
+
+## 3. Cluster and operator inputs
+
+Use a prepared OpenShift cluster suitable for SAW's VM path first. The researched
+SAW baseline requires OpenShift 4.22+; confirm compatibility against the exact
+chosen release before installation. The older minimum in an OpenShell guide does
+not override SAW's installation requirements or qualify a Kata guest kernel.
+
+| Input | Requirement and owner |
+| --- | --- |
+| Cluster identity | API URL, `kube-system` namespace UID, context; compare before every mutating test |
+| Access | Private cluster-admin kubeconfig for installation; user identities for functional/security tests |
+| Workstation/runner | Linux acceptance runner; `oc`, matching `virtctl`, Helm 3, local Podman, Git, jq, OpenSSL, uv/Python and required test tools |
+| Kubeconfig location | Under the runner's HOME; current `pattern.sh` rejects paths outside HOME |
+| Virtualization | KVM-capable scheduled nodes, required firmware/nesting, functional CNV installation by the declared owner |
+| Storage | Working, platform-owned default StorageClass for current VM DataVolumes; capacity, provisioning and recovery behavior verified |
+| Network | OVN-Kubernetes and enforced ingress/egress NetworkPolicy; public/private CA trust; registry and provider access |
+| Topology | Actual Pod/Service CIDRs, API Service IP and EndpointSlice IP/port list; generated by the existing discovery script |
+| DNS/TLS | Working API/Ingress/Keycloak/RHDH names, trusted certificates or explicitly supplied verified CA bundles |
+| Git | Writable `pmatouse` fork, reviewed remote branch, explicit Pattern origin/branch; no credentials in URLs |
+| Images | Published golden-image tag and digest, credential-proxy digest, coherent CLI/gateway/supervisor/sandbox BOM |
+| Inference | Provider/profile/model pair supported by the selected SAW profile; a real usable credential where required |
+| Optional capabilities | Brave, Slack/Gmail, MCP endpoints, APF images/keys and their separate test credentials when those profiles are qualified |
+| Identity | Two ordinary baseline accounts and a separate portal account; never test all roles with an administrator token |
+| Kata later | Approved RuntimeClass, installed OSC/Kata owner, actual guest kernel feature evidence, placement and capacity |
+
+Plan capacity for two VM users, a portal-created VM during baseline, plus container
+and Kata candidates without deleting the reference VM. README sizing is about
+4 CPU / 8 GiB / 40 GiB per VM and 8 CPU / 16 GiB / 50 GiB shared overhead; these
+are starting estimates, not proof of schedulability. Include Pod quotas, PVCs,
+image imports, Jobs, Kata VM overhead and supervisor count per sandbox. GPU is not
+required for an agent workspace using a remote inference endpoint.
+
+### Shared dependency ownership gate
+
+Inventory CNV, RHBK, Vault, ESO, GitOps, Pipelines, RHDH and RHOAI before installing.
+SAW `values-prod.yaml` declares subscriptions for several of these, including
+OpenShift AI. A cluster already running the selected CoCo/RHOAI branch may own
+some of them. Do not install duplicate Subscriptions, conflicting OperatorGroups,
+second Vault instances over existing state or competing Argo Applications.
+
+For a clean SAW cluster, let documented Pattern ownership provision them. For a
+shared cluster, prepare and render reviewed source overrides first. If a supported
+reuse switch does not exist, implement it in Git and qualify it; do not work around
+it by editing live subscriptions. The initial clean VM baseline should preferably
+use the unambiguous dedicated-cluster ownership path.
+
+## 4. Phase A — exact supported VM baseline
+
+**Gate A0:** no implementation changes; site inputs and upstream bootstrap only.
+The following sequence follows README Option A. Option B's separate manual Helm
+install is not mixed into this sequence.
+
+### A1. Clone the fork and pin the deploying branch
+
+Existing commands, with operator-supplied branch:
+
+```bash
+git clone https://github.com/pmatouse/secure-agent-workspace.git
+cd secure-agent-workspace
+git remote add upstream https://github.com/validatedpatterns-sandbox/secure-agent-workspace.git
+git switch <reviewed-pushed-vm-baseline-branch>
+git status --short
+git rev-parse HEAD
+export TARGET_ORIGIN=origin
+export TARGET_BRANCH=<reviewed-pushed-vm-baseline-branch>
+```
+
+Use a source revision containing only baseline/site changes. The planning branch
+may hold this document, but the first runtime gate must not include container
+implementation. The deploying branch must already exist remotely. Verify the
+local and remote SHA match; record the upstream base, site commit and branch.
+`TARGET_REVISION` is not a supported replacement for `TARGET_BRANCH` here.
+
+### A2. Authenticate, check platform prerequisites and record identity
+
+```bash
+export KUBECONFIG="$HOME/.kube/saw-test-config"
+oc whoami
+oc whoami --show-server
+oc get namespace kube-system -o jsonpath='{.metadata.uid}{"\n"}'
+oc get nodes
+oc get storageclass
+scripts/storage-class-check.sh --check-only
+make prereqs-check
+```
+
+Alternatively use normal `oc login` with a verified API CA to populate that
+kubeconfig. Do not use insecure TLS flags. `make prereqs-check` is the Pattern
+check; `quickstart-prereqs-check` assumes operators have already been installed
+and belongs to Option B.
+
+The existing storage check in install can offer to change a default StorageClass
+or create hostpath storage. Do not accept that as an implicit repair. Provision
+storage through its platform owner before proceeding; do not set
+`SAW_STORAGE_ASSUME_YES=1`. Current VM disks omit `storageClassName`, so a suitable
+default is a real prerequisite until a separately reviewed change makes it explicit.
+
+The pinned prereq script checks OpenShell CLI API version **0.1.2**. Do not replace
+it with an arbitrary newer CLI or suppress the check. Record full distribution
+versions and ensure they are compatible with the `0.1.2-rhaiv.6` component BOM.
+
+### A3. Generate local SSH material and prepare private secret inputs
+
+```bash
+make ssh-key-generate
+```
+
+This preserves existing keys and may create `~/values-secret.yaml` from the
+shipped template. Inspect, do not overwrite existing private input files.
+The framework prefers `~/values-secret-secure-agent-workspace.yaml` when both
+exist. Use one deliberately selected effective input and record its path privately.
+
+For the default data-science baseline, use its NVIDIA `build` provider and the
+model selected by the shipped profile. Supply the inference key through the
+file reference in `values-secret.yaml.template`. If web search is to be tested,
+supply the Brave key. If deliberately excluded for the minimal baseline, commit
+`global.webSearch.enabled: false` in `values-global.yaml` and remove the unused
+private `web-search` entry. This exclusion is not full web-search qualification.
+Preserve the generated `rhdh-oidc` client/session-secret entries.
+
+Use private file permissions, and never put raw values in shell history or Git.
+The platform secret loader, not a tenant sandbox, enrolls these values in Vault.
+
+### A4. Mirror the existing VM image and supply the proxy image
+
+```bash
+make images-mirror IMAGE_TAG=<verified-published-sha-tag>
+make check-oidc-ca
+```
+
+The tag must exist. Resolve and record its digest and provenance before use; do
+not guess a tag from the current commit and do not fall back to `latest`.
+The mirror script enables the registry Route, creates its declared resources and
+adds an internal `latest` alias. These are supported bootstrap mutations, not
+read-only checks. To remove ambiguity, configure an exact reviewed disk digest
+in the site values for all new baseline VMs:
+
+```yaml
+# Existing schema: overrides/saw-users.yaml
+users: []
+defaults:
+  openshellSaw:
+    containerRuntime: podman
+    source:
+      registryURL: docker://<reachable-registry>/openshell-gateway@sha256:<verified-digest>
+    credentialProxy:
+      enabled: true
+      image: <reachable-registry>/saw-credential-proxy@sha256:<verified-digest>
+```
+
+The proxy image is mandatory in default proxy mode; its stock value is empty.
+Use an existing reviewed published artifact or publish it through the repository's
+credential-proxy CI workflow and record the resulting digest. Existing
+`make credential-proxy-build` is an explicit supported in-cluster alternative,
+not a hidden step: it creates/patches a BuildConfig and performs a binary build.
+If used, run from clean tracked source and record source inventory/build UID/digest.
+Do not disable the proxy because its image is missing.
+
+Complete the artifact inventory before acceptance: the researched defaults also
+contain mutable NemoClaw CLI, dashboard and enabled cuda-dev sandbox tags. Resolve
+and select reviewed digests through the supported BOM/profile/site fields, and
+record each source/build provenance. Observing a digest after a tag pull is not the
+same as selecting that digest for replay. Freeze the VP utility-container image
+through its supported input and lock resolved external charts/operator versions for
+final replay; where current framework inputs cannot express a required pin, record
+and close that source-level gap before claiming deterministic release selection.
+
+Changing `source.registryURL` later does not update an existing VM root disk.
+No VM image-recreation shortcut is permitted after the baseline is recorded.
+
+### A5. Commit actual topology, CA and initial site settings
+
+```bash
+uv sync --locked
+uv run --locked python scripts/network-topology.py print-json
+```
+
+Use the returned values in the existing schema below. This is a schematic input,
+not a deployable file with sample CIDRs:
+
+```yaml
+users: []
+defaults:
+  openshellSaw:
+    # Include the image/credential settings from A4 in this same mapping.
+    networkPolicy:
+      enabled: true
+      clusterNetworkCIDRs: [<discovered-pod-cidr>]
+      serviceNetworkCIDRs: [<discovered-service-cidr>]
+    cleanupApi:
+      serviceIP: <discovered-api-service-ip>
+      endpoints:
+        - ip: <discovered-apiserver-backend-ip>
+          port: <discovered-apiserver-backend-port>
+```
+
+Record all actual endpoints, not just one example. Audit each profile's inference,
+MCP, registry and package destinations before enabling isolation. Add necessary
+narrow destinations through existing `extraEgress`/allowlist inputs. Do not add
+blanket namespace or internet permissions. Rerun topology validation after endpoint
+rotation; Argo cannot discover these values during Helm rendering.
+
+SAW's GitOps user defaults stage NetworkPolicy off; enable it explicitly for the
+new test users. An empty users list is not proof that any workload policy passed.
+Keep OIDC and TLS verification enabled. For an external private issuer, supply a
+verified CA using documented `oidc.caBundle`; do not fetch a trust anchor from an
+unverified endpoint. For the default in-cluster issuer, use the existing
+`saw-ingress-ca` automation and wait for its reconciliation.
+
+Commit and push these public values to the deploying branch before install.
+Store image and topology receipts outside secret input directories.
+
+### A6. Run the official Pattern installer
+
+```bash
+./pattern.sh make install
+./pattern.sh make argo-healthcheck
+```
+
+`pattern.sh` uses the VP utility container and the current branch/origin; local
+Podman is required. `install` includes secret loading when enabled. Do not also
+run quickstart `keycloak-deploy`, `governance-deploy` or `saw-create` to provision
+resources that the Pattern owns.
+
+Wait using bounded condition checks and capture failures. Check the actual
+Application inventory, resolved revisions, CSV/operator readiness, HyperConverged,
+Keycloak, Vault/ESO, RHDH/Backstage and Tekton readiness. Wait for the declared
+`saw-portal-vault` and `saw-ingress-ca` jobs/outputs. No timestamp sleeps count as
+readiness. Record resolved versions because current channels and some chart
+versions are not exact immutable pins.
+
+At this point `users: []` intentionally creates **no workspace VM**.
+
+### A7. Declare two real VM users and create their accounts
+
+Add the following to the same `overrides/saw-users.yaml`, preserving defaults:
+
+```yaml
+users:
+  - name: sawvmowner
+    profiles: [data-science]
+  - name: sawvmother
+    profiles: [data-science]
+```
+
+Both names are ordinary users, not administrators. Names are DNS labels of at
+most 19 characters. Run `make prereqs-check` against these local enabled-user
+entries before committing/pushing, so Argo cannot apply an unvalidated topology.
+Then commit/push and use the documented account operation:
+
+```bash
+make keycloak-add-users
+oc -n vp-gitops get application saw-sawvmowner
+oc -n vp-gitops get application saw-sawvmother
+oc -n saw-sawvmowner get virtualmachine,pvc,pod
+make saw-logs OPENSHELL_SAW_NAME=sawvmowner
+```
+
+`keycloak-add-users` writes missing accounts and generated-password state; it
+preserves existing users. The owner resolver binds exact Keycloak subjects. Do
+not hand-edit membership or use guessed subject IDs to bypass failed resolution.
+For interactive login, `make keycloak-password KC_USER=sawvmowner` copies the
+password to the clipboard where supported or identifies its Secret. Do not use
+`SHOW=1` or capture passwords in receipts; use the equivalent operation for the
+other test accounts. Both guest installer phases **install and apply must reach Done**. VM Running
+and Application Healthy alone are insufficient.
+
+### A8. Authenticate and exercise the actual VM service
+
+```bash
+export OPENSHELL_SAW_NAME=sawvmowner
+make login
+make saw-configure
+openshell gateway login "$OPENSHELL_SAW_NAME"
+openshell sandbox list
+openshell sandbox list --workspace cuda-dev
+openshell sandbox exec -n notebook --no-tty -- sh -c 'test -d /sandbox && printf "sandbox-ready\n"' </dev/null
+make sandbox-ui
+```
+
+Use the matching CLI and profile commands; `sandbox connect` to a `sleep infinity`
+main process is not an interactive shell. Authenticate the second user with a
+separate local token/config directory and prove owner access is denied.
+
+`make saw-configure` verifies gateway CA trust but may use the SSH helper to add
+the caller's public key to the VM access Secret. `make saw-status` has the same
+side effect. They are supported bootstrap/diagnostic operations, not purely
+read-only cluster checks. Use the declared bootstrap key and record this action;
+do not install software or modify guest state through the resulting SSH access.
+
+Test the real agent UI and an actual provider completion. Record status/result
+without keys or sensitive prompts. Exercise enabled harness/tool-gate behavior,
+audit generation, filesystem permissions, proxy marker handling and denied
+undeclared egress. Enumerate every enabled workspace and sandbox, including `cuda-dev/cuda-sandbox`;
+notebook-only CI evidence does not qualify the full data-science profile.
+
+### A9. Verify the existing RHDH VM flow before changing it
+
+Create a separate public account-input file for `sawportalvm`; do not add that
+user to the Git-owned workspace inventory. Provision the account with:
+
+```bash
+make keycloak-add-users USERS_FILE=<public-portal-account-file>
+oc -n vp-gitops get applications openshell-rhdh openshell-keycloak
+oc -n rhdh get externalsecret rhdh-oidc
+oc -n rhdh get backstage developer-hub
+oc -n rhdh get route
+```
+
+Follow [the existing RHDH user guide](rhdh-user-guide.md): sign in, select the
+existing create/update workspace template, choose a profile, supply its credentials
+through the protected request flow, and wait for the complete Tekton pipeline.
+Verify catalog entry, status, links, owner-only UI and actual inference.
+Never persist request-secret contents or Backstage tokens in test artifacts.
+
+Record the existing architecture accurately: portal keys go to Vault; nonsecret
+workspace inventory goes to `saw-ws-*` ConfigMaps; an ApplicationSet plugin
+renders `saw-users`. This is Argo-reconciled, not yet Git-backed workspace intent.
+Test portal delete on this disposable portal user only, including generation-safe
+credential cleanup; keep both reference VM users.
+
+### A10. Freeze baseline evidence and stop if anything failed
+
+Required evidence: exact source/site revisions and resolved image digests; cluster
+UID, topology and storage; operator/CRD/chart versions; Argo desired/observed
+revisions; user subjects (no tokens); VM/root-PVC identities; installer Done states;
+real inference; owner denial; expected egress denial; proxy isolation; enabled
+profile/harness/tool/audit checks; RHDH create/update/delete results.
+
+Write a harmless per-run canary through OpenShell in `/sandbox`, then retain it
+for later restart/upgrade checks. Record a digest, not user files. Record that
+baseline signing mode may still be the upstream `warn` mode; do not claim enforced
+image admission or signed-bundle enforcement unless independently configured/tested.
+
+If installation fails, capture diagnostics and correct source or declared platform
+inputs. Do not proceed with backend work until the baseline is reproducible.
+A code fix starts a new baseline attempt; preserve the failed one.
+
+## 5. Target architecture and exact component boundaries
+
+```mermaid
+flowchart TB
+  Git[Git: site, users, profiles, policies] --> Argo[Pattern / Argo CD]
+  Argo --> G[Per-user gateway Pod + retained state]
+  Argo --> R[SAW BOM reconciler]
+  Argo --> P[Role-specific policies / approved storage]
+  R -->|Authenticated admin API| G
+  G --> I[Existing interceptor or APF]
+  G --> D[Kubernetes compute driver]
+  D --> CR[Agent Sandbox CR]
+  CR --> ASC[Agent Sandbox controller]
+  ASC --> W[Workload Pod: openshell-sandbox + agent]
+  D --> S[Separate supervisor Pod]
+  S -->|Initiates authenticated TLS :5500| W
+  W -. mediated operations on established channel .-> S
+  S --> CP[Credential proxy in separate trusted namespace]
+  Vault[Vault] --> ESO[ESO] --> CP
+  CP --> Provider[Configured inference / enterprise services]
+```
+
+The pinned protocol is **supervisor-initiated**. The workload denies all new
+outbound connections, including direct DNS; responses and mediated streams use
+the established authenticated channel. Supervisor health is 5501. Preserve SAW's
+external gateway 17670 and authenticated UI contracts; the upstream gateway's
+8080 default is not a requirement to change existing SAW endpoints.
+
+The agent's `openshell-sandbox` runtime stays with the agent: it owns its child,
+Landlock/seccomp mediation and executable identity checks. The supervisor is a
+separate trusted process/Pod. One supervisor/workload pair per sandbox initially;
+no shared-supervisor optimization or shared multi-user gateway in this change.
+
+Use one pre-created runtime namespace and gateway per SAW user initially, with driver
+`workspace_mode: shared` **within that user namespace**. This preserves logical
+names such as `default` and `cuda-dev`, avoids cluster-wide namespace privileges
+and does not share a gateway across users. In proxy mode add a separate trusted
+credential namespace per user, for example `saw-<user>-credentials`, owned by the
+platform/SAW GitOps apps. Keep full provider Secrets, proxy private CA and the proxy
+there; only metadata/markers and public CA reach the runtime namespace. Gateway and
+runtime reconciler identities have no Pod, Sandbox, Job or Secret administration
+rights in the credential namespace. Cross-namespace proxy traffic is explicitly
+allowed only to the intended Service/Pods and port.
+
+This extra namespace is required to preserve existing provider-key isolation from
+a compromised gateway: permission to create Pods in a namespace can expose its
+Secrets through mounts even without Secret GET. Merely withholding Secret-read
+RBAC or not mounting the keys in the normal gateway spec is insufficient. If a
+future design retains one namespace, it must supply equally strong admission
+against all direct and controller-mediated credential mounts; that is not the
+initial design. Direct credential mode remains a separately declared weaker option.
+
+If a future design chooses operator
+mode and one namespace per logical workspace, explicitly migrate name mapping,
+RBAC, proxy routing and persistence first; operator mode maps workspace names to
+pre-provisioned namespaces and is not a drop-in replacement for this layout.
+
+### Ownership and scope
+
+| Owner | Objects/operations |
+| --- | --- |
+| Platform GitOps | Shared operators, CRDs, runtime installation, default storage, cluster network prerequisites |
+| SAW Argo apps | Runtime and trusted credential namespaces, gateway/state references, reconciler, proxy/UI, approved volume references, role-specific policies |
+| SAW reconciler | OpenShell workspace/provider/managed-sandbox desired state through its API |
+| OpenShell driver | Sandbox CR, supervisor Pod, bootstrap generation Secrets, boundary Service and its reviewed fence policies |
+| Agent Sandbox controller | Workload Pod and native owned workspace-volume lifecycle |
+| Vault/ESO or explicit retained secret bootstrap | Persistent gateway PKI/JWT/credential KEK and provider secrets, each with exactly one owner |
+| RHDH | Authenticated requests/status/catalog; credentials never become Git content |
+
+Argo never owns driver-created Pods/Secrets concurrently. Users cannot create
+Pods, spoof supervisor labels, read bootstrap Secrets, create NetworkPolicies or
+change resource-approval labels. Namespace ownership alone is not a security
+boundary against a user who can mutate these objects.
+
+## 6. Proposed configuration contract
+
+This schema is **to be implemented**, not accepted by the baseline chart today:
+
+```yaml
+defaults:
+  openshellSaw:
+    deployment:
+      mode: vm
+    kubernetes:
+      gateway:
+        runtimeClassName: ""
+        port: 17670
+      supervisor:
+        runtimeClassName: ""
+        healthPort: 5501
+      workload:
+        runtimeClassName: ""
+        boundaryPort: 5500
+      storage:
+        className: <approved-filesystem-storageclass>
+        gatewaySize: 5Gi
+        workspaceSize: 20Gi
+        retainOnDelete: true
+users:
+  - name: sawcontainer
+    values:
+      deployment: {mode: container}
+  - name: sawkata
+    values:
+      deployment: {mode: kata}
+      kubernetes:
+        supervisor: {runtimeClassName: <approved-kata-runtimeclass>}
+        workload: {runtimeClassName: <approved-kata-runtimeclass>}
+```
+
+Add strict schema/semantic validation. `vm` is the omission/default behavior.
+`container` selects default container runtime; incompatible Kata-only overrides
+are errors. `kata` requires explicit administrator-approved workload and supervisor
+classes; no fallback. An internal qualification fixture may place only one member
+in Kata while proving compatibility, but is not advertised as the complete mode.
+`confidential` returns an actionable not-implemented error before mutation.
+
+Do not overload existing `containerRuntime`, which describes the in-VM Podman
+runtime. RuntimeClass, ServiceAccount, PVC approval labels, security contexts,
+annotations and network topology are admin inputs, not arbitrary RHDH form fields.
+Mode on an existing workspace is immutable until a migration workflow is designed.
+
+## 7. Work packages and exit gates
+
+### B1. Freeze runtime interfaces and build an additive chart backend
+
+Change `charts/openshell-saw` values/validation and split common resources from
+VM-only resources. Preserve the VM rendered workload, public names and semantics.
+Conditionalize CDI, VM SSH/cloud-init and golden-image RBAC; do not delete shared
+CNV just because a new container user is added. A later container-only install may
+omit those dependencies through explicit platform ownership settings.
+
+Render a per-user gateway StatefulSet (one replica), PVC, Service, TLS Route,
+restricted ServiceAccount/Role, configuration and readiness. Inventory the pinned
+driver's cluster-scoped needs too: namespace/node reads, RuntimeClass/PriorityClass
+reads and TokenReview creation. Shared namespace mode avoids namespace lifecycle
+writes, not every ClusterRole. Grant only actual required resources/verbs; test
+removal/absence cases and prevent cross-user writes. Pin matching images.
+Do not translate a bootc VM disk into a gateway image: the ODH gateway component
+image is a separate artifact. Audit required binaries and startup path from the
+published images; do not extract and install binaries interactively in a Pod.
+
+**Gate B1:** VM render regression unchanged except approved metadata; all four
+mode cases validate; no VM resources for a new container user; invalid combinations
+fail before application. Source tests and dependency validation pass.
+
+### B2. Agent Sandbox dependency and deterministic secret foundation
+
+Select a published, compatible Agent Sandbox controller/CRD release and record
+its SHA/digests in a dependency lock before implementation is considered complete.
+The researched driver prefers `v1beta1` and can fall back to `v1alpha1`; do not
+invent a compatible version from the API name alone. Reuse only after schema,
+controller version and ownership checks. Upgrade discovery requires a gateway
+restart after served API changes.
+
+Install dependencies through platform Argo applications before the gateway app.
+Wait for CRD Established and controller readiness. The upstream chart's capabilities
+preflight must succeed on the live cluster; supply apiVersions only for offline
+render tests, not as a way to bypass missing live CRDs. Parent sync-wave ordering
+alone is not evidence that a child Application completed; include health gates.
+
+Persistent gateway identity includes TLS/server trust, JWT signing identity,
+credential-store KEK, gateway ID and database. The pinned chart's KEK template uses
+`lookup` plus random generation; Argo template rendering cannot safely preserve
+that state. Supply `server.credentialStorage.existingSecret` and explicit retained
+Secret ownership. Audit certificate hooks for create-if-absent behavior, retries,
+RBAC/namespace ordering, deletion and rotation. Never rotate keys on ordinary sync.
+No HA claim with multiple gateway replicas sharing SQLite/NFS.
+
+**Gate B2:** repeated render/sync is stable; gateway restart preserves state and
+identity; no plaintext keys in manifests/reports; dependency and ownership conflicts
+fail closed; no required cluster-admin credential in a tenant namespace.
+
+### B3. Two small OpenShell driver extensions
+
+Implement against the pinned ODH source and submit upstream-compatible changes:
+
+1. Administrator-only `supervisor_runtime_class_name`, with explicit scheduling
+   support and validation. Existing workload `runtimeClassName` does not affect
+   `supervisor_pod()` in `src/sandbox_runtime.rs`.
+2. Configurable supervisor egress-fence behavior for an operator-managed allowlist.
+   The pinned `src/isolation.rs` currently emits supervisor `egress: [{}]`.
+   **A restrictive SAW NetworkPolicy cannot narrow that allow-all rule.** Add a
+   reviewed mode that omits/restricts the permissive supervisor rule while retaining
+   the workload fence, and verify prerequisite SAW policies before sandbox release.
+
+Do not patch runtime Pods after creation or use broad mutating admission to hide
+these changes. Admission is a separately reviewed fallback only if the driver
+extension cannot be accepted. Preserve immutable bootstrap identity checks and
+workload fence UID/resourceVersion binding. Test missing policy, wrong identity,
+repeated creation and stopped/restarted generations.
+
+Build/test/publish the derivative gateway image through CI. Record source commit,
+patch provenance and image digest; retain matching protocol-compatible supervisor,
+sandbox and CLI images unless a change truly requires their rebuild. Do not update
+the default VM BOM silently. A patched gateway is not called an unchanged upstream
+binary; eliminating this derivative requires an upstream release containing it.
+
+**Gate B3:** supervisor placement tests pass; rendered policies contain no unintended
+allow-all supervisor egress in restricted mode; existing Podman/VM tests pass;
+new image is immutable and its provenance is recorded.
+
+### B4. Container runtime qualification before full SAW integration
+
+Deploy a source-defined test user/gateway and minimal sandbox through GitOps and
+the trusted API reconciler. No ad hoc `openshell sandbox create` is used to supply
+missing desired state. Exercise restricted UID/GID, no added capabilities,
+`allowPrivilegeEscalation:false`, RuntimeDefault seccomp, image pulls and persistent
+workspace initialization. Prove Landlock and seccomp-notify behavior, not merely
+Ready Pods. Observe the admitted runtime Pod specs and actual driver capability.
+
+Positive tests: owner authentication, sandbox exec/log/file/forward, supervisor
+channel, allowed inference/proxy, stop/start with preserved canary. Negative tests:
+wrong owner, wrong bootstrap generation, direct workload DNS/egress/API, supervisor
+access to another tenant/API/undeclared service, policy service failure and credential
+proxy failure. No endpoint becomes available before its security preconditions.
+
+**Gate B4:** ordinary-container runtime lifecycle and boundaries pass from source
+alone. No privileged SCC or runtime-socket mount is added as a workaround.
+
+### B5. Complete BOM and storage adapters
+
+Refactor `apply_bom.py` into shared desired-state logic and VM/Podman versus
+Kubernetes adapters; keep existing VM paths and tests. Port provider reconciliation,
+profiles, agent launch, UI relays, signed harness verification, trusted tool gate,
+audit storage, prune/report behavior and drift detection. Remove systemd/Podman
+assumptions only from the new adapter, not by changing the baseline's semantics.
+
+Use a source-controlled reconciler Deployment with serialized per-workspace apply,
+observed desired-revision hash, bounded retries/backoff and conditions. It must
+recover after termination between each side effect without losing user data or
+creating duplicate providers/sandboxes. Static Argo health alone does not establish
+OpenShell/BOM convergence. A one-shot Job can bootstrap, but does not replace
+ongoing profile reconciliation.
+
+Admin API authentication is a separate trusted identity with explicit lifetime and
+scope. Preserve the existing boundary where end users cannot use installer admin
+credentials. PKI roots/KEK and provider key material must not be mounted into agent
+or UI containers. A reconciler that administers a gateway is part of the TCB.
+
+Translate Podman mounts into typed, approved Kubernetes mounts:
+
+| Data | Mount intent | Persistence/update rule |
+| --- | --- | --- |
+| Agent `/sandbox` | Writable workspace | Keep across stop/restart/reschedule; explicit purge only |
+| Harness | Read-only to agent | Verified digest/signature; publish revision atomically; explicit restart if required |
+| Trusted tool gate | Read-only to agent | Admin-owned and bound to approved profile; user cannot replace it |
+| Audit | Writable dedicated data | Preserve and collect; define tamper limitations and ownership |
+| Gateway DB and keys | Gateway only | Durable identity, backup and compatible migration |
+
+External PVCs and RuntimeClasses need administrator-controlled attachment approval.
+Both mount and volume settings must represent RW correctly. No hostPath, arbitrary
+Secret, control-tree overlay or caller-controlled ServiceAccount escape. Preserve
+OpenShell resource admission instead of enabling unrestricted driver config.
+
+Default seeding copies image `/sandbox` once; image updates do not reseed existing
+PVCs. Implement migration version markers and collision handling. Harness updates
+must not mutate trusted files halfway through an active operation. Define retain
+semantics before exposing delete: native Sandbox deletion can garbage-collect its
+owned workspace claim. Add an explicit retained-volume strategy/API support where
+required; do not promise retention from a Helm annotation alone. Failure here blocks
+parity, not an excuse to delete/recreate and lose data.
+
+**Gate B5:** every supported profile operation has an adapter or an explicit
+not-qualified result; tool approval/denial and audit persist; repeated reconcile
+converges; interrupted apply recovers; retained-data tests pass.
+
+### B6. SAW network, governance and UI integration
+
+Update governance interceptor/APF schemas and allowlists for the Kubernetes driver.
+Map permitted PVC identity, mount path/mode and runtime settings precisely; reject
+unknown fields and unauthorized requests. Keep fail-closed behavior and distinguish
+current interceptor ConfigMap policies from optional signed APF policy support.
+
+Rewrite selectors by component role. Do not carry broad VM egress rules onto all
+namespace Pods. Test actual CNI enforcement, union of all policies, EgressFirewall
+interaction, API EndpointSlice changes and separate handling of cluster Routes.
+The platform administrator remains trusted; users cannot alter label/policy inputs.
+
+Preserve gateway TLS/OIDC, owner-only UI proxies, redirect registrar, subject
+resolver and nonadmin relay credentials. Containerize existing proxy/forwarder
+behavior with readiness/reconnect rather than leaving systemd shell scripts as an
+undocumented host requirement. Preserve external endpoint names where feasible;
+show equivalent links/status in RHDH and CLI.
+
+Render the new trusted credential namespace, ESO projections and proxy through
+`saw-users`/secret charts only for the new backend; preserve the original VM
+baseline layout. A trusted secret owner writes full Secrets there and only metadata
+companions in the runtime namespace. Validate that gateway Pod-create rights, any
+Sandbox template path and reconciler rights cannot indirectly mount credential
+namespace data. Check actual malicious Pod/Job/CR attempts, not just
+`oc auth can-i get secrets`. The proxy itself must not offer a key-read endpoint;
+using an approved bound credential remains possible by design.
+
+Credential rotation should remain Vault/ESO/proxy-owned. Default mode keeps real
+keys outside agent/supervisor state where the existing marker proxy permits it.
+Test both supported proxy and explicitly configured direct mode separately; direct
+mode retains its documented exposure and is never a fallback for failed proxy mode.
+Custom keyed HTTPS ports/private-CA behavior must follow actual proxy support.
+
+**Gate B6:** full user workflow works with policy/credential enforcement. In proxy
+mode, real provider keys are absent from agent filesystem/env and gateway state
+(markers are permitted); gateway/reconciler credentials cannot mount the trusted
+credential namespace's Secrets. Direct mode's expected exposure is separately
+measured/documented, never described as proxy isolation. Secret values stay out of
+logs/public status in both modes. Negative tests verify bypass denial; token/CA/key
+rotation behavior is documented and tested.
+
+### C1. Kata workload kernel proof
+
+Install/reuse Kata through its platform owner. Commit the approved runtime and
+scheduling inputs, then create a separate candidate workspace with Kata workload
+and ordinary supervisor as an internal qualification fixture. Keep the VM baseline.
+
+Verify actual runtime selection and VM boundary using host/runtime observations,
+not only the desired field. Probe the Kata **guest** kernel for required Landlock
+ABI and seccomp-notify behavior; test filesystem/proc visibility used by the sandbox
+runtime, UID mapping, PVC mount behavior, network fencing and memory/CPU overhead.
+A host kernel feature check is not sufficient.
+
+Missing kernel support is a blocking gap. Prefer a supported runtime release/config;
+a custom guest image would be a new explicit artifact/support boundary and requires
+separate review. Do not substitute privileged containers, seccomp unconfined or
+an unenforced filesystem policy. Stop this gate until the declared runtime works.
+
+**Gate C1:** the same container functional and negative tests pass inside Kata.
+
+### C2. Separate Kata supervisor and workload
+
+Enable the reviewed supervisor RuntimeClass setting on another source-declared
+candidate. Prove there are two different Kata Pod/VM boundaries, with authenticated
+communication and no shared process/network namespaces. The gateway can remain an
+ordinary Pod; selecting Kata for it later is independent of this milestone.
+
+Test failure/recreation of each member, bootstrap generation rollover, gateway
+restart, quotas, placement, runtime unavailability and retained data. Neither member
+may fall back to a host container. Ordinary Kata still trusts cluster administrators:
+`oc exec` denial is an RBAC/admission question here, not a confidential-guest-policy
+claim. OpenShell exec uses its network protocol and is a distinct authorization path.
+
+**Gate C2:** complete `kata` mode passes and reports actual placement; original VM
+and container users still pass their smoke/regression tests.
+
+### D1. RHDH, CLI and runtime-neutral lifecycle
+
+Update the profile catalog generator, not only generated forms. Add a constrained
+mode selector; default VM. Validate server-side against administrator capabilities,
+not browser input. Preserve exact authenticated subject and namespace ownership.
+Serialize runtime choice in the current registry and new Git-backed mode.
+
+Replace hardcoded VM/VM-running pipeline tasks and portal readiness queries with
+runtime-created/runtime-ready/BOM-ready/agent-ready phases. Keep VM-specific
+subdiagnostics. Catalog, Tekton graphs/logs, timestamps and failure reasons must
+remain available. Never mark a workspace Ready merely because an Application is
+Synced or a gateway Pod is Running.
+
+CLI status/log/restart/stop commands dispatch through the backend adapter. VM SSH
+remains clearly VM-specific operator diagnostics; user agent terminal/file access
+continues through OpenShell. No new tenant `pods/exec` permission is needed just
+to emulate gateway terminal functionality.
+
+**Gate D1:** create/update/stop/start/delete, owner checks, UI links, logs and error
+reporting work for VM/container/Kata through RHDH and CLI. Malicious mode, owner,
+PVC, RuntimeClass and credential-reference inputs are refused.
+
+### D2. Full Git-backed workspace intent
+
+Keep the current ConfigMap registry as an explicit compatibility mode. Implement
+Git-backed mode for the requested full GitOps lifecycle:
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Portal as RHDH / validated request pipeline
+  participant Vault
+  participant Git as Scoped repository branch / PR
+  participant Argo
+  participant Reconciler as SAW reconciler
+  participant Gateway
+  User->>Portal: Profile + permitted mode + protected credential input
+  Portal->>Portal: Verify token, owner, schema and collision rules
+  Portal->>Vault: Store generation-scoped credentials
+  Portal->>Git: Nonsecret desired workspace declaration
+  Git->>Argo: Approved/merged desired revision
+  Argo->>Reconciler: Config + namespace/foundation
+  Reconciler->>Gateway: Reconcile workspace, providers, sandboxes
+  Gateway-->>Portal: Observed generation and actual runtime readiness
+  Portal-->>User: Catalog, stage status, links and errors
+```
+
+Use a repository-scoped credential in a trusted provisioner, never the workspace.
+Keep protected-branch approval policy explicit; an approved automation service may
+merge valid requests if configured, but pipeline status cannot pretend an unmerged
+PR deployed. Git and Vault have no shared transaction: use request IDs/generation,
+conflict detection, bounded compensation and orphan-secret cleanup. Old cleanup
+must not remove a replacement workspace's keys. Never write transient request
+Secrets, bearer tokens or secret values into Git or pipeline logs.
+
+Define authoritative intent for managed sandboxes: CLI changes to Git-managed
+configuration are either refused or reconciled, with a clear message. Interactive
+agent tasks remain ephemeral user activity, not a Git commit per command. If user-
+created unmanaged sandboxes remain supported, define their quotas, lifecycle and
+status separately instead of silently pretending Git owns them.
+
+Deletion is desired state: commit suspend/retain/tombstone, observe safe shutdown
+and data retention, then remove the declaration or perform explicit purge. Prevent
+Argo from resurrecting resources while cleanup runs. Avoid a finalizer deadlock
+where namespace deletion removes the controller needed to finish retention.
+
+**Gate D2:** a fresh workspace and its entire lifecycle follow a traceable Git
+revision; repeated reconciliation is stable; conflict, crash and cleanup tests pass;
+existing VM/portal registry flows remain compatible.
+
+### E. Optional inference integration — not on the container/Kata critical path
+
+Use the existing approved provider for baseline and parity qualification. Neither
+new mode requires CoCo, Trustee, encrypted models or a GPU on the SAW cluster.
+
+For the selected CoCo branch later, use its RHOAI `LLMInferenceService`, JWE archive
+and OSC storage-helper architecture. Do not reintroduce the earlier custom OCI
+volume-populator demo. Its current HTTPS `/api/chat` endpoint is not an OpenAI
+provider: it restricts roles/fields and disables streaming. Add a measured,
+authenticated TLS OpenAI-compatible endpoint inside the Qwen guest, preserving
+loopback vLLM and existing chat. Validate streaming, tools, timeouts, model/context
+limits and credential-proxy CA support. Regenerate exact Trustee bindings for
+changed measured inputs; preserve mandatory CPU+GPU checks.
+
+Qwen3-0.6B/2048 context proves transport, not realistic coding-agent parity.
+Confidential SAW is a different future project: CPU-only supervisor bindings,
+attested bootstrap identity, secret delivery and storage protection cannot reuse
+Qwen's GPU binding or ordinary Kubernetes Secret assumptions.
+
+## 8. Tests, execution harness and evidence
+
+### Existing local commands
+
+Use Linux acceptance tooling from [testing.md](testing.md), including the stated
+GNU tools, Node, Go, Helm and Python versions. A partial macOS run or fake GNU
+commands do not substitute for Linux acceptance.
+
+```bash
+uv sync --locked
+make catalog-check
+make lint
+make test
+make test-credential-proxy
+make test-dependencies
+```
+
+`test-dependencies` checks external artifacts and needs its documented clients and
+network access. Record skips/reasons; missing Rust dependencies are not a Rust pass.
+For the OpenShell derivative, run its actual documented formatting/lint/unit and
+driver integration jobs at the selected source revision; define exact commands in
+that PR after inspecting its build instructions. Do not invent a successful build.
+
+### Existing live harness limitations
+
+`make test-deployment` combines quickstart and Pattern lifecycle and is destructive.
+The default Pattern E2E workflow builds a CI profile, installs, tests and uninstalls
+twice. It can also temporarily change the default StorageClass under its lock.
+Neither is the retained-baseline extension test.
+
+Existing split targets `test-pattern-e2e-install`, `test-pattern-e2e-live` and
+`test-pattern-e2e-cleanup` have their own state/identity requirements; they cannot
+be pointed at an arbitrary existing installation as generic checks.
+
+### Proposed qualification harness
+
+Implement a new source-controlled, non-destructive baseline/extension runner by
+reusing existing test primitives. Suggested CLI interface, **not implemented**:
+
+```text
+scripts/ci/backend_qualification.py baseline --site <public-yaml> --run <id>
+scripts/ci/backend_qualification.py qualify --mode container --site <public-yaml> --run <id>
+scripts/ci/backend_qualification.py qualify --mode kata --site <public-yaml> --run <id>
+scripts/ci/backend_qualification.py regression --baseline <receipt> --run <id>
+scripts/ci/backend_qualification.py report --run <id>
+```
+
+The harness must compare API URL/cluster UID, acquire an exclusive lease/lock,
+validate source and image pins, verify branch/revision stability, protect recorded
+baseline identities and use exact namespaces/generations for cleanup. No implicit
+cluster teardown, default-storage changes, credential discovery or replay that
+silently wipes failed state. Readiness waits have deadlines and report exact gates.
+
+The first historical baseline may be observed using existing commands, but full
+parity/final clean replay must use automated tests. Browser acceptance needs a
+repeatable owner/non-owner login and UI interaction test, not only HTTP 200.
+
+### Acceptance matrix
+
+| Area | VM baseline | Container | Kata |
+| --- | --- | --- | --- |
+| Published images / locked desired revision | Required | Required | Required |
+| Actual runtime boundary | KubeVirt VM | Separate ordinary Pods | Separate supervisor/workload Kata VMs |
+| Install/apply or equivalent BOM convergence | Required | Required | Required |
+| Owner CLI exec/log/file/forward | Required | Same contract | Same contract |
+| Owner browser/UI + non-owner denial | Required | Required | Required |
+| RHDH create/update/status/delete | Existing registry flow | Registry + Git mode | Registry + Git mode |
+| Real inference + applicable streaming/tools | Required | Required | Required |
+| Harness/signature semantics + tool approval/denial | Required for enabled profiles | Same | Same |
+| Workspace/audit persistence and retention | Required | Required | Required |
+| Credential proxy isolation/rotation | Required | Required | Required |
+| Denied direct workload egress and cross-user access | Required | Required | Required |
+| Supervisor egress allowlist enforcement | VM boundary record | Explicit live negative checks | Same |
+| Guest Landlock/seccomp | Existing baseline | Host/runtime checks | Guest checks mandatory |
+| Gateway and individual compute restart | Record baseline | Required | Required |
+| Idempotent sync and interrupted reconciliation | Required | Required | Required |
+| No ad hoc repair in final replay | Required | Required | Required |
+
+Also test negative bootstrap/cert identities, invalid RuntimeClass approvals,
+missing/foreign PVCs, no Secret material in outputs, unavailable governance/proxy,
+resource exhaustion, failed image pull, API/CRD upgrade, provider failure, CA/token
+rotation, scoped teardown and restore from approved backups. Preserve baseline
+canary/data and verify functional health after every candidate upgrade. Requiring
+zero Pod restarts forever is not a substitute for testing healthy recovery.
+
+### Evidence contract
+
+Each run gets immutable public result metadata and private credential state kept
+separately. Record:
+
+- Source/upstream/site SHAs, branch head, artifact digests and build provenance.
+- Cluster UID/API, platform versions, CRD versions, runtime and actual guest features.
+- Desired/observed Argo/BOM revisions, object UIDs and ownership boundaries.
+- Expected/observed test result, request status, bounded sanitized log excerpts.
+- Startup, shutdown, restart and retained-PVC/canary identities.
+- Every failure, approved scripted intervention and cleanup scope.
+- Whether the run was baseline, recovery, upgrade or clean replay.
+
+Sanitize prompts and user content; never collect whole Secret objects, process
+environments, token directories, private-key mounts or raw credential-bearing logs.
+Do not label Ready as full E2E: qualification requires all mandatory tests.
+
+## 9. Pitfall register and required resolutions
+
+| Risk | Required resolution before the relevant gate |
+| --- | --- |
+| Existing fork/shared operator conflicts | Inventory ownership; source-configured reuse or dedicated baseline cluster |
+| Dynamic chart versions, channels and mutable image tags | Record resolutions; publish a tested release lock and avoid uncontrolled upgrades during acceptance |
+| Wrong OpenShell version/docs | Pin coherent midstream artifacts; re-read source when upgrading |
+| Supervisor RuntimeClass missing | Reviewed driver extension, immutable image, runtime proof |
+| Supervisor allow-all policy defeats restrictions | Remove/configure rule in driver; inspect effective union; actual negative tests |
+| Workload policy accidentally widened by SAW | Role-specific selectors and no-new-egress tests |
+| Kata guest lacks required kernel behavior | Fail closed; qualify supported guest; no privilege or policy bypass |
+| Helm randomness rotates encryption/identity keys | ExistingSecret/retained declarative bootstrap; restart and sync tests |
+| VM-only installer assumptions | Explicit backend adapters, shared behavioral tests |
+| Sandbox deletion garbage-collects user data | Designed retention and explicit purge; deletion/finalizer recovery tests |
+| API is Ready but profile failed | Surface applied revision and workload/UI/inference gates |
+| RHDH registry misrepresented as full GitOps | Separate compatibility and Git-backed modes, traced Git revisions |
+| Portal exposes arbitrary infrastructure choices | Server-side capability allowlist and exact owner/resource checks |
+| Gateway Pod-create can mount same-namespace provider Secrets | Separate trusted credential namespace; no cross-namespace write; malicious mount tests |
+| Credentials leak in build/status/browser pipelines | Reference-only config, isolated private state, automated secret-output checks |
+| Current E2E deletes the baseline | Separate retained-baseline runner; explicit cleanup scope |
+| Functional parity claimed from one notebook | Enumerated profile/feature matrix; failures cannot be silently skipped |
+| Plain Kata called confidential | Separate mode/claims; confidential rejects until independently qualified |
+
+## 10. PR sequence, completion and handover
+
+Each PR has source changes, docs, tests and exact qualification evidence. Keep the
+VM baseline branch/revision independently recoverable. Proposed sequence:
+
+1. **Plan/site lock and VM baseline:** this document, declared site inputs, upstream
+   install receipt, failure records and a retained baseline acceptance runner.
+2. **Mode contract/chart split:** default VM unchanged, enum validation, dependency
+   ownership and mode-specific rendering; confidential unsupported.
+3. **OpenShell driver patch:** independent supervisor placement and controlled
+   supervisor egress; upstream submission, tests and published derivative digest.
+4. **Kubernetes foundation:** Agent Sandbox lock, gateway/persistent identity,
+   scoped RBAC, policies and source-driven minimal runtime proof.
+5. **Shared BOM adapter:** profile/provider lifecycle, approved mounts, harness,
+   tool gate, audit, retention, UI relays and status.
+6. **Container parity:** complete test matrix, failure recovery and docs.
+7. **Kata qualification:** guest feature proof, separate VMs and same test matrix.
+8. **RHDH/CLI and Git-backed lifecycle:** selector, validation, revision/status,
+   Git request pipeline, safe delete/retain/purge, compatibility mode tests.
+9. **Clean install/upgrade qualification:** final release lock, ordinary official
+   VM installation first, additive container/Kata activation, repeated full E2E.
+
+Final replay starts with a newly prepared cluster and declared inputs. Run the
+normal SAW Pattern install, establish the VM reference, then add source-declared
+container and Kata users. No debugging patch, untracked file or manually supplied
+runtime object may be necessary. Re-running automation must converge safely; a
+recovery test may resume state, but a first-pass clean claim must say exactly what
+happened. On failure fix source and run a new clean attempt while retaining evidence.
+
+Release is complete only when:
+
+- Existing VM functionality and the two new backend matrices pass.
+- RHDH and Git-declared users can choose the permitted modes through the same
+  validated schema; confidentiality is clearly not implemented.
+- Documented bootstrap, platform inputs, secret inputs and dependency ownership
+  are sufficient for another operator; no lab-specific hidden state is required.
+- All artifacts have provenance and immutable references; runtime health and
+  effective policy are verified, not inferred from YAML.
+- Upgrade, stop/restart, retained storage, explicit purge and rollback limits are
+  documented/tested without threatening the reference deployment.
+- All implemented changes are committed/published under the intended `pmatouse`
+  fork/branches; no live-only work is called part of the implementation.
+
+### Resuming this plan when the cluster is ready
+
+Start at A1, record the chosen source/cluster/site identities, and complete A10.
+Do not skip directly to a Kubernetes sandbox. If the upstream SAW or OpenShell
+version changed, update the source lock and revalidate the listed implementation
+assumptions first. Then execute B1–B6, C1–C2 and D1–D2 with their gates; E remains
+optional. Leave a per-gate pass/fail/not-run receipt and the exact next action for
+another model, harness or human operator.

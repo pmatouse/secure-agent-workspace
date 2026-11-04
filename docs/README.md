@@ -17,6 +17,7 @@ quickstart, and the supported-provider and secrets tables.
 
 | Doc | What it covers |
 |---|---|
+| [Container and Kata implementation plan](container-kata-implementation-plan.md) | Planned extension: exact VM baseline installation, additive backends, GitOps/RHDH, security gaps and qualification gates |
 | [Architecture alignment](architecture-alignment.md) | How this implementation maps to NVIDIA's Secure Agent Workspace reference design — implemented, partial, and gaps |
 | [Credential isolation](credential-isolation.md) | How provider keys and admin mTLS keys stay out of VM root: namespace credential proxy, `-meta` Secrets, per-apply admin CA, saw-relay, migration and rotation |
 | [BOM architecture](bom-architecture.md) | Visual overview of how a SAW is assembled from its Bill of Materials |
