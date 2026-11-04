@@ -867,6 +867,9 @@ defaults:
         gatewaySize: 5Gi
         workspaceSize: 20Gi
 users:
+  - name: sawvm
+    values:
+      deployment: {mode: vm}
   - name: sawcontainer
     values:
       deployment: {mode: container}
@@ -889,6 +892,34 @@ Do not overload existing `containerRuntime`, which describes the in-VM Podman
 runtime. RuntimeClass, ServiceAccount, PVC approval labels, security contexts,
 annotations and network topology are admin inputs, not arbitrary RHDH form fields.
 Mode on an existing workspace is immutable until a migration workflow is designed.
+
+**Mixed deployment is required:** VM, container and Kata workspaces may coexist
+on the same cluster and in the same user inventory. The default is only a
+fallback; it must not become a cluster-wide backend switch. RHDH must select and
+display the mode for each workspace. Qualification must exercise a container
+workspace while the retained VM workspace still passes inference, ownership and
+persistence checks, then repeat with Kata. This does not mix runtimes among
+sandboxes inside one workspace or provide in-place migration between modes.
+
+### Future enhancement: multiple workspaces for one owner
+
+**Deferred; not a gate for this implementation.** Keep SAW's current one-workspace-
+per-user mapping. Mixed VM/container/Kata acceptance uses different users for now.
+A future version should allow one authenticated owner to have, for example,
+`petr-vm` and `petr-container` simultaneously. Separate the workspace identifier
+from the owner identity; mode, gateway, namespace, storage and lifecycle belong to
+the workspace, while authorization uses the verified issuer/subject.
+
+This requires SAW integration changes, not an OpenShell or Kata fork: normalize
+legacy `users[].name` inputs without renaming existing resources; separate owner
+lookup from namespace naming in `saw-users` and the owner resolver; update RHDH
+forms/catalog, portal registry, ApplicationSet, Vault paths and CLI selection to
+address a workspace rather than assume its name is the username. Retain immutable
+owner bindings and namespace/instance identity checks. Deleting, rotating keys or
+updating one workspace must not affect another workspace of the same owner.
+Future acceptance must prove concurrent owner access to both backends,
+cross-user denial and independent storage/lifecycle. No API/schema change for
+this deferred feature is introduced by the current plan.
 
 ## 7. Work packages and exit gates
 
