@@ -112,8 +112,8 @@ See [Keycloak resource requirements](https://www.keycloak.org/operator/advanced-
 Recovery results so far: standard `make load-secrets` exited zero, Vault's
 ClusterSecretStore reports Ready, RHDH ExternalSecrets report SecretSynced,
 both tuned `virt-operator` replicas became Ready, and realm import reports
-Done/Job Complete. Full HyperConverged, identity server and portal readiness
-remain required before the two VM acceptance users are deployed.
+Done/Job Complete. Full platform readiness remains required before the two VM
+acceptance users are deployed.
 
 The first Keycloak server was already unhealthy when its resource request was
 changed. Its `OrderedReady` StatefulSet waited on the old Pod before replacing
@@ -127,8 +127,12 @@ and the final CPU request from the beginning.
 The zero-replica stage was observed in both the Keycloak CR and StatefulSet,
 and the old server Pod disappeared before restoring one replica. HyperConverged
 also reached Available=True, Progressing=False, Degraded=False and
-Upgradeable=True. Identity and portal acceptance still require the new Pod
-and RHDH to become Ready; no workload inference is claimed by this receipt.
+Upgradeable=True. The replacement Keycloak Pod became Ready without restarting;
+the Keycloak CR, owner resolver and redirect registrar subsequently became Ready.
+RHDH's three init containers completed successfully. Its standard OIDC-client
+Job also completed, creating the client, catalog-reader roles and default user
+group. RHDH subsequently became Ready. No workload inference is claimed by this
+platform receipt.
 
 The private values file must supply `inference.provider=openai`, the private API-key file, model `gpt-4.1-mini`, generated SSH-key file references and the standard generated RHDH OIDC/session fields. Omit the unused web-search entry. Use `VALUES_SECRET` to select that file explicitly; do not overwrite unrelated home-directory secrets.
 
@@ -140,6 +144,13 @@ The private values file must supply `inference.provider=openai`, the private API
 - Golden image mirror completed and internal digest matches the selected source index.
 - Official OpenAI API model listing authenticated successfully; model listed. This is not yet an inference test from SAW.
 - `make catalog`, `make catalog-check`, BOM render and a canary saw-users render passed.
-- Full platform installation and VM/RHDH acceptance remain pending; no container/Kata qualification is claimed.
+- Platform bootstrap gate passed: the documented `pattern.sh make argo-healthcheck`
+  exited zero with all ten Applications Synced/Healthy; Keycloak, both identity
+  helpers and both RHDH containers are Ready; its OIDC-client Job is Complete.
+- The next declared inventory contains `sawvmowner` and `sawvmother`, each using
+  `data-science` with NetworkPolicy enabled. It exactly matches the successful
+  bastion preflight input; Helm renders six child Applications. VM guest startup,
+  inference, owner isolation, persistence and RHDH self-service acceptance remain
+  pending. No container/Kata qualification is claimed.
 
 Operator channels and external chart ranges remain upstream defaults. This freezes workload image selections, not every future dependency resolution. Record the installed CSV/chart versions when the platform converges before claiming deterministic replay.

@@ -1,5 +1,15 @@
 # glmhg VM baseline. Add accounts only after platform health checks.
-users: []
+users:
+  - name: sawvmowner
+    profiles: [data-science]
+    values:
+      networkPolicy:
+        enabled: true
+  - name: sawvmother
+    profiles: [data-science]
+    values:
+      networkPolicy:
+        enabled: true
 defaults:
   openshellSaw:
     containerRuntime: podman
