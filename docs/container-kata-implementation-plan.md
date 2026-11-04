@@ -121,9 +121,18 @@ already correct. Site commit `9a15f37` uses the supported sandbox inputs
 `inference.protocol: openai` and `inference.baseUrl: https://api.openai.com/v1`
 to register the requested model explicitly. This is site configuration, not an
 OpenClaw or OpenShell code change; generic defaults stay unchanged here. The
-focused explicit-endpoint onboarding regression test passes. Live recovery is
-pending Argo sync and the documented VM restart for disk-backed profile inputs.
-Tool-gate setup and all acceptance checks remain required; none are bypassed.
+official-provider regression suite passes all 42 cases. Argo adopted the site
+inputs before the documented restart; the first VM retained its root PVC and
+completed install/apply at 19:13:21/19:30:44 UTC. Both sandboxes passed real
+provider inference, undeclared-egress denial and gateway-backed OpenClaw `read`
+with effective model `gpt-4.1-mini-2025-04-14`. Second-user access was denied
+with gRPC status 7. Notebook SSO/chat and tool-denial audit passed, including
+verification that the forbidden file was not created. The CUDA-profile UI also
+returned a completion but displayed failed-attempt messages; its agent receipt
+reports rerouting. Clean single-attempt UI behavior remains to be investigated.
+Full credential-file scanning, restart persistence, second-VM recovery and RHDH
+self-service acceptance remain pending. No runtime image, probe or enforcement
+setting was changed. Stock signing remains warn/unsigned, not enforced.
 
 ## 1. Objective and execution rules
 
