@@ -115,6 +115,15 @@ both tuned `virt-operator` replicas became Ready, and realm import reports
 Done/Job Complete. Full HyperConverged, identity server and portal readiness
 remain required before the two VM acceptance users are deployed.
 
+The first Keycloak server was already unhealthy when its resource request was
+changed. Its `OrderedReady` StatefulSet waited on the old Pod before replacing
+it, leaving the new request only in the template. Recovery uses the existing
+`keycloak.instances` chart input in two GitOps stages: zero, wait for the
+operator-managed server Pod to disappear, then one. PostgreSQL/PVC and imported
+realm remain intact; no direct Pod deletion or StatefulSet patch is used.
+This is recovery history only. A fresh installation starts with one replica
+and the final CPU request from the beginning.
+
 The private values file must supply `inference.provider=openai`, the private API-key file, model `gpt-4.1-mini`, generated SSH-key file references and the standard generated RHDH OIDC/session fields. Omit the unused web-search entry. Use `VALUES_SECRET` to select that file explicitly; do not overwrite unrelated home-directory secrets.
 
 ## Verification receipt — 2026-11-04
