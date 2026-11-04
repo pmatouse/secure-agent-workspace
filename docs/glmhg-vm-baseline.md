@@ -78,6 +78,27 @@ Wait for ESO, Vault auth and secret loading before VM users. If the original
 installer times out, use the documented `./pattern.sh make load-secrets` after
 those dependencies are ready; do not create ad hoc Vault policies or tokens.
 
+### Nested-cluster CPU contention
+
+After ESO recovery, both `virt-operator` replicas repeatedly failed their stock
+liveness probes before serving metrics. A read-only `/proc/stat` sample on
+control-plane-1 measured approximately 73% CPU steal; its load average was 96.
+This indicates outer-hypervisor CPU contention, not memory exhaustion in this
+cluster. It is a likely contributor to slow startup, not proof of the sole cause.
+
+The site file uses supported Subscription `config.resources` to request
+`250m` CPU and `512Mi` memory per CNV operator container, without limits. The
+largest original bundle requests were `200m` CPU and `450Mi` memory. This raises
+CPU scheduling weight without reducing any existing request. It applies to all
+eleven operator deployments in that subscription, not just `virt-operator`;
+OLM owns their rollout. No health probes or operator binaries are changed.
+See [OLM Subscription resource configuration](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/subscription-config.md#resources).
+
+This tuning cannot guarantee outer-host CPU capacity. Require real operator,
+HyperConverged and VM readiness; an Argo Application reporting Healthy is not
+sufficient. If contention persists, the RHDP infrastructure needs more available
+CPU or relocation before this environment can qualify the baseline.
+
 The private values file must supply `inference.provider=openai`, the private API-key file, model `gpt-4.1-mini`, generated SSH-key file references and the standard generated RHDH OIDC/session fields. Omit the unused web-search entry. Use `VALUES_SECRET` to select that file explicitly; do not overwrite unrelated home-directory secrets.
 
 ## Verification receipt — 2026-11-04

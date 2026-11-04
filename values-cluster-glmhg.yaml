@@ -1,6 +1,17 @@
 # Nested lab storage makes initial operator image pulls slow. Keep this
 # recovery policy declarative; OLM owns failed unpack Job cleanup/retry.
 clusterGroup:
+  subscriptions:
+    openshift-virtualization:
+      # OLM applies resources to every operator container in this bundle.
+      # Preserve at least the largest original requests (200m / 450Mi).
+      # This improves CPU scheduling weight inside the nested cluster;
+      # it cannot reserve CPU on the outer RHDP hypervisor.
+      config:
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
   namespaces:
     external-secrets-operator:
       # clustergroup 0.9.58's map-form namespace helper does not forward
