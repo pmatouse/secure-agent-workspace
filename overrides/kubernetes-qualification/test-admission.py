@@ -13,4 +13,22 @@ for role in (None,'workload','supervisor'):
  else:
   assert r.returncode==0, 'unrelated restricted Pod unexpectedly rejected'
  results.append({'role':role or 'ordinary','result':'rejected-runtime-identity' if role else 'admitted','dryRun':True})
-print(json.dumps({'scope':'runtime identity admission only; no CNI or positive runtime Pod proof','results':results}))
+# Reserve the labels trusted by proxy and governance ingress. Even correct labels
+# and an owner reference do not authorize an arbitrary creator.
+gateway=copy.deepcopy(pod)
+gateway['metadata']['labels']={'app.kubernetes.io/instance':ns,'openshell.pattern/role':'gateway'}
+def dryrun(obj,identity=()):
+ return subprocess.run(['oc',*identity,'create','--dry-run=server','-f','-','-ojson'],input=json.dumps(obj),text=True,capture_output=True)
+r=dryrun(gateway)
+assert r.returncode and policy in r.stderr and 'Gateway identity requires' in r.stderr
+results.append({'role':'forged-gateway-label','result':'rejected-gateway-identity','dryRun':True})
+gateway['spec']['serviceAccountName']=ns+'-gateway'
+uid=subprocess.check_output(['oc','get','statefulset',ns+'-gateway','-n',ns,'-o','jsonpath={.metadata.uid}'],text=True)
+gateway['metadata']['ownerReferences']=[{'apiVersion':'apps/v1','kind':'StatefulSet','name':ns+'-gateway','uid':uid,'controller':True}]
+r=dryrun(gateway)
+assert r.returncode and policy in r.stderr and 'Only the Kubernetes StatefulSet controller' in r.stderr
+results.append({'role':'forged-gateway-owner','result':'rejected-creator','dryRun':True})
+r=dryrun(gateway,('--as=system:serviceaccount:kube-system:statefulset-controller','--as-group=system:serviceaccounts','--as-group=system:serviceaccounts:kube-system','--as-group=system:authenticated'))
+assert r.returncode==0, 'legitimate StatefulSet controller dry-run unexpectedly rejected'
+results.append({'role':'gateway-statefulset-controller','result':'admitted','dryRun':True})
+print(json.dumps({'scope':'runtime/gateway identity admission only; no CNI or actual sandbox Pod proof','results':results}))

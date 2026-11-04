@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/pmatouse/secure-agent-workspace.git
-    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    targetRevision: 62f97067497e408051d57fc12c3d492026c097fe
     path: charts/saw-runtime-policies
     helm:
       releaseName: saw-k8s-runtime-policies
