@@ -130,9 +130,18 @@ with gRPC status 7. Notebook SSO/chat and tool-denial audit passed, including
 verification that the forbidden file was not created. The CUDA-profile UI also
 returned a completion but displayed failed-attempt messages; its agent receipt
 reports rerouting. Clean single-attempt UI behavior remains to be investigated.
-Full credential-file scanning, restart persistence, second-VM recovery and RHDH
-self-service acceptance remain pending. No runtime image, probe or enforcement
+Full credential-file scanning passed: no upstream provider key was found in the
+VM, no full provider Secret was attached, and CA/admin cleanup passed. Restart
+persistence, second-VM recovery and RHDH self-service acceptance remain pending. No runtime image, probe or enforcement
 setting was changed. Stock signing remains warn/unsigned, not enforced.
+
+RHDH's real sign-in test exposed a cached startup OIDC discovery failure: the
+provider retained an initial HTTP 503 although live discovery from the backend
+now returned 200. The shared chart adds a public-metadata/TLS startup check before
+RHDH initializes that stock provider. No RHDH image or authentication policy is
+changed. Tests pass (55 on this branch); site `0c318c5` is Argo Synced and its
+operator-owned replacement Pod is initializing. Portal lifecycle testing remains
+pending; this recovery is not clean-replay proof.
 
 ## 1. Objective and execution rules
 
