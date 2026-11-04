@@ -19,7 +19,8 @@ history, including failed attempts):
 | Native policies | Installed by Argo; no CEL warnings, OVN SetupSucceeded. Six server dry runs: ordinary Pod and legitimate StatefulSet controller admitted; forged workload, supervisor, gateway label and gateway owner rejected. Packet tests still required |
 | SAW policy image | Full build/push passed: `sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97`; existing VM service unchanged; isolated service 1/1 Available; protocol/policy qualification pending |
 | Trusted proxy | Existing SAW binary deployed separately with ESO; real marker-only OpenAI chat returned `SAW_PROXY_OK`; unapproved host and unknown marker denied; repeat sync preserved CA fingerprint and both CA resource UIDs. Port-forward test does not qualify client-side CNI |
-| Stock Kubernetes gateway | 1/1 Ready under `restricted-v2`, driver connected, eight governance bindings initialized; ordinary owner passed stock CLI `workspace list` through verified TLS/OIDC. In-cluster issuer uses the internal ingress VIP; no supervisor/workload or agent qualification yet |
+| Stock Kubernetes gateway | 1/1 Ready under `restricted-v2`, driver connected, eight governance bindings initialized; ordinary owner passed stock CLI `workspace list` through verified TLS/OIDC. In-cluster issuer uses the internal ingress VIP; generic lifecycle passed; OpenClaw agent qualification remains open |
+| Generic container lifecycle | Git generations 7/8/9 reached GenericReady, Stopped and GenericReady. Both restricted-v2 Pods were replaced. The ordinary owner verified a fresh nonce on the same PVC; direct API egress and cross-owner access were denied. [Receipt](https://github.com/pmatouse/secure-agent-workspace/blob/23b8a94/docs/evidence/glmhg-stock-container-lifecycle.json) |
 | Kata prerequisite | Both worker nodes have KVM/CPU virtualization, but boot in BIOS. OSC 1.13 documents UEFI. Stock operator installation is separate; no KataConfig, forced eligibility or reboot requested |
 
 The trusted credential proxy is now wired and transport-tested. The stock gateway now passes
@@ -29,8 +30,8 @@ An ordinary OIDC owner read it and the second user received a membership denial.
 Sandbox creation additionally needs matching compiler, governance and stock
 driver mount contracts. The pinned driver reserves both the volume name
 `workspace` and the mount root `/sandbox`. The external PVC uses
-`saw-workspace` at `/sandbox/workspace`. Test workload lifecycle, packet
-behavior, persistent data and agent/UI/RHDH parity separately. The qualification governance endpoint uses network-
+`saw-workspace` at `/sandbox/workspace`. The generic lifecycle and direct API denial passed on the live cluster. Container
+OpenClaw, audit, tool gates and RHDH parity remain open. The qualification governance endpoint uses network-
 isolated HTTP, so transport-level caller authentication is still a production gap. The dependency probe bypasses
 OpenShell intentionally to test Agent Sandbox alone; it must never be reported
 as a working SAW container workspace. The documented Kata path needs a

@@ -1,6 +1,7 @@
 # Stock OpenShell Kubernetes reconciliation foundation
 
-The controller runs in a dedicated OpenShift qualification namespace. The VM
+The controller runs in a dedicated OpenShift qualification namespace. The
+[generic container lifecycle](https://github.com/pmatouse/secure-agent-workspace/blob/23b8a94/docs/evidence/glmhg-stock-container-lifecycle.json) passed owner exec, direct API denial and a persistent file check across fresh Pods. The VM
 baseline has passed OpenClaw inference. Container agent and Kata parity remain
 separate acceptance gates. The shared core preserves VM profile installation,
 application order and the signed-bundle format.
@@ -311,7 +312,8 @@ The original VM baseline must still pass before live candidate qualification.
 ## Test a retained generic toolbox
 
 Use the ordinary owner's OIDC gateway login with verified TLS. Supply the
-cluster's API service IP and a Python 3 toolbox. Start only after
+cluster's API service IP and the UBI Python 3.11 toolbox. The probe uses
+`/usr/bin/python3.11 -I -S` within the governed read-only system paths. Start only after
 `GenericReady`. Record the sandbox ID, workload and supervisor Pod UIDs, PVC
 UID and PV name. The marker is unique per run.
 

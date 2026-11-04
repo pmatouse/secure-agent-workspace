@@ -11,7 +11,7 @@ exec_args=(--name "$sandbox" --no-tty --no-login-shell --timeout 15 --)
 case "$action" in
   write|read)
     [[ "$value" =~ ^[a-f0-9]{32}$ ]] || { echo 'use a fresh 32-character hexadecimal test nonce' >&2; exit 2; }
-    openshell sandbox exec "${scope[@]}" "${exec_args[@]}" python3 -c '
+    openshell sandbox exec "${scope[@]}" "${exec_args[@]}" /usr/bin/python3.11 -I -S -c '
 from pathlib import Path
 import sys
 action, nonce = sys.argv[1:]
@@ -27,7 +27,7 @@ print("PVC_" + action.upper() + "_OK")
 ' "$action" "$value"
     ;;
   deny-api)
-    openshell sandbox exec "${scope[@]}" "${exec_args[@]}" python3 -c '
+    openshell sandbox exec "${scope[@]}" "${exec_args[@]}" /usr/bin/python3.11 -I -S -c '
 import ipaddress, socket, sys
 host = str(ipaddress.ip_address(sys.argv[1]))
 try:
