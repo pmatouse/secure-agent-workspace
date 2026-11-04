@@ -115,11 +115,19 @@ class KubernetesResourceVerifier:
             raise ContractError("Kubernetes resource replaced or deleting")
         return metadata
 
-    def __call__(self, plan):
+    def verify_shutdown(self, plan):
+        """Shutdown checks namespace identity, not renewed attachment permission.
+
+        The reconciler still checks authenticated gateway identity and retained
+        workspace/sandbox IDs. This method grants no create/start capability.
+        """
         namespace = self.read("namespace", plan["namespace"])
         meta = self._identity(namespace, plan["namespaceUID"])
         if meta.get("labels", {}).get(OWNER) != plan["ownerID"]:
             raise ContractError("runtime namespace belongs to another installation")
+
+    def __call__(self, plan):
+        self.verify_shutdown(plan)
         self.verify_boundary(plan)
         for reference in plan["claims"]:
             obj = self.read("persistentvolumeclaim", reference["name"], plan["namespace"])

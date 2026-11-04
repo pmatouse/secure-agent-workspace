@@ -284,9 +284,14 @@ profile migrations, retained-volume initialization, UI/relay integration, portal
 status wiring, production controller assembly/build/deployment manifests, and live
 positive/negative tests. The ConfigMap watcher and status publisher themselves are
 implemented and tested against simulated Kubernetes/gateway APIs.
-The current verifier also runs for `Stopped` intent: revoked attachment approval
-or a failed boundary check prevents the stop RPC. Before live lifecycle delivery,
-add an identity-checked recovery/shutdown path that can stop already owned
-resources without requiring renewed attachment authorization. Do not bypass
-namespace/gateway/object ownership checks to achieve that.
+`Stopped` now uses a separate shutdown path: namespace ownership/UID, authenticated
+gateway version/driver, and previously retained workspace/sandbox IDs must match.
+It can stop known resources after attachment approval is revoked or a boundary
+prerequisite fails, without creating memberships, providers or workspaces. It
+includes retained sandboxes removed from current desired membership; unrecorded
+or replaced objects are rejected. New, empty stopped intent creates nothing.
+`KubernetesResourceVerifier.verify_shutdown` checks namespace identity only; all
+attachment/boundary checks remain mandatory for running/start. A custom verifier
+defaults to its full check unless it explicitly supplies `verify_shutdown`.
+Shutdown does not delete storage or bypass gateway authentication.
 The original VM baseline must still pass before live candidate qualification.

@@ -331,8 +331,75 @@ def test_tampered_plan_and_owner_changes_rejected(runtime):
 def test_stopped_new_intent_does_not_briefly_start_workload(runtime):
     plan, gateway, reconciler, _ = runtime
     for _ in range(3):
-        assert reconciler.reconcile(plan, generation=1, desired_state="Stopped")["phase"] == "Pending"
+        assert reconciler.reconcile(plan, generation=1, desired_state="Stopped")["phase"] == "Stopped"
     assert not gateway.sandboxes
+    assert not any(method.startswith(("Create", "Add", "Start", "Stop")) for method, _ in gateway.calls)
+
+
+def test_shutdown_after_attachment_revocation_only_stops_owned_objects(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    def revoked(_):
+        raise ContractError("attachment revoked")
+    checked = []
+    reconciler.verify_resources = revoked
+    reconciler.verify_shutdown = lambda p: checked.append(p["namespaceUID"])
+    gateway.calls.clear()
+    reconciler.reconcile(plan, generation=2, desired_state="Stopped")
+    assert checked == [plan["namespaceUID"]]
+    assert {m for m, _ in gateway.calls} <= {"GetGatewayInfo", "GetWorkspace", "GetSandbox", "StopSandbox"}
+    assert any(m == "StopSandbox" for m, _ in gateway.calls)
+    with pytest.raises(ContractError, match="revoked"):
+        reconciler.reconcile(plan, generation=3, desired_state="Running")
+
+
+@pytest.mark.parametrize("object_type", ["workspace", "sandbox"])
+def test_shutdown_rejects_same_name_replacement(runtime, object_type):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    if object_type == "workspace":
+        gateway.workspaces["default"]["metadata"]["id"] = "foreign-id"
+    else:
+        gateway.sandboxes[("default", "toolbox")]["metadata"]["id"] = "foreign-id"
+    gateway.calls.clear()
+    with pytest.raises(ContractError, match="replaced"):
+        reconciler.reconcile(plan, generation=2, desired_state="Stopped")
+    assert not any(m == "StopSandbox" for m, _ in gateway.calls)
+
+
+def test_shutdown_without_recorded_ids_does_not_adopt_existing_sandbox(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    state = reconciler.store.load()
+    state["objectIDs"] = {}
+    reconciler.store.save(state)
+    gateway.calls.clear()
+    with pytest.raises(ContractError, match="unrecorded"):
+        reconciler.reconcile(plan, generation=2, desired_state="Stopped")
+    assert not any(m == "StopSandbox" for m, _ in gateway.calls)
+
+
+def test_shutdown_also_covers_retained_objects_removed_from_desired_membership(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    removed = copy.deepcopy(plan)
+    removed["workspaces"][0]["sandboxes"] = []
+    removed["revision"] = digest({k: v for k, v in removed.items() if k != "revision"})
+    gateway.calls.clear()
+    reconciler.reconcile(removed, generation=2, desired_state="Stopped")
+    assert any(m == "StopSandbox" and r["name"] == "toolbox" for m, r in gateway.calls)
+
+
+def test_shutdown_does_not_skip_its_identity_verifier(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    def replaced(_):
+        raise ContractError("namespace replaced")
+    reconciler.verify_shutdown = replaced
+    gateway.calls.clear()
+    with pytest.raises(ContractError, match="namespace replaced"):
+        reconciler.reconcile(plan, generation=2, desired_state="Stopped")
+    assert not gateway.calls
 
 
 def test_kata_uses_stock_workload_setting_and_reports_ordinary_supervisor(source, runtime):
@@ -360,6 +427,16 @@ def resources(runtime):
 def test_pending_wffc_claim_is_admitted_without_deadlock(resources):
     plan, _, _, verifier = resources
     verifier(plan)
+
+
+def test_shutdown_verifier_checks_namespace_without_reattaching_revoked_storage(resources):
+    plan, ns, pvc, verifier = resources
+    pvc["metadata"]["labels"]["openshell.ai/sandbox-attachable"] = "false"
+    verifier.verify_boundary = lambda _: (_ for _ in ()).throw(ContractError("policy unavailable"))
+    verifier.verify_shutdown(plan)
+    ns["metadata"]["uid"] = "foreign"
+    with pytest.raises(ContractError, match="replaced"):
+        verifier.verify_shutdown(plan)
 
 
 @pytest.mark.parametrize("mutation", [

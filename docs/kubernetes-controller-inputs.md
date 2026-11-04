@@ -45,6 +45,12 @@ The frontend never writes either desired ConfigMap. It never deletes ConfigMaps,
 workloads or PVCs. A missing source is a blocked reconciliation, **not** a request
 to stop or remove an existing workload.
 
+Explicit `Stopped` intent uses the identity-checked shutdown path. It can stop
+previously recorded sandboxes even after PVC approval revocation, without creating
+or repairing dependencies. Namespace/gateway/workspace/sandbox identity checks
+remain; same-name replacements and unrecorded objects are refused. The normal
+full prerequisite checks still gate `Running`. This does not add automatic prune.
+
 ## Exact input contract
 
 Construct one `Scope(namespace, profile_name, bindings_name, status_name, owner_id)`.

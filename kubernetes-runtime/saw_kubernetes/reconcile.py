@@ -95,12 +95,16 @@ class Reconciler:
     providing a no-op in a deployment is not qualification.
     """
 
-    def __init__(self, rpc, state_directory, verify_resources):
+    def __init__(self, rpc, state_directory, verify_resources, *, verify_shutdown=None):
         self.rpc = rpc
         self.store = StateStore(state_directory)
         if not callable(verify_resources):
             raise ContractError("resource verifier is required")
         self.verify_resources = verify_resources
+        self.verify_shutdown = (verify_shutdown if verify_shutdown is not None else
+                                getattr(verify_resources, "verify_shutdown", verify_resources))
+        if not callable(self.verify_shutdown):
+            raise ContractError("shutdown identity verifier must be callable")
 
     def _get(self, method, request, field):
         try:
@@ -182,7 +186,7 @@ class Reconciler:
             intent = {"generation": generation, "revision": plan["revision"], "desiredState": desired_state}
             if previous.get("generation", 0) > generation or (previous.get("generation") == generation and previous != intent):
                 raise ContractError("stale generation or conflicting intent at the same generation")
-            self.verify_resources(plan)
+            (self.verify_shutdown if desired_state == "Stopped" else self.verify_resources)(plan)
             state.update(identity=identity, intent=intent)
             self.store.save(state)
             try:
@@ -205,6 +209,8 @@ class Reconciler:
         info = self.rpc.call("GetGatewayInfo", {})
         if info.get("gateway_version") != plan["gatewayVersion"] or [d.get("name") for d in info.get("compute_drivers", [])] != ["kubernetes"]:
             raise ContractError("gateway version or active compute driver differs from approved inputs")
+        if desired_state == "Stopped":
+            return self._stop_pass(plan, state, generation)
         for provider_type in sorted({p["type"] for w in plan["workspaces"] for p in w["providers"]}):
             # Resolve platform scope explicitly (workspace_scope omitted). A
             # workspace administrator's same-name custom profile is not enough.
@@ -224,6 +230,45 @@ class Reconciler:
         self.store.save(state)
         return self._status(plan, generation, "Pending" if pending else
                             ("GenericReady" if desired_state == "Running" else "Stopped"),
+                            pending=pending, retry_after_seconds=5 if pending else 0)
+
+    def _stop_pass(self, plan, state, generation):
+        """Only stop previously observed IDs; never create or repair dependencies.
+
+        Include retained sandboxes removed from current desired membership.
+        Revoked PVC approval or a failed policy prerequisite must not require
+        restarting a workload merely to regain the ability to stop it.
+        """
+        ids = state.get("objectIDs", {})
+        references = {f"sandbox/{ws['name']}/{sb['name']}"
+                      for ws in plan["workspaces"] for sb in ws["sandboxes"]}
+        references.update(key for key in ids if key.startswith("sandbox/"))
+        pending = []
+        for ref in sorted(references):
+            _, workspace, name = ref.split("/")
+            scope = {"workspace_scope": {"workspace": workspace}}
+            sandbox = self._get("GetSandbox", {**scope, "name": name}, "sandbox")
+            if sandbox is None:
+                continue  # No resource is created to satisfy Stopped intent.
+            workspace_obj = self._get("GetWorkspace", {"name": workspace}, "workspace")
+            workspace_ref = f"workspace//{workspace}"
+            if (ref not in ids or workspace_ref not in ids or workspace_obj is None
+                    or sandbox.get("metadata", {}).get("id") != ids[ref]
+                    or workspace_obj.get("metadata", {}).get("id") != ids[workspace_ref]):
+                raise ContractError("shutdown refuses unrecorded or replaced workspace/sandbox identity")
+            self._identity("workspace", "", workspace, workspace_obj, plan, state, default=workspace == "default")
+            self._identity("sandbox", workspace, name, sandbox, plan, state)
+            phase = sandbox.get("status", {}).get("phase")
+            if phase == "SANDBOX_PHASE_STOPPED":
+                continue
+            if phase not in {"SANDBOX_PHASE_READY", "SANDBOX_PHASE_ERROR"}:
+                pending.append(ref)
+                continue
+            self._mutate("StopSandbox", {**scope, "name": name}, plan, generation)
+            pending.append(ref)
+        state["transientAttempts"] = 0
+        self.store.save(state)
+        return self._status(plan, generation, "Pending" if pending else "Stopped",
                             pending=pending, retry_after_seconds=5 if pending else 0)
 
     def _prepare_workspace(self, ws, plan, state, generation, pending):
