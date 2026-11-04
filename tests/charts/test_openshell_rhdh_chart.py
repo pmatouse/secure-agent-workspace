@@ -635,3 +635,36 @@ def test_portal_workspaces_inherit_shared_credential_mode(tmp_path, enabled):
         "credentialProxy": {"enabled": enabled}}}}))
     result = generator_defaults(render("-f", str(path)))
     assert result["defaults"]["openshellSaw"]["credentialProxy"]["enabled"] == enabled
+
+
+@pytest.mark.ci_external
+@pytest.mark.parametrize("modes", [["vm"], ["vm", "container", "kata"]])
+def test_operator_mode_policy_reaches_both_forms_and_server(modes):
+    docs = render("--set-json", f"portal.deploymentModes={json.dumps(modes)}",
+                  "--set-json", 'portal.admins=["admin"]')
+    templates = one(docs, "ConfigMap", "saw-rhdh-templates")["data"]
+    for name in ("create-workspace.yaml", "create-workspace-for-user.yaml"):
+        form = yaml.safe_load(templates[name])
+        field = form["spec"]["parameters"][-1]["properties"]["deploymentMode"]
+        assert field["enum"] == modes and field["default"] == "vm"
+        request = form["spec"]["steps"][0]["input"]["body"]["stringData"]
+        assert request["deploymentMode"] == "${{ parameters.deploymentMode }}"
+        assert "runtimeClassName" not in str(form)
+    task = one(docs, "Task", "saw-workspace")
+    step = next(s for s in task["spec"]["steps"] if s["name"] == "run")
+    dep = one(docs, "Deployment", "saw-workspaces-generator")
+    for container in [step, dep["spec"]["template"]["spec"]["containers"][0]]:
+        env = {e["name"]: e.get("value") for e in container["env"]}
+        assert json.loads(env["SAW_DEPLOYMENT_MODES"]) == modes
+
+
+@pytest.mark.ci_external
+@pytest.mark.parametrize("modes", [[], ["container"], ["vm", "vm"], ["vm", "confidential"],
+                                  ["vm", "bogus"], ["vm", {}], "vm"])
+def test_invalid_operator_mode_policy_rejects_chart(modes):
+    result = run_helm([HELM, "template", "openshell-rhdh", str(CHART), "-n", "rhdh",
+                       "--set-json", f"portal.deploymentModes={json.dumps(modes)}"],
+                      capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "portal.deploymentModes" in result.stderr
+    assert not result.stdout.strip()

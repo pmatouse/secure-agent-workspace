@@ -19,7 +19,7 @@ Deployment modes:
 | --- | --- | --- |
 | `vm` | Existing KubeVirt VM, gateway and Podman-managed sandboxes | Existing; default and regression reference |
 | `container` | Kubernetes gateway, separate supervisor and agent workload Pods | First new backend |
-| `kata` | Same Kubernetes backend; independently selected Kata supervisor/workload Pods | Second new backend |
+| `kata` | Same Kubernetes backend; ordinary supervisor Pod and separate Kata workload Pod/VM | Second new backend; supervisor-in-Kata is a future enhancement |
 | `confidential` | Confidential Kata, attestation, measured policy and protected secret/storage paths | Reserved; reject until separately implemented and qualified |
 
 Functional parity means the supported SAW workflows work through the same public
@@ -631,10 +631,14 @@ boundary against a user who can mutate these objects.
 
 ## 6. Proposed configuration contract
 
-Only `deployment.mode` validation is implemented on the development branch:
-`vm` works, omission preserves VM behavior, and the other modes fail clearly while
-unimplemented. The Kubernetes configuration below remains **proposed**, not a
-working deployment recipe:
+The parent `saw-users` and RHDH provisioning gates still admit only `vm` while
+container/Kata integration is incomplete. Offline foundations now exist: the
+[stock gateway chart](../charts/openshell-saw-kubernetes/README.md),
+[Agent Sandbox dependency](container-runtime-dependencies.md),
+[native policies](../charts/saw-runtime-policies/README.md) and
+[API reconciler](../kubernetes-runtime/README.md). They are independently tested;
+they are not a complete deployable SAW backend. The parent configuration below
+remains **proposed**. The gateway chart's README defines its actual current inputs.
 
 ```yaml
 defaults:
@@ -642,20 +646,12 @@ defaults:
     deployment:
       mode: vm
     kubernetes:
-      gateway:
-        runtimeClassName: ""
-        port: 17670
-      supervisor:
-        runtimeClassName: ""
-        healthPort: 5501
       workload:
         runtimeClassName: ""
-        boundaryPort: 5500
       storage:
         className: <approved-filesystem-storageclass>
         gatewaySize: 5Gi
         workspaceSize: 20Gi
-        retainOnDelete: true
 users:
   - name: sawcontainer
     values:
@@ -664,15 +660,15 @@ users:
     values:
       deployment: {mode: kata}
       kubernetes:
-        supervisor: {runtimeClassName: <approved-kata-runtimeclass>}
         workload: {runtimeClassName: <approved-kata-runtimeclass>}
 ```
 
 Add strict schema/semantic validation. `vm` is the omission/default behavior.
 `container` selects default container runtime; incompatible Kata-only overrides
-are errors. `kata` requires explicit administrator-approved workload and supervisor
-classes; no fallback. An internal qualification fixture may place only one member
-in Kata while proving compatibility, but is not advertised as the complete mode.
+are errors. `kata` requires an explicit administrator-approved workload class;
+no fallback. Its supervisor is deliberately an ordinary Pod. The gateway is also
+an ordinary Pod. Supervisor runtime selection is not a current input. The ports
+remain gateway 17670, workload boundary 5500 and supervisor health 5501.
 `confidential` returns an actionable not-implemented error before mutation.
 
 Do not overload existing `containerRuntime`, which describes the in-VM Podman
@@ -691,9 +687,10 @@ actual destination, implementation commit and tests as it lands.
 
 ### B1. Freeze runtime interfaces and build an additive chart backend
 
-Change `charts/openshell-saw` values/validation and split common resources from
-VM-only resources. Preserve the VM rendered workload, public names and semantics.
-Conditionalize CDI, VM SSH/cloud-init and golden-image RBAC; do not delete shared
+Keep `charts/openshell-saw` as the VM chart and add a separate Kubernetes chart
+selected by `saw-users` from the validated mode. Preserve the VM rendered workload,
+public names and semantics. The Kubernetes chart omits CDI, VM SSH/cloud-init and
+golden-image RBAC; do not delete shared
 CNV just because a new container user is added. A later container-only install may
 omit those dependencies through explicit platform ownership settings.
 
@@ -738,34 +735,56 @@ No HA claim with multiple gateway replicas sharing SQLite/NFS.
 identity; no plaintext keys in manifests/reports; dependency and ownership conflicts
 fail closed; no required cluster-admin credential in a tenant namespace.
 
-### B3. Two small OpenShell driver extensions
+### B3. Stock-component admission and network-policy integration
 
-Implement against the pinned ODH source and submit upstream-compatible changes:
+Keep OpenShell, Kata and Agent Sandbox binaries/source **unchanged**. The user
+requires integration-only delivery: SAW charts, API adapters, policy configuration,
+RHDH wiring and qualification tests; no derivative OpenShell gateway image.
 
-1. Administrator-only `supervisor_runtime_class_name`, with explicit scheduling
-   support and validation. Existing workload `runtimeClassName` does not affect
-   `supervisor_pod()` in `src/sandbox_runtime.rs`.
-2. Configurable supervisor egress-fence behavior for an operator-managed allowlist.
-   The pinned `src/isolation.rs` currently emits supervisor `egress: [{}]`.
-   **A restrictive SAW NetworkPolicy cannot narrow that allow-all rule.** Add a
-   reviewed mode that omits/restricts the permissive supervisor rule while retaining
-   the workload fence, and verify prerequisite SAW policies before sandbox release.
+Stock OpenShell already creates separate supervisor/workload Pods. Its existing
+`default_runtime_class_name` selects the workload runtime. Two native platform
+integrations supply placement validation and the egress boundary:
 
-Do not patch runtime Pods after creation or use broad mutating admission to hide
-these changes. Admission is a separately reviewed fallback only if the driver
-extension cannot be accepted. Preserve immutable bootstrap identity checks and
-workload fence UID/resourceVersion binding. Test missing policy, wrong identity,
-repeated creation and stopped/restarted generations.
+1. **Runtime validation:** use OpenShift's native `ValidatingAdmissionPolicy`
+   (VAP) and binding. In `container` mode both roles use the default runtime; in
+   `kata` mode the workload must select the approved class and the supervisor must
+   remain an ordinary Pod. Match the reserved role/account/namespace identity,
+   preserve it on UPDATE and reject wrong or missing classes. No mutation is
+   needed. The chart does not install a policy controller or a feature gate.
+2. **Supervisor egress:** install a role/namespace-scoped OpenShift
+   `AdminNetworkPolicy` (ANP) before enabling the gateway. Ordered `Pass` rules
+   delegate declared DNS, gateway, workload-boundary and credential-proxy traffic
+   to existing NetworkPolicies; a final explicit `Deny` covers remaining IPv4/IPv6
+   traffic. ANP takes precedence over the stock driver's supervisor allow-all
+   NetworkPolicy. An ordinary NetworkPolicy or BaselineAdminNetworkPolicy cannot
+   enforce this restriction against that allow-all. Assign an explicit unique
+   platform-approved priority and check for higher-priority conflicts.
 
-Build/test/publish the derivative gateway image through CI. Record source commit,
-patch provenance and image digest; retain matching protocol-compatible supervisor,
-sandbox and CLI images unless a change truly requires their rebuild. Do not update
-the default VM BOM silently. A patched gateway is not called an unchanged upstream
-binary; eliminating this derivative requires an upstream release containing it.
+Implementation and inputs: [native runtime-policy chart](../charts/saw-runtime-policies/README.md).
+The stock driver does not inspect these policies or their realization. A platform
+health/preflight gate must prove their presence and enforcement before releasing
+workloads. VAP uses `failurePolicy: Fail` and a Deny binding, but an absent policy
+cannot validate anything. Protect namespace/role labels and policy deletion with
+administrator-only RBAC. Rendered YAML is not evidence of admission or OVN behavior.
 
-**Gate B3:** supervisor placement tests pass; rendered policies contain no unintended
-allow-all supervisor egress in restricted mode; existing Podman/VM tests pass;
-new image is immutable and its provenance is recorded.
+**Supervisor in a second Kata VM is future work**, not a condition for initial
+`kata` delivery. The [upstream enhancement proposal](proposals/openshell-supervisor-runtimeclass.md)
+describes an administrator-only `supervisor_runtime_class_name` setting, changes
+at both creation/restart call sites and tests. It includes an illustrative patch
+shape, not an applied patch. The native admission-only alternative is documented
+there too: OpenShift 4.22's `MutatingAdmissionPolicy` requires a preview feature
+set. Do not enable `TechPreviewNoUpgrade` for this integration. No Kyverno
+dependency or OpenShell derivative image is part of either initial mode.
+
+**Gate B3:** stock-image digests retained; admission tests preserve immutable
+bootstrap identity and reject wrong/missing runtimes; ANP priorities/selectors
+are correct, with no new workload egress; live negative traffic tests prove the
+restriction despite the driver's allow-all NetworkPolicy. No upstream component
+patch or custom webhook server is part of delivery.
+
+Sources: [OpenShift policy precedence](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/network_security/admin-network-policy),
+[OpenShift admission](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/architecture/admission-plug-ins),
+[4.22 native mutation feature gate](https://github.com/openshift/api/blob/release-4.22/features/features.go#L85).
 
 ### B4. Container runtime qualification before full SAW integration
 
@@ -877,7 +896,7 @@ rotation behavior is documented and tested.
 
 Install/reuse Kata through its platform owner. Commit the approved runtime and
 scheduling inputs, then create a separate candidate workspace with Kata workload
-and ordinary supervisor as an internal qualification fixture. Keep the VM baseline.
+and ordinary supervisor as the initial `kata` topology. Keep the VM baseline.
 
 Verify actual runtime selection and VM boundary using host/runtime observations,
 not only the desired field. Probe the Kata **guest** kernel for required Landlock
@@ -892,10 +911,11 @@ an unenforced filesystem policy. Stop this gate until the declared runtime works
 
 **Gate C1:** the same container functional and negative tests pass inside Kata.
 
-### C2. Separate Kata supervisor and workload
+### C2. Future enhancement: separate Kata supervisor and workload
 
-Enable the reviewed supervisor RuntimeClass setting on another source-declared
-candidate. Prove there are two different Kata Pod/VM boundaries, with authenticated
+This optional follow-up does not block workload-only Kata. After a supported
+native mutator or an upstream OpenShell placement setting is available, enable
+the reviewed supervisor class on another source-declared candidate. Prove there are two different Kata Pod/VM boundaries, with authenticated
 communication and no shared process/network namespaces. The gateway can remain an
 ordinary Pod; selecting Kata for it later is independent of this milestone.
 
@@ -905,7 +925,7 @@ may fall back to a host container. Ordinary Kata still trusts cluster administra
 `oc exec` denial is an RBAC/admission question here, not a confidential-guest-policy
 claim. OpenShell exec uses its network protocol and is a distinct authorization path.
 
-**Gate C2:** complete `kata` mode passes and reports actual placement; original VM
+**Gate C2:** optional dual-Kata placement passes and reports both actual VMs; original VM
 and container users still pass their smoke/regression tests.
 
 ### D1. RHDH, CLI and runtime-neutral lifecycle
@@ -1016,9 +1036,9 @@ make test-dependencies
 
 `test-dependencies` checks external artifacts and needs its documented clients and
 network access. Record skips/reasons; missing Rust dependencies are not a Rust pass.
-For the OpenShell derivative, run its actual documented formatting/lint/unit and
-driver integration jobs at the selected source revision; define exact commands in
-that PR after inspecting its build instructions. Do not invent a successful build.
+No OpenShell derivative is built. Validate integration against the exact stock
+image/source lock; run policy-engine tests for admission and schema/render tests
+for ANP, followed by actual CNI/runtime tests on the cluster.
 
 ### Existing live harness limitations
 
@@ -1059,7 +1079,7 @@ repeatable owner/non-owner login and UI interaction test, not only HTTP 200.
 | Area | VM baseline | Container | Kata |
 | --- | --- | --- | --- |
 | Published images / locked desired revision | Required | Required | Required |
-| Actual runtime boundary | KubeVirt VM | Separate ordinary Pods | Separate supervisor/workload Kata VMs |
+| Actual runtime boundary | KubeVirt VM | Separate ordinary Pods | Ordinary supervisor; separate workload Kata VM |
 | Install/apply or equivalent BOM convergence | Required | Required | Required |
 | Owner CLI exec/log/file/forward | Required | Same contract | Same contract |
 | Owner browser/UI + non-owner denial | Required | Required | Required |
@@ -1106,8 +1126,8 @@ Do not label Ready as full E2E: qualification requires all mandatory tests.
 | Existing fork/shared operator conflicts | Inventory ownership; source-configured reuse or dedicated baseline cluster |
 | Dynamic chart versions, channels and mutable image tags | Record resolutions; publish a tested release lock and avoid uncontrolled upgrades during acceptance |
 | Wrong OpenShell version/docs | Pin coherent midstream artifacts; re-read source when upgrading |
-| Supervisor RuntimeClass missing | Reviewed driver extension, immutable image, runtime proof |
-| Supervisor allow-all policy defeats restrictions | Remove/configure rule in driver; inspect effective union; actual negative tests |
+| Supervisor RuntimeClass setting missing in stock driver | Start with ordinary supervisor; document native admission alternative and upstream enhancement as future work |
+| Supervisor allow-all policy defeats ordinary NetworkPolicy restrictions | Higher-precedence scoped ANP, explicit priority and actual negative traffic tests |
 | Workload policy accidentally widened by SAW | Role-specific selectors and no-new-egress tests |
 | Kata guest lacks required kernel behavior | Fail closed; qualify supported guest; no privilege or policy bypass |
 | Helm randomness rotates encryption/identity keys | ExistingSecret/retained declarative bootstrap; restart and sync tests |
@@ -1131,14 +1151,15 @@ VM baseline branch/revision independently recoverable. Proposed sequence:
    install receipt, failure records and a retained baseline acceptance runner.
 2. **Mode contract/chart split:** default VM unchanged, enum validation, dependency
    ownership and mode-specific rendering; confidential unsupported.
-3. **OpenShell driver patch:** independent supervisor placement and controlled
-   supervisor egress; upstream submission, tests and published derivative digest.
+3. **Stock platform policies:** native runtime validation and ANP supervisor
+   egress; ordinary supervisor, no upstream forks, extra controllers or rebuilds.
 4. **Kubernetes foundation:** Agent Sandbox lock, gateway/persistent identity,
    scoped RBAC, policies and source-driven minimal runtime proof.
 5. **Shared BOM adapter:** profile/provider lifecycle, approved mounts, harness,
    tool gate, audit, retention, UI relays and status.
 6. **Container parity:** complete test matrix, failure recovery and docs.
-7. **Kata qualification:** guest feature proof, separate VMs and same test matrix.
+7. **Kata qualification:** workload guest feature proof and same test matrix;
+   supervisor-in-Kata remains a separate future enhancement.
 8. **RHDH/CLI and Git-backed lifecycle:** selector, validation, revision/status,
    Git request pipeline, safe delete/retain/purge, compatibility mode tests.
 9. **Clean install/upgrade qualification:** final release lock, ordinary official

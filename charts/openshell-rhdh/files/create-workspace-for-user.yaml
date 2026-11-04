@@ -21,8 +21,16 @@ spec:
           Administrators only; your own name for your workspace. The user signs in with their own password.}
   - title: Workspace profile
     description: The workspace is named after the user (namespace saw-<user>).
-    required: [profile]
+    required: [profile, deploymentMode]
     properties:
+      deploymentMode:
+        title: Deployment
+        type: string
+        enum: [vm]
+        enumNames: [Virtual machine]
+        default: vm
+        description: Available deployment options are set by your administrator. An existing workspace
+          keeps its deployment type.
       profile:
         title: Profile
         type: string
@@ -97,12 +105,13 @@ spec:
           labels: {saw.redhat.com/request: 'true'}
         type: Opaque
         stringData: {action: create, token: '${{ secrets.backstageToken }}', profile: '${{ parameters.profile
-            }}', forUser: '${{ parameters.forUser }}', inference.api_key: '${{ secrets.inference__api_key
-            }}', inference.url: '${{ parameters.inference__url }}', inference.model: '${{ parameters.inference__model
-            }}', web-search.api_key: '${{ secrets.web_search__api_key }}', inference.cuda_model: '${{
-            parameters.inference__cuda_model }}', gmail.client_id: '${{ secrets.gmail__client_id }}',
-          gmail.client_secret: '${{ secrets.gmail__client_secret }}', gmail.refresh_token: '${{ secrets.gmail__refresh_token
-            }}', slack.bot_token: '${{ secrets.slack__bot_token }}'}
+            }}', deploymentMode: '${{ parameters.deploymentMode }}', forUser: '${{ parameters.forUser
+            }}', inference.api_key: '${{ secrets.inference__api_key }}', inference.url: '${{ parameters.inference__url
+            }}', inference.model: '${{ parameters.inference__model }}', web-search.api_key: '${{ secrets.web_search__api_key
+            }}', inference.cuda_model: '${{ parameters.inference__cuda_model }}', gmail.client_id: '${{
+            secrets.gmail__client_id }}', gmail.client_secret: '${{ secrets.gmail__client_secret }}',
+          gmail.refresh_token: '${{ secrets.gmail__refresh_token }}', slack.bot_token: '${{ secrets.slack__bot_token
+            }}'}
   - id: run
     name: Start the pipeline
     action: http:backstage:request

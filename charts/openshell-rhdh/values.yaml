@@ -96,6 +96,10 @@ rhdh:
 # The portal namespace: request Secrets, the Tekton pipelines, the workspace
 # registry (ConfigMaps saw-ws-<user>) and the ApplicationSet plugin generator.
 portal:
+  # Administrator-owned request allowlist. Non-VM provisioning remains unavailable
+  # until its lifecycle/readiness adapter is implemented; this is not an enablement
+  # switch for an incomplete runtime. Existing workspace mode is immutable.
+  deploymentModes: [vm]
   namespace: saw-portal
   provisionerServiceAccount: saw-portal-provisioner
   # Python 3 with the standard library is all portal.py needs.

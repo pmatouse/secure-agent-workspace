@@ -309,6 +309,56 @@ def check_user(user):
     return user
 
 
+# Request policy is operator-owned, never taken from a form or registry entry.
+DEPLOYMENT_MODES = ("vm", "container", "kata")
+# A renderable foundation is not a qualified provisioning/readiness adapter.
+# Expand only when runtime lifecycle, BOM and readiness are implemented.
+PROVISIONABLE_MODES = ("vm",)
+
+
+def deployment_modes():
+    try:
+        modes = json.loads(os.environ.get("SAW_DEPLOYMENT_MODES", '["vm"]'))
+    except ValueError:
+        raise PortalError("SAW_DEPLOYMENT_MODES must be a JSON list") from None
+    if (not isinstance(modes, list) or not modes or "vm" not in modes
+            or any(not isinstance(m, str) or m not in DEPLOYMENT_MODES for m in modes)
+            or len(set(modes)) != len(modes)):
+        raise PortalError("SAW_DEPLOYMENT_MODES must contain vm and unique supported modes: vm, container, kata")
+    return tuple(modes)
+
+
+def validate_deployment_mode(mode):
+    if mode == "confidential":
+        raise PortalError("confidential workspace deployment is reserved and is not implemented")
+    if not isinstance(mode, str) or mode not in DEPLOYMENT_MODES:
+        raise PortalError("deploymentMode must be one of vm, container, kata")
+    return mode
+
+
+def request_deployment_mode(data):
+    mode = validate_deployment_mode(data.get("deploymentMode", "vm"))
+    if mode not in deployment_modes():
+        raise PortalError(f"deploymentMode={mode} is not enabled by the administrator")
+    return mode
+
+
+def entry_deployment_mode(entry):
+    """Legacy registry entries are VMs, independently of later chart defaults."""
+    values = entry.get("values", {})
+    if not isinstance(values, dict):
+        raise PortalError("registry values must be an object")
+    deployment = values.get("deployment", {})
+    if not isinstance(deployment, dict) or set(deployment) - {"mode"}:
+        raise PortalError("registry deployment must be an object with only mode")
+    return validate_deployment_mode(deployment.get("mode", "vm"))
+
+
+def assert_mode_unchanged(entry, mode):
+    if entry_deployment_mode(entry) != mode:
+        raise PortalError("workspace deployment mode is immutable; an explicit migration is required")
+
+
 def parse_request(data, catalog):
     """The chosen profile and, for each Secret it reads, the field values.
 
@@ -432,14 +482,16 @@ def read_entry(cm):
     return entry if isinstance(entry, dict) else {}
 
 
-def registry_entry(user, profile, generation=""):
+def registry_entry(user, profile, generation="", mode="vm"):
     """The saw-users list entry for a portal workspace."""
+    mode = validate_deployment_mode(mode)
     return {"name": user, "profiles": [profile], "ownerSubject": "",
+            "values": {"deployment": {"mode": mode}},
             "vaultPrefix": f"{env('VAULT_KV_MOUNT', 'secret')}/data/{vault_prefix(user, generation)}",
             "pruneOnRemove": os.environ.get("PRUNE_ON_REMOVE", "true") == "true"}
 
 
-def put_configmap(k8s, ns, name, data, labels=None, resource_version=None):
+def put_configmap(k8s, ns, name, data, labels=None, resource_version=None, deployment_mode=None):
     body = {"apiVersion": "v1", "kind": "ConfigMap",
             "metadata": {"name": name, "namespace": ns, "labels": labels or {}}, "data": data}
     path = f"/api/v1/namespaces/{ns}/configmaps"
@@ -467,7 +519,9 @@ def put_configmap(k8s, ns, name, data, labels=None, resource_version=None):
     current = k8s.call("GET", f"{path}/{name}", ok404=True)
     if current is None or is_deleting(current):
         raise PortalError(f"{name} changed while this request ran (a delete?); request it again")
-    put_configmap(k8s, ns, name, data, labels, current["metadata"]["resourceVersion"])
+    if deployment_mode is not None:
+        assert_mode_unchanged(read_entry(current), deployment_mode)
+    put_configmap(k8s, ns, name, data, labels, current["metadata"]["resourceVersion"], deployment_mode)
 
 
 def is_deleting(cm):
@@ -505,6 +559,12 @@ def list_workspaces(k8s, ns, deleting=False):
             bad.append(name)
             continue
         if (cm["metadata"].get("labels") or {}).get(DELETING_LABEL) == "true" and not deleting:
+            continue
+        try:
+            entry_deployment_mode(entry)
+        except PortalError:
+            log(f"ERROR: registry entry {name} has an invalid deployment mode; skipped")
+            bad.append(name)
             continue
         out.append(entry)
     BAD_ENTRIES[:] = sorted(bad)
@@ -572,6 +632,7 @@ def entities_yaml(workspaces, catalog, domain, rhdh_url, statuses=None, portal_n
                           "title": "Delete workspace", "icon": "delete"})
         description = "Secure Agent Workspace (profiles: " + ", ".join(ws.get("profiles", [])) + ")"
         annotations = {"openshell.pattern/namespace": f"saw-{user}",
+                       "openshell.pattern/deployment-mode": entry_deployment_mode(ws),
                        # The Tekton tab: the create and delete pipeline runs
                        # labelled with this id in the portal namespace.
                        "backstage.io/kubernetes-id": f"saw-{user}",
@@ -795,6 +856,12 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
         return {"user": user, "phase": "deleting", "title": PHASE_TITLES["deleting"],
                 "message": detail, "ready": False, "failed": False, "steps": [], "links": [],
                 "text": f"Deleting: {detail}"}
+    mode = entry_deployment_mode(entry)
+    if mode not in PROVISIONABLE_MODES:
+        message = f"{mode} workspace lifecycle and readiness are not qualified in this release"
+        return {"user": user, "deploymentMode": mode, "phase": "runtime-not-qualified",
+                "title": "Runtime not available", "message": message, "ready": False,
+                "failed": True, "steps": [], "links": [], "text": message}
     reached["registered"] = cm is not None
     details["registered"] = (f"ConfigMap saw-ws-{user}, profile {', '.join(profiles)}" if cm
                              else f"no registry entry saw-ws-{user} yet")
@@ -1076,6 +1143,11 @@ def handle(action, request_name):
             if deleting:
                 raise PortalError(f"workspace saw-{user} is being deleted; request it again when "
                                   "the delete pipeline has finished")
+            mode = request_deployment_mode(data)
+            if cm is not None:
+                assert_mode_unchanged(read_entry(cm), mode)
+            if mode not in PROVISIONABLE_MODES:
+                raise PortalError(f"{mode} workspace provisioning is not available in this release")
             profile, secrets = parse_request(data, catalog)
             check_namespace_is_ours(k8s, user)
             check_applications_are_ours(k8s, user)
@@ -1087,10 +1159,11 @@ def handle(action, request_name):
             for secret, values in secrets.items():
                 vault.write(f"{prefix}/{secret}", values)
                 log(f"Vault: {prefix}/{secret} ({', '.join(sorted(values))})")
-            entry = registry_entry(user, profile, generation)
+            entry = registry_entry(user, profile, generation, mode)
             put_configmap(k8s, ns, name, {"user.json": json.dumps(entry, sort_keys=True)},
                           {WORKSPACE_LABEL: "true", "openshell.pattern/owner": user},
-                          resource_version=cm["metadata"].get("resourceVersion") if cm else None)
+                          resource_version=cm["metadata"].get("resourceVersion") if cm else None,
+                          deployment_mode=mode)
             log(f"workspace saw-{user} registered with profile {profile}; Argo CD builds it next")
         else:
             argo_app = f"/apis/argoproj.io/v1alpha1/namespaces/{env('ARGO_NAMESPACE')}/applications/portal-ws-{user}"
@@ -1248,6 +1321,9 @@ def generator_params(workspaces, defaults):
     chart values for that user alone (JSON, which is YAML)."""
     out = []
     for ws in workspaces:
+        # Freeze legacy VM intent instead of inheriting a new backend default.
+        ws = {**ws, "values": {**ws.get("values", {}),
+                               "deployment": {"mode": entry_deployment_mode(ws)}}}
         values = {**defaults, "users": [ws]}
         out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
     return out

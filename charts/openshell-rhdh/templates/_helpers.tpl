@@ -147,3 +147,39 @@ from the release is enough and keeps renders stable.
 {{- $found | default "rhdh.redhat.com/v1alpha5" -}}
 {{- end -}}
 {{- end -}}
+
+{{/* Operator-owned request policy; never derive it from a user request. */}}
+{{- define "openshell-rhdh.deploymentModes" -}}
+{{- $modes := .Values.portal.deploymentModes -}}
+{{- if not (kindIs "slice" $modes) -}}
+{{- fail "portal.deploymentModes must be a list containing vm" -}}
+{{- end -}}
+{{- $seen := dict -}}
+{{- range $mode := $modes -}}
+{{- if not (kindIs "string" $mode) -}}
+{{- fail "portal.deploymentModes must contain only strings" -}}
+{{- end -}}
+{{- if not (has $mode (list "vm" "container" "kata")) -}}
+{{- fail "portal.deploymentModes supports vm, container, kata; confidential is not implemented" -}}
+{{- end -}}
+{{- if hasKey $seen $mode -}}{{- fail "portal.deploymentModes must not contain duplicates" -}}{{- end -}}
+{{- $_ := set $seen $mode true -}}
+{{- end -}}
+{{- if not (hasKey $seen "vm") -}}{{- fail "portal.deploymentModes must include default vm" -}}{{- end -}}
+{{- toJson $modes -}}
+{{- end -}}
+
+{{/* Generated forms have vm as their safe default; project the administrator's
+allowlist into both forms without enabling privileged form parameters. */}}
+{{- define "openshell-rhdh.createTemplate" -}}
+{{- $root := .root -}}
+{{- $template := $root.Files.Get .path | fromYaml -}}
+{{- $step := last $template.spec.parameters -}}
+{{- $modes := include "openshell-rhdh.deploymentModes" $root | fromJsonArray -}}
+{{- $_ := set $step.properties.deploymentMode "enum" $modes -}}
+{{- $labels := dict "vm" "Virtual machine" "container" "Container (not yet available)" "kata" "Kata (not yet available)" -}}
+{{- $names := list -}}
+{{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
+{{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}
+{{- toYaml $template | replace "__PROVISIONER_SA__" $root.Values.portal.provisionerServiceAccount -}}
+{{- end -}}

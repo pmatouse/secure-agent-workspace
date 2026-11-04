@@ -1,0 +1,428 @@
+import copy
+import json
+import uuid
+
+import pytest
+import yaml
+
+from saw_kubernetes import ContractError, Reconciler, RpcError, compile_profile
+from saw_kubernetes.adapters import GrpcGateway, KubernetesResourceVerifier, OcReader
+from saw_kubernetes.compiler import MANAGED, OWNER, canonical, digest
+from saw_kubernetes.reconcile import Busy, StateStore
+
+
+@pytest.fixture
+def source(tmp_path):
+    root = tmp_path / "profile"
+    ws = root / "default"
+    ws.mkdir(parents=True)
+    docs = {
+        "workspace.yaml": {"apiVersion": "saw.redhat.com/v1alpha1", "kind": "Workspace",
+                           "metadata": {"name": "default"}},
+        "providers.yaml": {"apiVersion": "saw.redhat.com/v1alpha1", "kind": "Providers",
+                           "spec": {"providers": []}},
+        "sandbox.yaml": {"apiVersion": "saw.redhat.com/v1alpha1", "kind": "Sandboxes",
+                         "spec": {"sandboxes": [{"name": "toolbox", "type": "generic",
+                             "image": "registry.example/sandbox@sha256:" + "a" * 64,
+                             "providers": []}]}},
+    }
+    for name, content in docs.items():
+        (ws / name).write_text(yaml.safe_dump(content))
+    config = {"ownerID": "b032b2e4-2cd5-47a7-8ef8-ac73e15700b1", "namespace": "saw-alice",
+              "namespaceUID": "namespace-uid", "ownerSubject": "alice-sub", "mode": "container",
+              "gatewayVersion": "0.1.2-rhaiv.6", "approvedCredentialFreeProviders": ["tools"],
+              "bindings": {"default/toolbox": {"workspace": {
+                  "claimName": "workspace-toolbox", "uid": "pvc-uid", "readOnly": False}}}}
+    return root, config
+
+
+def mutate(source, filename, fn):
+    path = source[0] / "default" / filename
+    doc = yaml.safe_load(path.read_text())
+    fn(doc)
+    path.write_text(yaml.safe_dump(doc))
+
+
+def sandbox(source, fn):
+    mutate(source, "sandbox.yaml", lambda d: fn(d["spec"]["sandboxes"][0]))
+
+
+def test_compiler_is_deterministic_and_uses_stock_driver_envelope(source):
+    root, config = source
+    first = compile_profile(root, config)
+    assert first == compile_profile(root, json.loads(json.dumps(config, sort_keys=True)))
+    sb = first["workspaces"][0]["sandboxes"][0]
+    assert sb["spec"]["command"] == ["sh", "-c", "sleep infinity"]
+    driver = sb["spec"]["template"]["driver_config"]["kubernetes"]
+    assert driver["volumes"][0]["persistent_volume_claim"] == {
+        "claim_name": "workspace-toolbox", "read_only": False}
+    assert driver["containers"]["agent"]["volume_mounts"] == [
+        {"name": "workspace", "mount_path": "/sandbox", "read_only": False}]
+    assert first["claims"] == [{"name": "workspace-toolbox", "uid": "pvc-uid", "workspace": "default"}]
+
+
+@pytest.mark.parametrize("extra", [
+    {"type": "openclaw"}, {"type": "nemoclaw"}, {"harnessRef": {"name": "harness"}},
+    {"env": {"TOKEN": {"secret": "inference"}}}, {"driver_config": {"hostPath": "/"}},
+    {"serviceAccountName": "admin"}, {"ui": {"route": True}}, {"inference": {"providerRef": "nvidia"}},
+    {"image": "registry.example/sandbox:latest"}, {"enabled": "false"},
+])
+def test_unported_or_privileged_profile_fails_before_rpc(source, extra):
+    sandbox(source, lambda sb: sb.update(extra))
+    with pytest.raises(ContractError):
+        compile_profile(*source)
+
+
+def test_credential_provider_not_silently_treated_as_keyless(source):
+    mutate(source, "providers.yaml", lambda d: d["spec"]["providers"].append(
+        {"name": "nvidia", "type": "nvidia", "credentialSecret": "inference"}))
+    with pytest.raises(ContractError):
+        compile_profile(*source)
+
+
+def test_governed_credential_free_provider_compiles(source):
+    mutate(source, "providers.yaml", lambda d: d["spec"]["providers"].append(
+        {"name": "tools", "type": "tools", "credentialFree": True}))
+    sandbox(source, lambda sb: sb.update(providers=["tools"]))
+    plan = compile_profile(*source)
+    assert plan["workspaces"][0]["providers"][0]["type"] == "tools"
+    assert "credentials" not in canonical(plan)
+
+
+@pytest.mark.parametrize("path", ["/", "/etc", "/sandbox/harness", "/data/../etc", "/data//files", "/data/", "/data/\x00"])
+def test_unapproved_mount_paths_rejected(source, path):
+    source[1]["bindings"]["default/toolbox"]["mounts"] = [
+        {"claimName": "data", "uid": "data-uid", "readOnly": False, "mountPath": path}]
+    with pytest.raises(ContractError):
+        compile_profile(*source)
+
+
+def test_rw_and_ro_mount_flags_both_reach_driver(source):
+    source[1]["bindings"]["default/toolbox"]["mounts"] = [
+        {"claimName": "data", "uid": "data-uid", "readOnly": True, "mountPath": "/data"}]
+    driver = compile_profile(*source)["workspaces"][0]["sandboxes"][0]["spec"]["template"]["driver_config"]["kubernetes"]
+    assert driver["volumes"][1]["persistent_volume_claim"]["read_only"] is True
+    assert driver["containers"]["agent"]["volume_mounts"][1]["read_only"] is True
+
+
+def test_native_gc_workspace_is_never_implicitly_created(source):
+    source[1]["bindings"] = {}
+    with pytest.raises(ContractError, match="retained workspace PVC"):
+        compile_profile(*source)
+
+
+class FakeGateway:
+    """In-memory stock RPC semantics; no claim to be live runtime validation."""
+
+    def __init__(self):
+        self.calls = []
+        self.workspaces = {"default": {"metadata": {"name": "default", "id": "ws-1"},
+                                       "status": {"phase": "WORKSPACE_PHASE_ACTIVE"}}}
+        self.members, self.providers, self.sandboxes = {}, {}, {}
+        self.fail_after_create = False
+
+    def call(self, method, request):
+        self.calls.append((method, copy.deepcopy(request)))
+        ws = request.get("workspace_scope", {}).get("workspace")
+        key = (ws, request.get("name"))
+        if method == "GetGatewayInfo":
+            return {"gateway_version": "0.1.2-rhaiv.6", "compute_drivers": [{"name": "kubernetes"}]}
+        if method == "GetProviderProfile":
+            return {"profile": {"id": request["id"], "source": "interceptor/governance"}}
+        if method == "GetWorkspace":
+            if request["name"] not in self.workspaces:
+                raise RpcError("NOT_FOUND")
+            return {"workspace": copy.deepcopy(self.workspaces[request["name"]])}
+        if method == "CreateWorkspace":
+            self.workspaces[request["name"]] = {"metadata": {"name": request["name"], "id": str(uuid.uuid4()), "labels": request["labels"]},
+                                               "status": {"phase": "WORKSPACE_PHASE_ACTIVE"}}
+            return {"workspace": self.workspaces[request["name"]]}
+        if method == "ListWorkspaceMembers":
+            return {"members": self.members.get(ws, [])}
+        if method == "AddWorkspaceMember":
+            self.members.setdefault(ws, []).append({"principal_subject": request["principal_subject"], "role": request["role"]})
+            return {}
+        if method == "GetProvider":
+            if key not in self.providers:
+                raise RpcError("NOT_FOUND")
+            return {"provider": copy.deepcopy(self.providers[key])}
+        if method == "CreateProvider":
+            obj = copy.deepcopy(request["provider"])
+            obj["metadata"].update(workspace=ws, id=str(uuid.uuid4()))
+            self.providers[(ws, obj["metadata"]["name"])] = obj
+            return {"provider": obj}
+        if method == "GetSandbox":
+            if key not in self.sandboxes:
+                raise RpcError("NOT_FOUND")
+            return {"sandbox": copy.deepcopy(self.sandboxes[key])}
+        if method == "CreateSandbox":
+            obj = {"metadata": {"name": request["name"], "workspace": ws, "id": str(uuid.uuid4()),
+                                "labels": request["labels"], "annotations": request["annotations"]},
+                   "spec": copy.deepcopy(request["spec"]), "status": {"phase": "SANDBOX_PHASE_PROVISIONING"}}
+            self.sandboxes[key] = obj
+            if self.fail_after_create:
+                self.fail_after_create = False
+                raise RpcError("DEADLINE_EXCEEDED")
+            return {"sandbox": obj}
+        if method in {"StartSandbox", "StopSandbox"}:
+            self.sandboxes[key]["status"]["phase"] = "SANDBOX_PHASE_STARTING" if method == "StartSandbox" else "SANDBOX_PHASE_STOPPING"
+            return {"sandbox": self.sandboxes[key]}
+        raise AssertionError(method)
+
+
+@pytest.fixture
+def runtime(source, tmp_path):
+    plan = compile_profile(*source)
+    gateway = FakeGateway()
+    checks = []
+    verifier = lambda p: checks.append(p["revision"])
+    reconciler = Reconciler(gateway, tmp_path / "state", verifier)
+    return plan, gateway, reconciler, checks
+
+
+def ready(runtime):
+    plan, gateway, reconciler, _ = runtime
+    for _ in range(5):
+        result = reconciler.reconcile(plan, generation=1)
+        for sb in gateway.sandboxes.values():
+            sb["status"]["phase"] = "SANDBOX_PHASE_READY"
+        if result["phase"] == "GenericReady":
+            return
+    raise AssertionError("did not converge")
+
+
+def test_reconcile_is_idempotent_and_checks_readiness(runtime):
+    plan, gateway, reconciler, checks = runtime
+    ready(runtime)
+    before = [c for c in gateway.calls if c[0].startswith(("Create", "Add"))]
+    assert reconciler.reconcile(plan, generation=1)["phase"] == "GenericReady"
+    assert [c for c in gateway.calls if c[0].startswith(("Create", "Add"))] == before
+    assert len(checks) >= 4
+    assert not any(c[0].startswith("Delete") for c in gateway.calls)
+
+
+def test_ambiguous_create_and_process_restart_do_not_duplicate(runtime):
+    plan, gateway, reconciler, _ = runtime
+    reconciler.reconcile(plan, generation=1)  # membership
+    gateway.fail_after_create = True
+    assert reconciler.reconcile(plan, generation=1)["phase"] == "Retry"
+    restarted = Reconciler(gateway, reconciler.store.directory, lambda p: None)
+    assert restarted.reconcile(plan, generation=1)["phase"] == "Pending"
+    assert len([c for c in gateway.calls if c[0] == "CreateSandbox"]) == 1
+
+
+def test_intent_generations_make_repeated_stop_start_unambiguous(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    sb = gateway.sandboxes[("default", "toolbox")]
+    for generation, target in [(2, "Stopped"), (3, "Running"), (4, "Stopped"), (5, "Running")]:
+        assert reconciler.reconcile(plan, generation=generation, desired_state=target)["phase"] == "Pending"
+        assert reconciler.reconcile(plan, generation=generation, desired_state=target)["phase"] == "Pending"
+        sb["status"]["phase"] = "SANDBOX_PHASE_STOPPED" if target == "Stopped" else "SANDBOX_PHASE_READY"
+        assert reconciler.reconcile(plan, generation=generation, desired_state=target)["phase"] in {"Stopped", "GenericReady"}
+    mutations = [r["request_id"] for m, r in gateway.calls if m in {"StartSandbox", "StopSandbox"}]
+    assert len(mutations) == len(set(mutations)) == 4
+    with pytest.raises(ContractError, match="stale"):
+        reconciler.reconcile(plan, generation=2, desired_state="Stopped")
+
+
+def test_retained_identity_detects_same_name_replacement(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    gateway.sandboxes[("default", "toolbox")]["metadata"]["id"] = "replacement-id"
+    with pytest.raises(ContractError, match="same-name replacement"):
+        reconciler.reconcile(plan, generation=1)
+
+
+def test_foreign_object_is_not_adopted(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    gateway.sandboxes[("default", "toolbox")]["metadata"]["labels"][OWNER] = "someone-else"
+    with pytest.raises(ContractError, match="another installation"):
+        reconciler.reconcile(plan, generation=1)
+
+
+def test_resource_verification_failure_prevents_all_rpc(runtime):
+    plan, gateway, reconciler, _ = runtime
+    def revoked(_):
+        raise ContractError("approval revoked")
+    reconciler.verify_resources = revoked
+    with pytest.raises(ContractError, match="revoked"):
+        reconciler.reconcile(plan, generation=1)
+    assert not gateway.calls
+
+
+def test_lock_prevents_second_reconciler(runtime):
+    plan, _, reconciler, _ = runtime
+    with reconciler.store.locked():
+        with pytest.raises(Busy):
+            Reconciler(reconciler.rpc, reconciler.store.directory, lambda p: None).reconcile(plan, generation=1)
+
+
+def test_tampered_plan_and_owner_changes_rejected(runtime):
+    plan, _, reconciler, _ = runtime
+    ready(runtime)
+    changed = copy.deepcopy(plan)
+    changed["ownerSubject"] = "mallory"
+    with pytest.raises(ContractError, match="modified compiled plan"):
+        reconciler.reconcile(changed, generation=2)
+    changed["revision"] = digest({k: v for k, v in changed.items() if k != "revision"})
+    with pytest.raises(ContractError, match="immutable"):
+        reconciler.reconcile(changed, generation=2)
+
+
+def test_stopped_new_intent_does_not_briefly_start_workload(runtime):
+    plan, gateway, reconciler, _ = runtime
+    for _ in range(3):
+        assert reconciler.reconcile(plan, generation=1, desired_state="Stopped")["phase"] == "Pending"
+    assert not gateway.sandboxes
+
+
+def test_kata_uses_stock_workload_setting_and_reports_ordinary_supervisor(source, runtime):
+    source[1].update(mode="kata", workloadRuntimeClass="kata", workloadRuntimeClassUID="class-uid")
+    plan = compile_profile(*source)
+    assert plan["requestedPlacement"] == {"supervisor": "container", "workload": "kata"}
+    result = runtime[2].reconcile(plan, generation=1)
+    assert result["requestedPlacement"] == plan["requestedPlacement"]
+    driver = plan["workspaces"][0]["sandboxes"][0]["spec"]["template"]["driver_config"]["kubernetes"]
+    assert driver["pod"] == {"runtime_class_name": "kata"}
+
+
+@pytest.fixture
+def resources(runtime):
+    plan = runtime[0]
+    ns = {"metadata": {"uid": plan["namespaceUID"], "labels": {OWNER: plan["ownerID"]}}}
+    pvc = {"metadata": {"uid": "pvc-uid", "labels": {OWNER: plan["ownerID"],
+            "openshell.ai/sandbox-attachable": "true", "openshell.ai/sandbox-attachable-workspace": "default"},
+            "annotations": {"argocd.argoproj.io/sync-options": "Prune=false,Delete=false"}},
+           "spec": {"volumeMode": "Filesystem"}, "status": {"phase": "Pending"}}
+    read = lambda kind, name, namespace=None: ns if kind == "namespace" else pvc
+    return plan, ns, pvc, KubernetesResourceVerifier(read, lambda plan: None)
+
+
+def test_pending_wffc_claim_is_admitted_without_deadlock(resources):
+    plan, _, _, verifier = resources
+    verifier(plan)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda p: p["metadata"].update(uid="replacement"),
+    lambda p: p["metadata"].update(deletionTimestamp="now"),
+    lambda p: p["metadata"].update(ownerReferences=[{"kind": "Sandbox"}]),
+    lambda p: p["metadata"].update(annotations={}),
+    lambda p: p["metadata"]["labels"].update({"openshell.ai/sandbox-attachable-workspace": "other"}),
+    lambda p: p["spec"].update(volumeMode="Block"),
+])
+def test_replaced_unapproved_or_gc_owned_claim_refused(resources, mutation):
+    plan, _, pvc, verifier = resources
+    mutation(pvc)
+    with pytest.raises(ContractError):
+        verifier(plan)
+
+
+def test_oc_reader_does_not_allow_secret_or_arbitrary_resource_access():
+    with pytest.raises(ContractError, match="allowlist"):
+        OcReader()("secret", "inference")
+
+
+def test_provider_preflight_occurs_before_mutation(source, tmp_path):
+    mutate(source, "providers.yaml", lambda d: d["spec"]["providers"].append(
+        {"name": "tools", "type": "tools", "credentialFree": True}))
+    sandbox(source, lambda sb: sb.update(providers=["tools"]))
+    plan = compile_profile(*source)
+    gateway = FakeGateway()
+    original = gateway.call
+    def request(method, body):
+        if method == "GetProviderProfile":
+            return {"profile": {"id": "tools", "source": "interceptor/governance", "credentials": [{"name": "key"}]}}
+        return original(method, body)
+    gateway.call = request
+    with pytest.raises(ContractError, match="credential-free"):
+        Reconciler(gateway, tmp_path / "state", lambda p: None).reconcile(plan, generation=1)
+    assert not any(m.startswith(("Create", "Add")) for m, _ in gateway.calls)
+
+
+def test_disappeared_sandbox_does_not_recreate_or_erase_workspace(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    del gateway.sandboxes[("default", "toolbox")]
+    before = len([m for m, _ in gateway.calls if m == "CreateSandbox"])
+    with pytest.raises(ContractError, match="refuse implicit recreation"):
+        reconciler.reconcile(plan, generation=1)
+    assert len([m for m, _ in gateway.calls if m == "CreateSandbox"]) == before
+
+
+def test_spec_drift_never_triggers_delete_and_recreate(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    gateway.sandboxes[("default", "toolbox")]["spec"]["template"]["image"] = "unexpected"
+    with pytest.raises(ContractError, match="migration"):
+        reconciler.reconcile(plan, generation=1)
+    assert not any(m.startswith("Delete") for m, _ in gateway.calls)
+
+
+@pytest.mark.parametrize("extra", [
+    {"environment": {"UNAPPROVED": "value"}},
+    {"resource_requirements": {"gpu": {"count": 2}}},
+    {"resource_requirements": {"gpu": {}}},  # Presence requests the default GPU count.
+    {"log_level": "debug"},
+    {"restart_policy": "SANDBOX_RESTART_POLICY_ALWAYS"},
+    {"restart_policy": "SANDBOX_RESTART_POLICY_ON_FAILURE"},
+    {"host_config": {"privileged": True}},
+    {"future_unreviewed_field": "value"},
+])
+def test_unsupported_observed_spec_never_reports_ready_or_mutates(runtime, extra):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    gateway.sandboxes[("default", "toolbox")]["spec"].update(extra)
+    before = len(gateway.calls)
+    with pytest.raises(ContractError, match="configuration drift"):
+        reconciler.reconcile(plan, generation=1)
+    assert {method for method, _ in gateway.calls[before:]} <= {
+        "GetGatewayInfo", "GetWorkspace", "ListWorkspaceMembers", "GetSandbox"}
+
+
+def test_gateway_defaults_and_governed_policy_are_not_user_spec_drift(runtime):
+    plan, gateway, reconciler, _ = runtime
+    ready(runtime)
+    spec = gateway.sandboxes[("default", "toolbox")]["spec"]
+    spec.update(restart_policy="SANDBOX_RESTART_POLICY_NEVER",
+                provider_attachment_epoch=str(uuid.uuid4()),
+                policy={"version": 1}, environment={}, resource_requirements={}, log_level="")
+    assert reconciler.reconcile(plan, generation=1)["phase"] == "GenericReady"
+    # Provider attachment epochs are gateway-owned and can rotate independently.
+    spec["provider_attachment_epoch"] = str(uuid.uuid4())
+    assert reconciler.reconcile(plan, generation=1)["phase"] == "GenericReady"
+
+
+@pytest.mark.parametrize("options", ["Prune=false", "Delete=false", "Prune=true,Delete=false",
+                                    "Prune=false,Delete=false,Delete=true",
+                                    "Prune=false,Delete=false,Prune=true"])
+def test_retained_pvc_requires_prune_and_application_deletion_protection(resources, options):
+    plan, _, pvc, verifier = resources
+    pvc["metadata"]["annotations"]["argocd.argoproj.io/sync-options"] = options
+    with pytest.raises(ContractError, match="prune and application-deletion protection"):
+        verifier(plan)
+
+
+def test_retained_pvc_options_allow_order_and_whitespace(resources):
+    plan, _, pvc, verifier = resources
+    pvc["metadata"]["annotations"]["argocd.argoproj.io/sync-options"] = "Delete=false, Prune=false"
+    verifier(plan)
+
+
+def test_transient_retries_have_bounded_backoff(runtime):
+    plan, gateway, reconciler, _ = runtime
+    def unavailable(*_):
+        raise RpcError("UNAVAILABLE")
+    gateway.call = unavailable
+    delays = [reconciler.reconcile(plan, generation=1)["retry_after_seconds"] for _ in range(9)]
+    assert delays == [2, 4, 8, 16, 32, 60, 60, 60, 60]
+
+
+@pytest.mark.parametrize("endpoint", ["http://gateway:17670", "https://user:password@gateway",
+    "https://gateway/path", "https://gateway?token=secret", "https://gateway:bad",
+    "https://gateway:0", "https://gateway:\n443"])
+def test_invalid_or_insecure_grpc_endpoint_fails_before_identity_read(endpoint):
+    with pytest.raises(ContractError, match="gateway endpoint"):
+        GrpcGateway(endpoint, "/does-not-exist", "/does-not-exist", "/does-not-exist")

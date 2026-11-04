@@ -1,0 +1,12 @@
+EXPERIMENTAL {{ .Values.deployment.mode }} gateway foundation.
+Stock OpenShell gateway and supervisor; supervisor runs as an ordinary Pod.
+{{- if eq .Values.deployment.mode "kata" }}
+Only the workload uses the administrator-approved Kata RuntimeClass.
+{{- end }}
+
+Gateway readiness does not establish SAW profile, inference, UI or security parity.
+Install/verify the native ANP and validating admission foundation before creating
+sandboxes. Supply retained identity, trusted credential proxy, governance and
+Agent Sandbox dependencies through their declared owners.
+
+Read docs/container-kata-implementation-plan.md and this chart's README.

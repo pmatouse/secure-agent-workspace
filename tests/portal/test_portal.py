@@ -232,7 +232,8 @@ def test_generator_params_are_one_user_saw_users_values(portal):
     ws = {"name": "alice", "profiles": ["data-science"], "vaultPrefix": "secret/data/hub/saw-alice"}
     [params] = portal.generator_params([ws], defaults)
     assert params["name"] == "alice"
-    assert json.loads(params["values"]) == {**defaults, "users": [ws]}
+    assert json.loads(params["values"]) == {**defaults, "users": [
+        {**ws, "values": {"deployment": {"mode": "vm"}}}]}
 
 
 def entity_docs(text):
@@ -446,7 +447,8 @@ def test_create_writes_vault_and_the_registry(portal, world):
     assert cm["metadata"]["labels"]["saw.redhat.com/workspace"] == "true"
     assert json.loads(cm["data"]["user.json"]) == {
         "name": "alice", "profiles": ["data-science"], "ownerSubject": "",
-        "vaultPrefix": f"secret/data/{KEYS}", "pruneOnRemove": True}
+        "vaultPrefix": f"secret/data/{KEYS}", "pruneOnRemove": True,
+        "values": {"deployment": {"mode": "vm"}}}
     assert "/api/v1/namespaces/saw-portal/secrets/saw-req-1" not in fake.objects, "request consumed"
 
 
@@ -1455,3 +1457,100 @@ def test_the_ca_bundle_holds_every_source_found(tmp_path, monkeypatch):
     text = out.read_text()
     assert text.index("SYSTEM") < text.index("TRUSTED") < text.index("EXTRA")
     assert text.count("BEGIN CERTIFICATE") == 3
+
+
+# -- deployment selection ------------------------------------------------------
+
+def test_deployment_request_defaults_to_vm(portal, monkeypatch):
+    monkeypatch.delenv("SAW_DEPLOYMENT_MODES", raising=False)
+    assert portal.request_deployment_mode({}) == "vm"
+
+
+@pytest.mark.parametrize("mode", ["container", "kata"])
+def test_mode_requires_administrator_allowlist(portal, monkeypatch, mode):
+    monkeypatch.delenv("SAW_DEPLOYMENT_MODES", raising=False)
+    with pytest.raises(portal.PortalError, match="not enabled"):
+        portal.request_deployment_mode({"deploymentMode": mode})
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm", "container", "kata"]')
+    assert portal.request_deployment_mode({"deploymentMode": mode}) == mode
+
+
+@pytest.mark.parametrize("mode", ["confidential", "typo", "", None, False, [], {}])
+def test_unknown_or_malformed_mode_is_rejected(portal, mode):
+    with pytest.raises(portal.PortalError):
+        portal.request_deployment_mode({"deploymentMode": mode})
+
+
+@pytest.mark.parametrize("raw", ["vm", "{}", "[]", '["container"]', '["vm","vm"]',
+                                  '["vm",{}]', '["vm","confidential"]'])
+def test_invalid_administrator_mode_policy_fails_closed(portal, monkeypatch, raw):
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", raw)
+    with pytest.raises(portal.PortalError, match="SAW_DEPLOYMENT_MODES"):
+        portal.request_deployment_mode({})
+
+
+@pytest.mark.parametrize("mode", ["container", "kata"])
+def test_unqualified_mode_refused_before_vault_even_when_allowlisted(portal, world, monkeypatch, mode):
+    fake, signer = world
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm", "container", "kata"]')
+    fake.request("saw-req-mode", ds_request(signer, deploymentMode=mode))
+    assert portal.main(["create", "saw-req-mode"]) == 1
+    assert not fake.vault and not fake.logins
+    assert REGISTRY not in fake.objects
+
+
+def test_mode_change_is_refused_before_any_credential_update(portal, world, monkeypatch):
+    fake, signer = world
+    fake.request("saw-req-1", ds_request(signer))
+    assert portal.main(["create", "saw-req-1"]) == 0
+    previous = json.dumps(fake.vault, sort_keys=True)
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm", "container"]')
+    fake.request("saw-req-2", ds_request(signer, deploymentMode="container",
+                                       **{"inference.api_key": "replacement"}))
+    assert portal.main(["create", "saw-req-2"]) == 1
+    assert json.dumps(fake.vault, sort_keys=True) == previous
+    assert len(fake.logins) == 1
+    assert portal.entry_deployment_mode(portal.read_entry(fake.objects[REGISTRY])) == "vm"
+
+
+def test_concurrent_create_cannot_replace_a_different_mode(portal, world):
+    fake, _ = world
+    winner = portal.registry_entry("alice", "data-science", GEN[0], "container")
+    portal.put_configmap(portal.kube(), "saw-portal", "saw-ws-alice",
+                         {"user.json": json.dumps(winner)}, {portal.WORKSPACE_LABEL: "true"})
+    stale = portal.registry_entry("alice", "data-science", GEN[1], "vm")
+    with pytest.raises(portal.PortalError, match="immutable"):
+        portal.put_configmap(portal.kube(), "saw-portal", "saw-ws-alice",
+                             {"user.json": json.dumps(stale)}, deployment_mode="vm")
+    assert portal.read_entry(fake.objects[REGISTRY]) == winner
+
+
+@pytest.mark.parametrize("mode", ["vm", "container", "kata"])
+def test_mode_serializes_through_registry_to_gitops(portal, mode):
+    entry = portal.registry_entry("alice", "data-science", GEN[0], mode)
+    [params] = portal.generator_params([entry], {"defaults": {"openshellSaw": {
+        "deployment": {"mode": "kata"}}}})
+    values = json.loads(params["values"])
+    assert values["users"][0]["values"]["deployment"]["mode"] == mode
+
+
+def test_legacy_registry_mode_does_not_inherit_changed_chart_default(portal):
+    entry = {"name": "alice", "profiles": ["data-science"]}
+    [params] = portal.generator_params([entry], {"defaults": {"openshellSaw": {
+        "deployment": {"mode": "container"}}}})
+    assert json.loads(params["values"])["users"][0]["values"]["deployment"]["mode"] == "vm"
+    assert "values" not in entry, "normalization must not mutate the input"
+
+
+@pytest.mark.parametrize("mode", ["container", "kata"])
+def test_unqualified_runtime_never_uses_vm_readiness(portal, mode):
+    entry = portal.registry_entry("alice", "data-science", GEN[0], mode)
+    class RegistryOnly:
+        def call(self, method, path, **kwargs):
+            assert method == "GET" and path == REGISTRY
+            return {"metadata": {"name": "saw-ws-alice"},
+                    "data": {"user.json": json.dumps(entry)}}
+    status = portal.workspace_status(RegistryOnly(), "alice", {}, "saw-portal", "vp-gitops", "example.test")
+    assert status["phase"] == "runtime-not-qualified"
+    assert status["ready"] is False and status["failed"] is True
+    assert not status["links"]

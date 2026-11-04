@@ -51,6 +51,8 @@ spec:
               value: {{ $ns }}
             - name: PORT
               value: {{ $port | quote }}
+            - name: SAW_DEPLOYMENT_MODES
+              value: {{ include "openshell-rhdh.deploymentModes" . | quote }}
             - name: CATALOG_PATH
               value: /opt/saw/profile-catalog.json
             - name: GENERATOR_TOKEN_FILE

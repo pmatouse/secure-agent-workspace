@@ -2,6 +2,14 @@
 
 Deploy isolated, per-user AI agent sandboxes on OpenShift Virtualization with OIDC authentication and policy-controlled access.
 
+Development branch: [container/Kata integration plan](docs/container-kata-implementation-plan.md).
+The VM path remains the working default. Offline Kubernetes foundations use stock
+OpenShell and an ordinary supervisor; Kata applies to the workload Pod only.
+Container/Kata provisioning stays gated until integration and live qualification
+are complete. See the [gateway architecture](charts/openshell-saw-kubernetes/README.md),
+[native policies](charts/saw-runtime-policies/README.md) and
+[future supervisor placement proposal](docs/proposals/openshell-supervisor-runtimeclass.md).
+
 ## Upgrade: stage network isolation per user
 
 This release adds default-deny NetworkPolicy to each SAW. The `openshell-saw`
@@ -705,7 +713,7 @@ make sandbox-ui
 make saw-status
 make saw-vm-ssh
 
-# Local tests and all 13 Helm charts (no cluster needed)
+# Local tests and Helm charts (no cluster needed)
 make lint
 make test
 

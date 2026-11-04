@@ -1,0 +1,4 @@
+# Layer on container-values.yaml for offline tests, not a second namespace.
+mode: kata
+kata:
+  workloadRuntimeClassName: kata
