@@ -308,4 +308,14 @@ representation. A normal portal resubmission created task
 `3ea28214-9a63-40b2-941d-fc94a4508adc` / PipelineRun `saw-create-qx55p` with
 the new wait. Root PVC `sawportalvm-root` retains UID
 `d4c9442f-efcc-49fd-b242-c16df200fbfb`. This is recovery evidence, not a clean
-first-pass installation. Update, inference and delete acceptance remain pending.
+first-pass installation.
+
+The same guest subsequently reached `install=Done, apply=Done`. Ordinary-owner
+CLI login, exec and real provider inference passed in both `default/notebook`
+and `cuda-dev/cuda-sandbox`; both denied undeclared `https://example.org` egress.
+The notebook's authenticated browser chat selected `gpt-4.1-mini (Custom Provider)`
+and returned exactly `SAW_PORTAL_VM_OK`. No guest configuration was edited to
+obtain these results. The create pipeline still waits for the separate OpenShell
+web UI: its systemd unit is active while Podman downloads the stock oauth2-proxy
+image. Backend dashboard health alone does not prove proxy readiness. Model
+update and disposable-workspace deletion acceptance remain pending.
