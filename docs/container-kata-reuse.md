@@ -136,6 +136,23 @@ Bash 3.2's empty-array behavior under `set -u` in the existing image-mirror scri
 Use the repository's Linux CI for the complete interface suite; these are not
 live OpenShift failures or evidence of a passing baseline installation.
 
+[Linux CI run 41836814551](https://github.com/pmatouse/secure-agent-workspace/actions/runs/41836814551)
+passed on code commit `b2bd9b1431655f64d49a034256e79ca136ab7ff3`:
+
+| Check | Result |
+|---|---|
+| Static lint and shared external/static tests | Passed; 621 tests passed, one optional SDK-module skip |
+| Python 3.12 behavior/integration suite | 1,583 passed, eight skipped |
+| Python 3.14 behavior/integration suite | 1,583 passed, eight skipped |
+| Existing installer bundle drift verification | Passed |
+
+The behavior-suite skips are explicit: the separately exercised stock SDK module
+(one), no committed optional APF bundle (one), uncached Rust/serde dependencies
+for image-builder tests (two), and missing real `oc` for registry-TLS tests (four).
+No skip is counted as runtime, cluster or full SAW parity evidence. The first CI
+attempt exposed a Python test-module collision with installer fixtures; packaging
+the new runtime tests separately fixed collection without changing old tests.
+
 No cluster calls, image pulls or guest builds were made for these foundations.
 Temporary protobuf/compiler and test artifacts are disposable; keep source and
 sanitized test receipts. Cluster admission, networking, runtime and full SAW E2E
