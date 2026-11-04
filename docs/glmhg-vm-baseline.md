@@ -292,3 +292,11 @@ Guest provisioning is still running. VMI UID is
 The same ordinary portal user was denied the second baseline owner's notebook
 route with HTTP 403. This browser check complements the earlier cross-owner
 gateway gRPC denial. The temporary local form credential files were removed.
+
+Cold sandbox image pulls and nested-CPU agent configuration approached the
+portal's fixed 30-minute readiness wait while the guest continued progressing.
+The shared chart now exposes `portal.sandboxReadyTimeoutMinutes` (1–60, default
+30); this site selects 60 for subsequent runs. The Task allows two additional
+minutes for setup; readiness still requires every expected route. The original
+PipelineRun keeps its original deadline and result. This is not a health-check
+bypass, active-run patch or guest restart.

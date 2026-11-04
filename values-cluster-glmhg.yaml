@@ -1,5 +1,10 @@
 # Nested lab storage makes initial operator image pulls slow. Keep this
 # recovery policy declarative; OLM owns failed unpack Job cleanup/retry.
+portal:
+  # Two cold agent images plus nested-CPU guest configuration approach 30m.
+  # Keep real readiness checks; this only bounds new portal runs' wait time.
+  sandboxReadyTimeoutMinutes: 60
+
 keycloak:
   instances: 1
   resources:
