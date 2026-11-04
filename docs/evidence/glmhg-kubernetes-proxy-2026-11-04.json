@@ -1,0 +1,20 @@
+{
+  "scope": "Isolated credential proxy transport; not full SAW container parity",
+  "test": "tests/acceptance/kubernetes_proxy.py",
+  "model": "gpt-4.1-mini-2025-04-14",
+  "publicCA_SHA256": "c47bd6d602bb8ea161d6ef7678a24a052370ae215d87b2faaeb152ae006b72db",
+  "privateCASecretUID": "7e62f3b5-2c5d-4fef-818d-db15ac95df69",
+  "runtimeConfigMapUID": "54b3d39d-9496-416b-9fa3-36ab64da664c",
+  "publicProjectionMatches": true,
+  "realInference": true,
+  "reply": "SAW_PROXY_OK",
+  "unapprovedHostDenied": true,
+  "unknownMarkerDenied": true,
+  "clientCNIIngressTested": false,
+  "repeatSyncVerified": true,
+  "notes": [
+    "Loopback-only port-forward bypasses client-side ingress policy; upstream egress and proxy TLS/binding were exercised.",
+    "Client used only saw-cred.inference.api_key; full provider key remained in trusted namespace.",
+    "First ESO attempt requested absent optional URL; corrected through GitOps to request only required api_key."
+  ]
+}

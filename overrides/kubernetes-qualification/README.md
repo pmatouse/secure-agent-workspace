@@ -127,3 +127,40 @@ release compilation. The isolated governance Deployment is now 1/1 Available at
 the pinned digest. The stock OSC `sandboxed-containers-operator.v1.13.1` CSV is
 Succeeded. No `KataConfig` was created because both worker firmware checks failed
 the documented UEFI prerequisite.
+
+## Trusted proxy and stock gateway
+
+`proxy.yaml` deploys the unchanged SAW credential proxy in `saw-k8s-trusted`.
+ESO projects only `api_key` from the approved existing Vault reference. The policy
+binds it to OpenAI; no full key enters `saw-k8s-test`. Bootstrap retains the private
+CA and projects an immutable public CA into the runtime namespace.
+
+[Proxy receipt](../../docs/evidence/glmhg-kubernetes-proxy-2026-11-04.json): real
+`gpt-4.1-mini-2025-04-14` request returned `SAW_PROXY_OK` using only the marker.
+An unapproved CONNECT host and unknown marker were denied. Repeated Argo sync
+preserved the CA Secret UID, public CA fingerprint and runtime ConfigMap UID.
+The transport probe uses loopback-only port-forwarding; it does not prove client
+CNI ingress restrictions.
+
+`gateway.yaml` installs the pinned stock OpenShell Kubernetes gateway with
+retained identity, explicit API/DNS/OIDC/governance/proxy egress, passthrough TLS
+and a retained 1GiB RBD state claim. No agent workspace is activated by this file.
+Pod DNS resolves the issuer to `10.10.10.101`, while bastion DNS returns
+`52.118.50.101`. The first diagnostic timed out; the second reported HTTP 200 and
+`issuerMatches: true` after GitOps permitted the internal VIP on TCP 443. No TLS
+bypass was used. The stock gateway recovered on its normal restart, reported the
+Kubernetes driver connected, initialized eight governance bindings and became
+1/1 Ready under `restricted-v2`. An ordinary owner successfully ran the stock
+`openshell workspace list` through the passthrough Route using OIDC and verified
+TLS. [Gateway receipt](../../docs/evidence/glmhg-kubernetes-gateway-2026-11-04.json).
+
+The gateway-to-governance HTTP service uses network isolation, not transport-level
+caller authentication. This is a development qualification boundary; do not
+represent it as production mTLS. No OpenShell-created workload, supervisor
+lifecycle, container OpenClaw chat or portal parity has passed yet.
+
+Native admission generation 2 reserves the gateway ServiceAccount/labels for its
+controlling StatefulSet. The updated `test-admission.py` passed all six server
+dry runs: ordinary Pod admitted, forged workload/supervisor rejected, forged
+gateway label and forged owner rejected, approved StatefulSet controller admitted.
+No test Pod was persisted. CEL type checking reported no warnings.

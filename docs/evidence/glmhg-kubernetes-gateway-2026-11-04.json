@@ -1,0 +1,46 @@
+{
+  "scope": "Stock Kubernetes gateway startup and authenticated read-only RPC; no OpenShell-created workload or agent parity claimed",
+  "namespace": "saw-k8s-test",
+  "gateway": "saw-k8s-test",
+  "statefulSetUID": "69b44211-2966-4afd-8dce-5b4ac3605ef3",
+  "statePVCUID": "69c7b1f6-5ac6-441b-8682-3e88e493002f",
+  "statePVCPhase": "Bound",
+  "readyReplicas": 1,
+  "scc": "restricted-v2",
+  "gatewayImageID": "quay.io/opendatahub/odh-openshell-gateway@sha256:7bd1357f8b4c293ea6527dee2035e26dcca02fb9a87fb1521a0cd9255ec7d9fc",
+  "driverConfigured": "kubernetes",
+  "driverAdvertised": "kubernetes",
+  "governanceBindingsInitialized": 8,
+  "profileSourcesInitialized": 1,
+  "governanceTransport": "HTTP, network-isolated; no transport-level caller authentication. Development qualification only.",
+  "routeTLS": "passthrough",
+  "routeAdmitted": true,
+  "oidcDiscovery": {
+    "inClusterAddress": "10.10.10.101",
+    "bastionAddress": "52.118.50.101",
+    "httpStatus": 200,
+    "issuerMatches": true
+  },
+  "ordinaryCLI": {
+    "user": "sawvmowner",
+    "verifiedTLS": true,
+    "oidcReadOnlyRPC": "workspace list",
+    "passed": true,
+    "mutatingRPCs": false
+  },
+  "providerSecretInRuntimeNamespace": false,
+  "baselineVMIsUnchanged": true,
+  "recovery": "Initial OIDC discovery failed because Pod DNS resolves to the internal ingress VIP. Added only that VIP through GitOps; gateway recovered on ordinary Kubernetes retry. No TLS bypass or Pod patch.",
+  "nativeGatewayAdmission": {
+    "policyGeneration": 2,
+    "observedGeneration": 2,
+    "celWarnings": [],
+    "ordinaryPod": "admitted",
+    "forgedWorkload": "denied",
+    "forgedSupervisor": "denied",
+    "forgedGatewayLabel": "denied",
+    "forgedGatewayOwner": "denied",
+    "legitimateStatefulSetController": "admitted",
+    "serverDryRunOnly": true
+  }
+}
