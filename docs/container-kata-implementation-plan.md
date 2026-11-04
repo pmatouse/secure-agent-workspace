@@ -629,6 +629,79 @@ Pods, spoof supervisor labels, read bootstrap Secrets, create NetworkPolicies or
 change resource-approval labels. Namespace ownership alone is not a security
 boundary against a user who can mutate these objects.
 
+### One shared SAW implementation across deployment options
+
+**Design requirement: implement SAW feature semantics once.** Keep the controller,
+but make it a thin execution frontend around a shared SAW engine. The VM
+`apply_bom.py` entry point must call that same engine. The current Kubernetes
+compiler/reconciler duplicates a limited subset of the VM profile/apply logic;
+this is temporary foundation code, not a second installer to extend independently.
+Shared-core extraction is the next implementation priority before adding further
+controller profile features.
+
+```mermaid
+flowchart TB
+  P[One SAW profile model and schema] --> C[Shared parsing, validation and desired plan]
+  V[VM apply_bom entry point] --> C
+  K[SAW controller frontend] --> C
+  C --> E[Shared observe, plan, apply and verify engine]
+  E --> O[Common OpenShell client interface]
+  E --> VA[VM platform adapter]
+  E --> KA[Kubernetes platform adapter]
+  KA --> CT[Container placement]
+  KA --> KT[Kata workload placement]
+```
+
+Container and Kata use the **same Kubernetes adapter**. Kata changes approved
+placement and capability checks, not profile parsing, provider behavior or the
+lifecycle algorithm. The supervisor remains ordinary in both initial modes.
+Future confidential mode must reuse the same feature model while adding explicit
+attestation, secret-delivery and storage capabilities; it remains unsupported now.
+
+| Shared implementation | Deployment-specific mechanism |
+|---|---|
+| Profile types, parsing, defaults and validation | Reading verified VM inputs or Kubernetes configuration references |
+| Provider selection, credential-reference/marker semantics, agent configuration | Authorized credential resolver and gateway client identity acquisition |
+| Workspace ownership, desired revision, observe/apply/verify, retry and migration decisions | Execution scheduling: VM service versus controller watch/requeue/lease |
+| Harness contents, signatures/digests, tool policy and agent onboarding | Populating Podman volumes or approved PVCs; executing permitted operations |
+| Logical storage intent, retention policy and lifecycle | Actual volume binding, UID approval, mount configuration and platform initialization |
+| UI/authentication contract and readiness model | VM services/relays versus Kubernetes resources and exposure |
+| OpenShell operation semantics and normalized observations | Existing stock CLI transport initially, or pinned stock gRPC transport |
+
+Backend code must expose small typed operations and capabilities. A new provider
+validation rule or agent setting implemented in the shared core then reaches all
+supported backends when they ship that core revision. A feature requiring a new
+mount, process or exposure capability still needs an adapter implementation and
+qualification. Unsupported capabilities must fail preflight, not be silently
+omitted. Shared implementation does not imply identical isolation properties.
+
+Use one source package (proposed name `saw_core`), not copied helper files or a
+periodic synchronization script. Keep VM host installation, systemd, privilege
+transitions, local PKI/bootstrap and binary installation in the VM adapter. Keep
+PVC/RuntimeClass identity checks and native policy realization in the Kubernetes
+adapter. Share their policy intent and results where semantics agree.
+
+There must be **one active apply owner per workspace**. The VM path executes the
+core in its guest runner; the Kubernetes path executes it in the trusted
+controller. A controller managing VM infrastructure may deliver intent and read
+guest status, but must not also apply the same OpenShell objects concurrently.
+Version/migrate existing identity ledgers explicitly; do not adopt a foreign
+object or recreate storage as a side effect of this refactor.
+
+### Controller API status and proposed boundary
+
+No SAW controller CRD or watch loop is installed yet. The current `Workspace`,
+`Providers` and `Sandboxes` documents are **SAW profile YAML**, not Kubernetes
+custom resources. The existing runtime CRD is stock Agent Sandbox's
+`agents.x-k8s.io/v1beta1/Sandbox`, owned through OpenShell's driver.
+
+The proposed top-level `SecureAgentWorkspace` CRD should reference the same SAW
+profiles and approved deployment bindings, carry deployment mode and lifecycle
+intent, and expose observed generation/revision, conditions and endpoint status.
+Its name/schema remain proposals. Do not invent a second profile schema inside
+the CRD or make the controller own OpenShell-generated Sandbox CRs directly.
+CRD validation and controller status map to the shared engine's contract.
+
 ## 6. Proposed configuration contract
 
 The parent `saw-users` and RHDH provisioning gates still admit only `vm` while
@@ -804,13 +877,41 @@ proxy failure. No endpoint becomes available before its security preconditions.
 **Gate B4:** ordinary-container runtime lifecycle and boundaries pass from source
 alone. No privileged SCC or runtime-socket mount is added as a workaround.
 
-### B5. Complete BOM and storage adapters
+### B5. Extract the shared SAW engine, then complete backend capabilities
 
-Refactor `apply_bom.py` into shared desired-state logic and VM/Podman versus
-Kubernetes adapters; keep existing VM paths and tests. Port provider reconciliation,
-profiles, agent launch, UI relays, signed harness verification, trusted tool gate,
-audit storage, prune/report behavior and drift detection. Remove systemd/Podman
-assumptions only from the new adapter, not by changing the baseline's semantics.
+Refactor `apply_bom.py` into the shared engine described above and VM/Podman versus
+Kubernetes adapters; preserve existing VM behavior. Do this before expanding the
+current Kubernetes-only profile compiler. Use these concrete extraction steps:
+
+1. Extract `Provider`, `Sandbox`, `Workspace`, `Profile`, `parse_profiles`,
+   `validate_profiles` and enabled-profile selection. Both frontends consume the
+   same models and schema; retain stricter validation and test compatibility.
+2. Evolve `plan_for_user` / `profiles_from_plan` into a typed, versioned desired
+   intent with backend capability checks. Public plans, status and logs carry
+   credential references only; private material stays with authorized executors.
+3. Extract the platform-independent parts of `ProfileApplier` into shared
+   observe/plan/apply/verify operations. Its existing `cli()` seam can initially
+   remain the VM transport behind the same interface as the gRPC client.
+4. Split `HarnessVolume`, agent process operations, mounts and UI/service setup
+   behind platform interfaces. Keep shared content, governance checks and agent
+   configuration in the core; implement physical delivery per backend.
+5. Replace the duplicate Kubernetes parsing/lifecycle code with these shared
+   calls. Preserve its tested ownership, generation, retry and storage safeguards;
+   migrate VM state deliberately rather than replacing it with an empty ledger.
+6. Add the thin CRD/watch/status controller frontend and complete missing
+   provider, agent, harness, tool-gate, audit, UI and lifecycle capabilities.
+
+Package the **same pinned core revision** in the controller image and the verified
+VM installer bundle. Today `build-installer-manifest.py` and guest `verify-bundle`
+cover a fixed file set. Extend both signing and staging contracts for all extracted
+code and its required modules; importing unsigned Python from a live mount is not
+an acceptable refactor. No runtime download of an unpinned Python package.
+
+Run shared feature/conformance fixtures through VM and Kubernetes adapters,
+including equivalent normalized OpenShell intent, credentials redaction, ownership,
+recovery, retention and lifecycle outcomes. Run Kubernetes cases with both
+container and Kata placement inputs. Also retain backend-specific security and
+live tests; a common unit test cannot prove Kata kernel or network enforcement.
 
 Use a source-controlled reconciler Deployment with serialized per-workspace apply,
 observed desired-revision hash, bounded retries/backoff and conditions. It must
@@ -849,7 +950,10 @@ parity, not an excuse to delete/recreate and lose data.
 
 **Gate B5:** every supported profile operation has an adapter or an explicit
 not-qualified result; tool approval/denial and audit persist; repeated reconcile
-converges; interrupted apply recovers; retained-data tests pass.
+converges; interrupted apply recovers; retained-data tests pass. Both frontends
+import the same profile/feature core, with no independent schema/parser/apply
+algorithm for the Kubernetes path. Shared feature changes require conformance
+coverage across supported backends; extracted modules retain signing coverage.
 
 ### B6. SAW network, governance and UI integration
 
@@ -1155,8 +1259,9 @@ VM baseline branch/revision independently recoverable. Proposed sequence:
    egress; ordinary supervisor, no upstream forks, extra controllers or rebuilds.
 4. **Kubernetes foundation:** Agent Sandbox lock, gateway/persistent identity,
    scoped RBAC, policies and source-driven minimal runtime proof.
-5. **Shared BOM adapter:** profile/provider lifecycle, approved mounts, harness,
-   tool gate, audit, retention, UI relays and status.
+5. **Shared SAW engine first:** extract VM profile/lifecycle semantics, replace
+   duplicate Kubernetes logic, preserve signed packaging and add conformance
+   tests; then complete platform adapters and the thin CRD/controller frontend.
 6. **Container parity:** complete test matrix, failure recovery and docs.
 7. **Kata qualification:** workload guest feature proof and same test matrix;
    supervisor-in-Kata remains a separate future enhancement.

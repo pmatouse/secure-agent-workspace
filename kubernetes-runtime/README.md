@@ -3,6 +3,18 @@
 Status: **offline-tested foundation; not installed, not full SAW parity, not a
 qualified container/Kata deployment**. Existing VM installer code is unchanged.
 
+Next architectural step: [one shared SAW implementation](../docs/container-kata-implementation-plan.md#one-shared-saw-implementation-across-deployment-options).
+This foundation currently duplicates a subset of `apply_bom.py` profile and apply
+logic. Replace that duplication with a shared core used by both the VM entry point
+and this controller frontend before expanding profile features. Container and Kata
+share the Kubernetes adapter. This extraction has **not** been implemented yet.
+
+No SAW controller CRD/watch loop exists yet; `Workspace`, `Providers` and
+`Sandboxes` inputs here are profile documents, not installed Kubernetes API kinds.
+The proposed controller CRD will reference the shared profile model and expose
+intent/status around the shared engine; the stock Agent Sandbox CR remains
+OpenShell-driver-owned.
+
 This integration uses the stock OpenShell API and Kubernetes driver from
 [`305c8b3`](https://github.com/opendatahub-io/openshell/tree/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f)
 (`v0.1.2-rhaiv.6`). It adds no OpenShell, Kata or agent-image patches.
