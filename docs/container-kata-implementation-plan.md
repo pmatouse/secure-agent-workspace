@@ -1159,7 +1159,9 @@ PVCs under `/data`, matched read-only flags, an optional RuntimeClass and bounde
 resource field names. Host paths, extra containers, security overrides, unknown
 driver fields and non-admin requests are refused. Eight embedded Rust tests
 passed on the Linux bastion using Rust 1.94; the Helm/recipe tests also passed.
-The complete policy image still needs building, pinning and live qualification.
+The complete policy image subsequently passed its eight embedded tests and
+release build, was pinned by digest, and its isolated Deployment became Available.
+Stock protocol and positive/negative policy qualification remain required.
 This does not yet add Kubernetes agent gate/audit/harness mounts. Do not disable
 governance or drop PVC bindings to make a test pass. This is SAW policy integration;
 OpenShell gateway/driver, Agent Sandbox and Kata images remain stock.

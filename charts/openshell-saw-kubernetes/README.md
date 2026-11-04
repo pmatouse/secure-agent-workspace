@@ -157,8 +157,9 @@ missing trust/storage/network inputs, incompatible runtime fields and missing
 experimental opt-in. Config is mounted as a subPath file because stock OpenShell
 rejects symlinked config; its checksum rolls the Pod when configuration changes.
 
-Still needed before a complete deployment: retained-identity bootstrap; trusted
-namespace, ESO and proxy integration; a concrete ANP/VAP health verifier; reconciler
+The separate `saw-kubernetes-identity` chart now implements retained identity
+bootstrap; first and repeated Argo syncs passed on glmhg. Still needed before a
+complete deployment: trusted namespace ESO and proxy integration; a concrete ANP/VAP health verifier; reconciler
 image/Deployment and full profile adapters; owner/UI/RHDH/CLI lifecycle wiring;
 policy API validation and live positive/negative tests. Gateway `/readyz` only
 reports the gateway, not these dependencies or full SAW parity. Follow the
