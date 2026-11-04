@@ -28,7 +28,8 @@ def one(docs, kind, name):
     return found[0]
 
 
-@pytest.mark.parametrize("minutes,wait,task", [(30, "1800", "32m0s"), (60, "3600", "62m0s"), (1, "60", "3m0s")])
+@pytest.mark.parametrize("minutes,wait,task", [(30, "1800", "32m0s"), (60, "3600", "1h2m0s"),
+                                            (58, "3480", "1h0m0s"), (1, "60", "3m0s")])
 def test_bounded_site_guest_readiness_timeout(minutes, wait, task):
     docs = render("--set", f"portal.sandboxReadyTimeoutMinutes={minutes}")
     pipeline = one(docs, "Pipeline", "saw-workspace-create")
