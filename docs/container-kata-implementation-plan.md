@@ -132,7 +132,10 @@ returned a completion but displayed failed-attempt messages; its agent receipt
 reports rerouting. Clean single-attempt UI behavior remains to be investigated.
 Full credential-file scanning passed: no upstream provider key was found in the
 VM, no full provider Secret was attached, and CA/admin cleanup passed. Restart
-persistence, second-VM recovery and RHDH self-service acceptance remain pending. No runtime image, probe or enforcement
+persistence and second-VM recovery now passed: both original root PVC identities
+were retained, both canary hashes matched after a fresh first VMI, and all four
+sandboxes passed post-restart provider inference/egress checks. RHDH self-service
+create/update/delete remains pending. No runtime image, probe or enforcement
 setting was changed. Stock signing remains warn/unsigned, not enforced.
 
 RHDH's real sign-in test exposed a cached startup OIDC discovery failure: the
@@ -140,8 +143,16 @@ provider retained an initial HTTP 503 although live discovery from the backend
 now returned 200. The shared chart adds a public-metadata/TLS startup check before
 RHDH initializes that stock provider. No RHDH image or authentication policy is
 changed. Tests pass (55 on this branch); site `0c318c5` is Argo Synced and its
-operator-owned replacement Pod is initializing. Portal lifecycle testing remains
-pending; this recovery is not clean-replay proof.
+operator-owned replacement passed discovery and rolled out. Ordinary portal login
+now works. Site `1438671` also explicitly disables the unused Brave provider and
+regenerates its form; runtime BOM data is unchanged. The normal portal form
+submitted `saw-create-27v4p` for disposable user `sawportalvm`; request validation,
+Vault registration, Argo applications and VM creation passed. Guest provisioning
+is running; update/delete remains pending. This recovery is not clean-replay proof.
+
+Both container and Kata native-policy manifests were accepted by the live API
+with `oc create --dry-run=server`. No policy or RuntimeClass was created by that
+check. It establishes API/schema acceptance only, not CEL or OVN enforcement.
 
 ## 1. Objective and execution rules
 
@@ -985,6 +996,19 @@ mode cases validate; no VM resources for a new container user; invalid combinati
 fail before application. Source tests and dependency validation pass.
 
 ### B2. Agent Sandbox dependency and deterministic secret foundation
+
+**Progress:** the optional stock Agent Sandbox dependency is already locked to
+`v1.0.9` / `b1277676f8bf0e82ea299928997ecf5d696a92f1`, with the exact controller
+image and manifest hashes in `charts/agent-sandbox/source-lock.yaml`. Its chart
+is disabled and locally tested. The new optional
+[`saw-kubernetes-identity` chart](../charts/saw-kubernetes-identity/README.md)
+uses the stock gateway certificate generator and a SAW helper to retain an atomic
+identity bundle in a separate trusted namespace, then project only required
+gateway keys into the runtime namespace. Repeat sync/crash/concurrent-create,
+conflict rejection, real OpenSSL admin issuance and chart contracts passed 38
+offline tests. No automatic renewal/rotation is implemented; default admin leaf
+lifetime is 30 days. Live dependency/bootstrap qualification and provider-credential
+integration remain outstanding. See [the dependency contract](container-runtime-dependencies.md).
 
 Select a published, compatible Agent Sandbox controller/CRD release and record
 its SHA/digests in a dependency lock before implementation is considered complete.
