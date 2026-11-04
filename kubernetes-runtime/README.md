@@ -305,3 +305,39 @@ attachment/boundary checks remain mandatory for running/start. A custom verifier
 defaults to its full check unless it explicitly supplies `verify_shutdown`.
 Shutdown does not delete storage or bypass gateway authentication.
 The original VM baseline must still pass before live candidate qualification.
+
+## Test a retained generic toolbox
+
+Use the ordinary owner's OIDC gateway login with verified TLS. Supply the
+cluster's API service IP and a Python 3 toolbox. Start only after
+`GenericReady`. Record the sandbox ID, workload and supervisor Pod UIDs, PVC
+UID and PV name. The marker is unique per run.
+
+```bash
+check=./kubernetes-runtime/check-toolbox.sh
+nonce=$(openssl rand -hex 16)
+"$check" "$GATEWAY" "$WORKSPACE" "$SANDBOX" write "$nonce"
+"$check" "$GATEWAY" "$WORKSPACE" "$SANDBOX" deny-api "$API_SERVICE_IP"
+```
+
+Using an independent nonmember's OIDC login, run the following against the
+same gateway, workspace and sandbox. Expect `NONMEMBER_DENIED`.
+
+```bash
+"$check" "$GATEWAY" "$WORKSPACE" "$SANDBOX" nonmember -
+```
+
+Through Git, advance the intent generation and set `desiredState: Stopped`.
+Wait for status `Stopped` and the old workload Pod to disappear. Advance the
+generation again and set `Running`. Wait for `GenericReady`, verify the new
+Pod UIDs, original sandbox ID and original PVC/PV. With the owner's login:
+
+```bash
+"$check" "$GATEWAY" "$WORKSPACE" "$SANDBOX" read "$nonce"
+```
+
+`PVC_READ_OK` confirms the original marker survived. This removes that marker.
+For failed creates, inspect the **first** gateway rejection and the matching
+interceptor decision. Later retries can report an unresolved request ID. Check
+the gateway, Kubernetes objects and retained ledger before issuing a corrected
+generation. Preserve the PVC and state throughout recovery.
