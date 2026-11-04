@@ -1,4 +1,4 @@
-# Stock gateway: HTTPS OIDC uses the observed public ingress VIP plus router nodes.
+# Stock gateway: Pod DNS resolves Keycloak to the internal ingress VIP.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -83,7 +83,7 @@ spec:
               - ipBlock:
                   cidr: 10.10.10.31/32
               - ipBlock:
-                  cidr: 52.118.50.101/32
+                  cidr: 10.10.10.101/32
               ports:
               - protocol: TCP
                 port: 443
