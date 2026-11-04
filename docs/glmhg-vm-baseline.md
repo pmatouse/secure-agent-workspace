@@ -1,6 +1,6 @@
 # glmhg VM baseline
 
-This branch is upstream `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` plus site configuration and an optional Keycloak resource-values input. It does not include the container/Kata implementation. Installation follows README Option A through the Validated Patterns utility container and Argo CD. Component images and operator code remain stock.
+This branch is upstream `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` plus site configuration, an optional Keycloak resource-values input and an RHDH OIDC startup check. It does not include the container/Kata implementation. Installation follows README Option A through the Validated Patterns utility container and Argo CD. Component images and operator code remain stock.
 
 ## Site inputs
 
@@ -109,7 +109,7 @@ default preserves the original render; existing-server mode never modifies the
 shared server. The lab requests `500m` CPU while preserving the operator's
 `1700Mi` memory request and `2Gi` memory limit, with no CPU limit. The RHBK
 operator owns the resulting rollout. This is a chart input addition, not a
-Keycloak binary, probe, realm or authentication change. It is the one integration
+Keycloak binary, probe, realm or authentication change. It is an integration
 code addition to this VM baseline; do not describe the branch as site-values-only.
 See [Keycloak resource requirements](https://www.keycloak.org/operator/advanced-configuration#_resource_requirements).
 
@@ -205,7 +205,7 @@ the stock installer reported all workspaces, providers and sandboxes present.
 | Notebook browser chat | Authenticated owner received `SAW_UI_OK` |
 | Notebook tool gate | Browser-requested `write` denied; owner-attributed audit has `decision=deny`; target file absent |
 | CUDA-profile browser chat | Returned `SAW_CUDA_UI_OK`; UI also showed failed-attempt messages, so clean single-attempt UI behavior is not yet qualified |
-| Credential isolation | Full provider Secrets absent from VM attachments; guest CA-key/admin cleanup passed; full file-hash scan still pending |
+| Credential isolation | Passed: full provider Secrets absent from VM attachments; guest CA-key/admin cleanup passed; full regular-file hash scan found no provider API key; proxy Ready |
 | Persistent user work | Separate canaries written in both workspaces; post-restart hash verification pending |
 
 The CUDA agent receipt reports `rerouted=true`; its final read and inference
@@ -216,8 +216,31 @@ through the external proxy. It is not evidence that the real API key entered
 the VM. The separate credential-isolation test checks that boundary.
 
 Stock artifact signing remains **warn/unsigned**, not enforced signature
-verification. Web search is disabled. Second-VM recovery, full credential scan,
+verification. Web search is disabled. Second-VM recovery,
 restart persistence and RHDH create/update/delete remain acceptance gates;
 container and Kata have not been deployed. Regression coverage for the explicit
 OpenAI endpoint passed, with all 42 official-provider tests passing on the generic
 development branch (its default profiles remain unchanged).
+
+
+### RHDH startup ordering recovery
+
+The first real portal sign-in returned HTTP 500: the stock OIDC provider retained
+its startup discovery failure (`expected 200 OK, got: 503 Service Unavailable`).
+A request from the running backend to the same issuer returned 200, confirming
+that current Keycloak availability alone did not restore this provider instance.
+Inspection of the installed stock `oidcAuthenticator.initialize` confirmed the
+retained discovery promise; no third-party source was patched.
+
+Site `0c318c5` adds `saw-oidc-discovery` after the CA-bundle init container.
+It verifies public metadata over trusted TLS before backend startup, without
+provider credentials or additional RBAC. A source checksum in the Backstage
+Pod-template patch triggers the operator-owned rollout. The chart/helper tests
+passed (46 on this site branch, 55 on the development branch). Argo reports
+Synced/Succeeded at this revision and the replacement Pod includes the new init
+container; plugin installation and real sign-in validation remain pending.
+See [the startup contract](rhdh-user-guide.md#oidc-startup-dependency).
+
+The separate ordinary portal account `sawportalvm` was created through stock
+`make keycloak-add-users`, outside the Git-owned VM inventory. No portal workspace
+has been created yet. Neither baseline VM nor its PVC is disposable portal state.
