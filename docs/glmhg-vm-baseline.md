@@ -124,6 +124,12 @@ realm remain intact; no direct Pod deletion or StatefulSet patch is used.
 This is recovery history only. A fresh installation starts with one replica
 and the final CPU request from the beginning.
 
+The zero-replica stage was observed in both the Keycloak CR and StatefulSet,
+and the old server Pod disappeared before restoring one replica. HyperConverged
+also reached Available=True, Progressing=False, Degraded=False and
+Upgradeable=True. Identity and portal acceptance still require the new Pod
+and RHDH to become Ready; no workload inference is claimed by this receipt.
+
 The private values file must supply `inference.provider=openai`, the private API-key file, model `gpt-4.1-mini`, generated SSH-key file references and the standard generated RHDH OIDC/session fields. Omit the unused web-search entry. Use `VALUES_SECRET` to select that file explicitly; do not overwrite unrelated home-directory secrets.
 
 ## Verification receipt — 2026-11-04

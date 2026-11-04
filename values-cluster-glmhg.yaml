@@ -1,9 +1,7 @@
 # Nested lab storage makes initial operator image pulls slow. Keep this
 # recovery policy declarative; OLM owns failed unpack Job cleanup/retry.
 keycloak:
-  # Temporary recovery: OrderedReady waits on the unhealthy old Pod before
-  # applying the new CPU request. Restore to one after the operator scales down.
-  instances: 0
+  instances: 1
   resources:
     requests:
       cpu: 500m
