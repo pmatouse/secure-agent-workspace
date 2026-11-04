@@ -246,10 +246,11 @@ rebind/recovery operation is still needed. Removing objects from the desired
 profile is not an implemented prune workflow. Existing sandbox configuration
 changes can still require migration that the core refuses to perform.
 
-Stopping currently runs the same boundary/attachment checks as starting. Revoked
-attachment approval or a failing boundary verifier can therefore block a stop
-request too. An identity-checked emergency-stop/recovery path remains a gap; the
-frontend does not bypass those checks.
+The frontend runs the full boundary check for `Running`. Explicit `Stopped`
+delegates to the core's identity-checked shutdown path, so revoked network or
+attachment approval does not prevent stopping a previously recorded sandbox.
+Coherent inputs, monotonic generations, namespace identity and recorded gateway,
+workspace and sandbox IDs remain mandatory. This is not an adoption or purge path.
 
 ## Status and ownership
 

@@ -136,11 +136,14 @@ def test_real_shared_compiler_and_reconciler_compose_with_restart_and_stop(setup
                          Reconciler(gateway, state_root, lambda plan: None).reconcile, lambda plan: None)
     assert resumed.reconcile_once()["phase"] == "GenericReady"
     assert sum(method == "CreateSandbox" for method, _ in gateway.calls) == 1
+    resumed.verify_boundary = lambda _: (_ for _ in ()).throw(RuntimeError("revoked"))
+    assert resumed.reconcile_once()["reason"] == "BoundaryRejected"
     update_intent(setup, lambda i: i.update(generation=2, desiredState="Stopped"))
     assert resumed.reconcile_once()["phase"] == "Pending"
     instance["status"]["phase"] = "SANDBOX_PHASE_STOPPED"
     assert resumed.reconcile_once()["phase"] == "Stopped"
     assert instance["metadata"]["id"] == sandbox_id
+    assert sum(method == "CreateSandbox" for method, _ in gateway.calls) == 1
 
 
 def test_missing_boundary_verifier_fails_before_api_access(setup):

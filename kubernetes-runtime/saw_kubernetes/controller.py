@@ -331,10 +331,14 @@ class Controller:
                     or previous.get("generation") == intent["generation"] and previous.get("revision") != revision):
                 raise InputError("StaleOrConflictingGeneration")
             plan = self.compile_files(copy.deepcopy(files), copy.deepcopy(intent["bindings"]))
-            try:
-                self.verify_boundary(plan)
-            except Exception:
-                raise InputError("BoundaryRejected") from None
+            if intent["desiredState"] == "Running":
+                try:
+                    self.verify_boundary(plan)
+                except Exception:
+                    raise InputError("BoundaryRejected") from None
+            # Stopped delegates to the core's identity-checked shutdown path.
+            # Renewed network/attachment approval must not prevent stopping an
+            # already recorded sandbox. Input fencing above remains mandatory.
             state.update(inputUIDs=uids, intent={"generation": intent["generation"], "revision": revision})
             self.store.save(state)  # Fence identities and intent before any core mutation.
             result = self.core_pass(plan, generation=intent["generation"], desired_state=intent["desiredState"])
