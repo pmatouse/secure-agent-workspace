@@ -206,7 +206,7 @@ the stock installer reported all workspaces, providers and sandboxes present.
 | Notebook tool gate | Browser-requested `write` denied; owner-attributed audit has `decision=deny`; target file absent |
 | CUDA-profile browser chat | Returned `SAW_CUDA_UI_OK`; UI also showed failed-attempt messages, so clean single-attempt UI behavior is not yet qualified |
 | Credential isolation | Passed: full provider Secrets absent from VM attachments; guest CA-key/admin cleanup passed; full regular-file hash scan found no provider API key; proxy Ready |
-| Persistent user work | Separate canaries written in both workspaces; post-restart hash verification pending |
+| Persistent user work | Both canary hashes matched after a fresh VMI, with the root PVC UID retained |
 
 The CUDA agent receipt reports `rerouted=true`; its final read and inference
 succeeded, but this is not evidence that every internal attempt succeeded.
@@ -216,8 +216,8 @@ through the external proxy. It is not evidence that the real API key entered
 the VM. The separate credential-isolation test checks that boundary.
 
 Stock artifact signing remains **warn/unsigned**, not enforced signature
-verification. Web search is disabled. Second-VM recovery,
-restart persistence and RHDH create/update/delete remain acceptance gates;
+verification. Web search is disabled. Second-VM recovery and
+restart persistence passed; RHDH create/update/delete remains an acceptance gate;
 container and Kata have not been deployed. Regression coverage for the explicit
 OpenAI endpoint passed, with all 42 official-provider tests passing on the generic
 development branch (its default profiles remain unchanged).
@@ -237,13 +237,13 @@ It verifies public metadata over trusted TLS before backend startup, without
 provider credentials or additional RBAC. A source checksum in the Backstage
 Pod-template patch triggers the operator-owned rollout. The chart/helper tests
 passed (46 on this site branch, 55 on the development branch). Argo reports
-Synced/Succeeded at this revision and the replacement Pod includes the new init
-container; plugin installation and real sign-in validation remain pending.
+Synced/Succeeded at this revision; the replacement Pod completed plugin
+installation and real sign-in passed, as recorded below.
 See [the startup contract](rhdh-user-guide.md#oidc-startup-dependency).
 
 The separate ordinary portal account `sawportalvm` was created through stock
-`make keycloak-add-users`, outside the Git-owned VM inventory. No portal workspace
-has been created yet. Neither baseline VM nor its PVC is disposable portal state.
+`make keycloak-add-users`, outside the Git-owned VM inventory. Its workspace is reserved for the create/update/delete acceptance cycle. Neither
+baseline VM nor its PVC is disposable portal state.
 
 
 The replacement RHDH Pod passed `saw-oidc-discovery` at 20:08:13 UTC and rolled
@@ -259,5 +259,36 @@ site provider document now explicitly disables Brave; `make catalog` removes the
 unused key requirement. With the correct runtime values, Helm comparison proves
 the projected BOM data is byte-for-byte unchanged; this is a form/source-input
 alignment, not another VM configuration change. Other profiles and generic
-branch defaults retain their own provider requirements. Form creation and full
-portal lifecycle validation are still pending.
+branch defaults retain their own provider requirements. The corrected form has
+submitted the create request below; full portal lifecycle validation is pending.
+
+
+### Restart and second-user acceptance
+
+[Machine-readable receipt](evidence/glmhg-vm-restart-2026-11-04.json): both ordinary
+users authenticated through verified TLS after guest install/apply completed.
+All four sandboxes (two per VM) passed provider inference and denied undeclared
+egress. Both first-VM workspace canaries retained their exact SHA-256 values.
+
+| User | Fresh VMI UID | Retained root PVC UID |
+|---|---|---|
+| `sawvmowner` | `315ac357-1dc9-4972-8656-81eddcb79ebe` | `90f11b7f-dc4f-4658-aa7a-fbe269305e4b` |
+| `sawvmother` | `093586ed-ccdf-4b6b-b9ac-d4f6e141efdf` | `f8adadaa-a89a-4f90-b459-fb4617e77d0b` |
+
+These are ordinary KubeVirt VMs. The `cuda-dev` profile name does not imply GPU
+computation was tested: inference used the approved external OpenAI API. The
+first VM also has actual OpenClaw tool execution and browser-policy evidence
+above; the second VM's checks here cover owner exec, provider inference and egress.
+
+### Portal create acceptance in progress
+
+The ordinary `sawportalvm` user submitted the corrected RHDH form. Task
+`50cbc1c7-1875-42a4-b707-2106eeecce66` created PipelineRun `saw-create-27v4p`.
+Request validation, Vault registration, Argo applications, VM creation and VM
+Running gates passed without manual Kubernetes/Vault workload changes.
+Guest provisioning is still running. VMI UID is
+`bc975372-4877-4950-aa82-be8cc240f07a` on `control-plane-cluster-glmhg-2`.
+
+The same ordinary portal user was denied the second baseline owner's notebook
+route with HTTP 403. This browser check complements the earlier cross-owner
+gateway gRPC denial. The temporary local form credential files were removed.
