@@ -169,3 +169,42 @@ No cluster calls, image pulls or guest builds were made for these foundations.
 Temporary protobuf/compiler and test artifacts are disposable; keep source and
 sanitized test receipts. Cluster admission, networking, runtime and full SAW E2E
 remain pending.
+
+### Shared-core and ConfigMap-controller follow-up
+
+Code revision: `1cdc6367938d4e89472a9d38cf42deeee6d06ce6`.
+[Linux verification run](https://github.com/pmatouse/secure-agent-workspace/actions/runs/41847305072).
+
+| Check | Result |
+|---|---|
+| Static lint and shared external/static tests | Passed; 621 passed, one optional SDK-module skip |
+| Python 3.12 behavior/integration suite | 1,715 passed, eight existing optional/environment skips |
+| Python 3.14 behavior/integration suite | 1,715 passed, the same eight skips |
+| Installer bundle-drift job | Passed |
+
+There are no new skipped tests. The explicit skip categories are the same as the
+foundation receipt above. Linux exercised the signed-core staging checks that
+were skipped locally; this remains offline verification, not cluster qualification.
+
+This follow-up replaces duplicate profile parsing with the canonical SAW core,
+shares workspace/provider/sandbox stage ordering with the VM adapter, adds the
+ConfigMap controller and provides a local intent/hash builder. The guest verifier
+and staging scripts remain byte-for-byte identical to the preceding baseline;
+the extracted core travels inside the existing signed `apply_bom.py` artifact.
+
+Local checks passed: static lint; 205 focused profile/runtime tests before the
+final review fixes; 68 focused controller/intent tests after those fixes; and 42
+packaging/signing checks with nine Linux-only cases skipped. These suites overlap.
+The Linux run is the authoritative result for guest behavior and real staging.
+
+The first CI run rejected comment-only drift between the two bundled verifier
+copies. Removing those comments restored byte identity without changing verifier
+behavior. Review also tightened DNS-name validation and malformed watch-error
+handling, with regression tests. No test or installation gate was disabled.
+
+Local macOS tooling limitations were checked against the unchanged baseline:
+LibreSSL lacks required certificate options, Linux `shred` is absent, and tar can
+add AppleDouble files. The supported OpenSSL already installed on the workstation
+and `COPYFILE_DISABLE=1` resolved the applicable checks; Linux CI covers the guest
+toolchain. No extra local tooling, images or VM disks were downloaded. Task-owned
+scratch and generated caches were removed; no cluster access occurred.
