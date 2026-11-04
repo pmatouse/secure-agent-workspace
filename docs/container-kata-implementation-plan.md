@@ -1,6 +1,6 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **offline foundations tested; glmhg VM baseline bootstrap in progress; container/Kata deployment and cluster qualification remain pending**.
+Status: **offline foundations tested; glmhg platform bootstrap passed; VM acceptance in progress; container/Kata deployment and cluster qualification remain pending**.
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
 Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
 
@@ -94,14 +94,22 @@ input to scale to zero, observe the server Pod disappear, then restore one.
 The replacement Pod has the intended `500m` CPU request. PostgreSQL, its PVC and
 the completed realm import were retained; no direct Pod deletion or StatefulSet
 patch was used. Fresh installs start with one replica and the final resource
-request. The replacement server is still starting; readiness is not yet proved.
+request. The replacement server, Keycloak CR, owner resolver and redirect
+registrar subsequently became Ready; the new server had no restarts.
 
 RHDH's dynamic-plugin, RAG-data and CA-bundle init containers all completed with
-exit code zero. Application readiness and the Keycloak client hook remain pending.
+exit code zero. Both application containers became Ready, and the standard
+Keycloak-client hook completed, including catalog-reader roles and the default
+user group. The documented `pattern.sh make argo-healthcheck` then exited zero:
+all ten platform Applications were Synced/Healthy.
 
 Two-user VM inputs passed `make prereqs-check`, including enabled network
-policies, and remain undeployed until platform readiness. Cluster-published
-`virtctl` 1.8.4 is installed on the bastion. Full VM/RHDH acceptance is pending.
+policies. After platform readiness, site commit `d1b5e39` declares `sawvmowner`
+and `sawvmother`, each with the data-science profile and NetworkPolicy enabled.
+The staged YAML exactly matches the successful preflight input and renders six
+child Applications. Account creation uses stock `make keycloak-add-users`;
+passwords remain in its Kubernetes Secret. Cluster-published `virtctl` 1.8.4 is
+installed on the bastion. VM guest startup and full VM/RHDH acceptance are pending.
 This is a recovery run, not clean replay evidence.
 
 ## 1. Objective and execution rules
