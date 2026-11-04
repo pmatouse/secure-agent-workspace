@@ -109,8 +109,21 @@ and `sawvmother`, each with the data-science profile and NetworkPolicy enabled.
 The staged YAML exactly matches the successful preflight input and renders six
 child Applications. Account creation uses stock `make keycloak-add-users`;
 passwords remain in its Kubernetes Secret. Cluster-published `virtctl` 1.8.4 is
-installed on the bastion. VM guest startup and full VM/RHDH acceptance are pending.
+installed on the bastion. Both root disks imported and both VMs reached Running.
+Full VM/RHDH acceptance is pending.
 This is a recovery run, not clean replay evidence.
+
+The first VM completed component installation but OpenClaw `2026.9.6` rejected
+`openai/gpt-4.1-mini` while validating `agents.entries.main.model`. Its local
+OpenAI catalog was empty before the agent gateway started, although the live
+provider API independently listed this model. The wildcard runtime setting was
+already correct. Site commit `9a15f37` uses the supported sandbox inputs
+`inference.protocol: openai` and `inference.baseUrl: https://api.openai.com/v1`
+to register the requested model explicitly. This is site configuration, not an
+OpenClaw or OpenShell code change; generic defaults stay unchanged here. The
+focused explicit-endpoint onboarding regression test passes. Live recovery is
+pending Argo sync and the documented VM restart for disk-backed profile inputs.
+Tool-gate setup and all acceptance checks remain required; none are bypassed.
 
 ## 1. Objective and execution rules
 
