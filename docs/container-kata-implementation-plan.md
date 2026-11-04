@@ -1,6 +1,6 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **VM inference/model recovery verified; portal update acceptance in progress; container dependency qualification underway; Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
+Status: **VM inference/model recovery verified; portal update acceptance in progress; container dependency lifecycle verified; Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
 Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
 
@@ -14,10 +14,10 @@ history, including failed attempts):
 | VM baseline | Both retained VMs passed owner inference, undeclared-egress denial and restart/persistence; first VM also passed real OpenClaw browser/tool tests |
 | Portal create | Recovery run passed; separate portal VM returned `SAW_PORTAL_VM_OK` in authenticated OpenClaw chat |
 | Portal model update | Vault/ESO contain the new model; boot-time input disks require the documented restart. Guest verification remains pending. Portal HTTP-status task failed separately; Tekton success is insufficient |
-| Agent Sandbox dependency | Stock controller Available, CRD Established; isolated nonroot `restricted-v2` probe Ready with retained PVC, no token and deny-all network policy; GitOps suspend/resume in progress |
+| Agent Sandbox dependency | Stock controller Available, CRD Established; isolated nonroot `restricted-v2` probe Ready with retained PVC, no token and deny-all network policy; GitOps suspend/resume passed with a fresh Pod and unchanged canary/PVC |
 | Retained identity | First bootstrap and second Argo sync passed; six immutable Secret UIDs and public CA fingerprints unchanged |
 | Native policies | Installed by Argo; no CEL warnings, OVN SetupSucceeded. Dry-run ordinary Pod admitted, forged workload/supervisor roles denied. Packet tests still required |
-| SAW policy image | Full build/push passed: `sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97`; existing VM service unchanged; isolated live service qualification pending |
+| SAW policy image | Full build/push passed: `sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97`; existing VM service unchanged; isolated service 1/1 Available; protocol/policy qualification pending |
 | Kata prerequisite | Both worker nodes have KVM/CPU virtualization, but boot in BIOS. OSC 1.13 documents UEFI. Stock operator installation is separate; no KataConfig, forced eligibility or reboot requested |
 
 The next container integration remains the dedicated credential-proxy wiring,

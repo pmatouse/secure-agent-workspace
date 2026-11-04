@@ -1,7 +1,7 @@
 # Stock Kubernetes runtime dependencies
 
 Status: stock controller/CRD installed on glmhg; retained identity resync passed;
-**isolated container persistence testing is in progress and full SAW/Kata
+**isolated container persistence testing passed and full SAW/Kata
 qualification remains pending**. Both lab workers boot in BIOS, which fails
 OSC 1.13's documented UEFI prerequisite. Installing this dependency does not enable the portal's container or
 Kata provisioning gate. VM remains the default.
