@@ -24,12 +24,47 @@ the private OpenAI input on the supplied bastion and loading it into Vault.
 The stock golden image was mirrored by the documented in-cluster target, with
 the source index digest preserved. Stock OpenShell CLI 0.1.2 was checksum-verified.
 The standard `pattern.sh make install` runs on the Linux bastion to avoid large
-laptop downloads. Its initial rootless Podman `storage-chown-by-maps` step can
-take several minutes on this nested lab storage; do not interpret image pull
-completion as completion of container startup.
+laptop downloads. The first rootless Podman `storage-chown-by-maps` operation
+was too slow on this nested lab storage. That attempt was stopped before any
+Ansible task ran; its log is retained. The wrapper's existing `EXTRA_ARGS`
+input selects the following runner configuration, without changing its source:
+
+```bash
+export EXTRA_ARGS="--userns=keep-id:uid=0,gid=0 --user=0:0 -v /home/lab-user:/root"
+./pattern.sh make install SSH_KEY_PATH=/home/lab-user/.saw-private/glmhg/sandbox-ssh
+```
+
+Podman still runs as unprivileged `lab-user`. UID 0 inside the utility container
+maps to that user through the rootless namespace; it is not bastion root. The
+extra home alias makes the same private input directory available to the
+utility's root account. A read-only probe verified cluster access and the exact
+source revision before installation. This changes the bootstrap runner, not
+SAW guest privileges, credentials policy or deployment code. See
+[Podman's user-namespace documentation](https://docs.podman.io/en/stable/markdown/podman-run.1.html#userns-mode).
 
 Full platform convergence, VM inference, owner isolation and RHDH acceptance
-are still pending. See the [site inputs and artifact receipt](https://github.com/pmatouse/secure-agent-workspace/blob/site/glmhg-vm-baseline/docs/glmhg-vm-baseline.md).
+are still pending. Patterns operator `0.0.82` and OpenShift GitOps `1.21.7`
+have been installed by the framework; `vp-gitops` reports Available. The root
+Application references the intended site branch. Startup webhook and default
+AppProject ordering errors were allowed to recover through their controllers;
+no resources were patched to bypass them. See the
+[site inputs and artifact receipt](https://github.com/pmatouse/secure-agent-workspace/blob/site/glmhg-vm-baseline/docs/glmhg-vm-baseline.md).
+
+The first platform run timed out waiting for Vault authentication because the
+External Secrets operator bundle exceeded OLM's ten-minute unpack deadline.
+Site recovery commit `01a6c4f` adds a 30-minute timeout and ten-minute automatic
+retry interval through stock clustergroup `extraObjects`. The same OperatorGroup
+identity and scope are retained; a render comparison verifies only the two
+annotations change. Argo applied them and OLM advanced to an InstallPlan without
+manual Job deletion. CNV's missing PriorityClass also appeared through its
+controllers, and its Application reached Synced/Healthy. Operator and workload
+readiness must still be checked separately.
+
+The original installer exited at its Vault-auth wait. After ESO and the stock
+unseal job are ready, resume with the documented `pattern.sh make load-secrets`;
+do not launch a second full install or hand-create Vault auth state. Keycloak
+is still initializing its database/realm. This is a recovery run, not clean
+replay evidence, and no workspace or RHDH acceptance result is claimed yet.
 
 ## 1. Objective and execution rules
 
