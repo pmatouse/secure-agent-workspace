@@ -573,6 +573,10 @@ lint-static: ## Lint charts and shell syntax without running pytest
 					--set "deployment.mode=$$mode" \
 					--set-string "kubernetes.workload.runtimeClassName=$$runtime_class" >/dev/null || exit; \
 			done; \
+		elif [ "$$chart" = charts/saw-kubernetes-identity ]; then \
+			helm lint "$$chart" || exit; \
+			helm lint "$$chart" --namespace saw-lint-trusted -f tests/fixtures/saw-kubernetes-identity-values.yaml || exit; \
+			helm template identity-lint "$$chart" --namespace saw-lint-trusted -f tests/fixtures/saw-kubernetes-identity-values.yaml >/dev/null || exit; \
 		elif [ "$$chart" = charts/agent-sandbox ]; then \
 			helm lint "$$chart" || exit; \
 			helm lint "$$chart" --namespace agent-sandbox-system --set enabled=true || exit; \

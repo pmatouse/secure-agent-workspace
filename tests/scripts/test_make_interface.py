@@ -178,6 +178,12 @@ exec /bin/bash "$@"
                 assert "--api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy" in policy
             assert "helm lint charts/agent-sandbox" in helm_calls
             assert "helm lint charts/saw-runtime-policies" in helm_calls
+            assert "helm lint charts/saw-kubernetes-identity" in helm_calls
+            identity = next(call for call in helm_calls if call.startswith(
+                "helm template identity-lint charts/saw-kubernetes-identity"))
+            assert "--namespace saw-lint-trusted" in identity
+            assert "-f tests/fixtures/saw-kubernetes-identity-values.yaml" in identity
+            assert "sandboxName" not in identity
             assert "helm template agent-sandbox charts/agent-sandbox --namespace agent-sandbox-system --set enabled=true" in helm_calls
 
 
