@@ -1,6 +1,6 @@
 # glmhg Kubernetes foundation qualification
 
-Prepared site manifests; **not activated by the VM baseline root application**.
+Site foundation manifests, activated by `values-cluster-glmhg.yaml`.
 They install only the stock Agent Sandbox dependency and the retained identity
 bootstrap. They do not create a gateway, reconciler, agent workspace, provider
 credential, KataConfig or RuntimeClass, and do not enable portal backend choices.
@@ -17,8 +17,7 @@ controller ClusterRole/Binding. Repeat the inventory before activation; do not
 install a second owner. API Service/backend and DNS values are cluster-specific.
 The baseline VMs remain in their existing namespaces on control-plane nodes.
 
-After the VM/RHDH acceptance gate, activate through the existing site's
-`clusterGroup.applications`, with this Kustomize path:
+The existing site's `clusterGroup.applications` selects this Kustomize path:
 
 ```yaml
 saw-kubernetes-foundation:
@@ -34,3 +33,9 @@ the Sandbox CRD is Established and the stock controller is Available, and record
 only Secret UIDs/public certificate fingerprints for repeat-sync checks—never
 Secret values. Then qualify the separate gateway/policy/reconciler integration.
 This foundation alone is not evidence that container or Kata SAW works.
+
+Activation follows successful baseline and disposable-VM inference/owner/egress
+tests. It runs independently of the remaining portal dashboard cold pull and
+update/delete acceptance. Those tests remain required; no container/Kata agent
+is enabled by installing these dependencies. The ownership inventory was repeated
+before activation and found no matching CRD, namespaces or controller RBAC.

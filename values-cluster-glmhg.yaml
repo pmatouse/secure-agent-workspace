@@ -15,6 +15,12 @@ keycloak:
       memory: 2Gi
 
 clusterGroup:
+  applications:
+    saw-kubernetes-foundation:
+      name: saw-kubernetes-foundation
+      namespace: openshell-agents
+      path: overrides/kubernetes-qualification
+      kustomize: true
   subscriptions:
     openshift-virtualization:
       # OLM applies resources to every operator container in this bundle.
