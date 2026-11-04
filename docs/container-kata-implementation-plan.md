@@ -147,8 +147,19 @@ operator-owned replacement passed discovery and rolled out. Ordinary portal logi
 now works. Site `1438671` also explicitly disables the unused Brave provider and
 regenerates its form; runtime BOM data is unchanged. The normal portal form
 submitted `saw-create-27v4p` for disposable user `sawportalvm`; request validation,
-Vault registration, Argo applications and VM creation passed. Guest provisioning
-is running; update/delete remains pending. This recovery is not clean-replay proof.
+Vault registration, Argo applications and VM creation passed. The first run
+exceeded its 30-minute wait. A normal resubmission with the documented 60-minute
+site input succeeded around 21:29 UTC after cold image pulls completed. The new
+VM passed owner exec, both provider completions, both undeclared-egress denials,
+and an actual OpenClaw browser reply `SAW_PORTAL_VM_OK`.
+
+A model-update request reached Vault/ESO but the guest retained its old model:
+this baseline uses `vm.liveInputs: false`, so its input disks change on restart.
+The documented restart was requested for only the disposable portal VM; its
+post-restart model check remains pending. The UI task separately failed a status
+HTTP request despite Tekton success. Route readiness does not attest the applied
+model generation. Update/delete acceptance remains open. This recovery is not
+clean-replay proof.
 
 Both container and Kata native-policy manifests were accepted by the live API
 with `oc create --dry-run=server`. No policy or RuntimeClass was created by that
@@ -162,10 +173,15 @@ Make/Bash; the same suite passed on Linux without code workarounds. Test executi
 used `KUBECONFIG=/dev/null`; its temporary source checkout was removed afterward.
 The optional pinned-SDK wire suite was not rerun in this batch.
 
-Identity/bootstrap and shutdown source is pushed; live container/Kata qualification
-has not started. The site has prepared inactive foundation manifests under
-`overrides/kubernetes-qualification`, with immutable integration revision and
-separate trusted/runtime namespaces. They do not install a gateway or workload.
+The site activated `overrides/kubernetes-qualification` at `f17690b` after the
+VM inference/owner/egress checks. The stock Agent Sandbox controller is Available
+and its CRD Established. The retained identity bootstrap and a second explicit
+Argo sync both succeeded; all six identity Secret UIDs and immutability settings
+were retained. These are dependency/bootstrap tests, not workload acceptance.
+No gateway, agent workload or Kata runtime is installed by that foundation.
+Site `08c513e` adds an isolated, automatic OpenShift build of the SAW governance
+candidate from pinned source/base images. It does not change the policy service
+used by baseline VMs; completion, digest pinning and live tests remain required.
 The runtime shutdown path now stops only recorded identities without requiring
 renewed PVC attachment approval; `Running` still requires the full checks.
 
