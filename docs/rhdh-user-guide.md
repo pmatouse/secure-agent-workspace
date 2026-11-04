@@ -32,6 +32,28 @@ oc get application openshell-rhdh -n vp-gitops -o json \
 A missing kind usually means an operator is still installing
 (`oc get csv -A | grep -iE "rhdh|pipelines"` shows `Succeeded` when done).
 
+### OIDC startup dependency
+
+With TLS verification enabled, the RHDH Pod builds its CA bundle, then runs
+`saw-oidc-discovery` before starting the backend. It requires HTTPS discovery,
+an exact issuer match and secure authorization/token/userinfo/JWKS endpoints.
+The check uses public metadata only; it has no client secret or service-account
+volume. It retries for ten minutes and exits nonzero if the issuer is unavailable;
+Kubernetes retries the init container while the backend remains stopped.
+
+This avoids a stock RHDH OIDC-provider startup failure: its initial discovery
+promise is retained, so a 503 during initialization can leave sign-in broken even
+after Keycloak recovers. Pod readiness alone does not verify login. The integration
+adds startup ordering, not changes to RHDH/Keycloak code or authentication policy.
+The check does not repair a new outage after backend initialization. Its source
+checksum is in the Pod-template patch so Argo/operator rollout picks up changes.
+The existing explicit insecure test mode omits both CA and discovery init steps.
+
+```bash
+oc logs -n rhdh deploy/backstage-developer-hub -c saw-oidc-discovery
+# OIDC discovery ready; issuer and TLS verified
+```
+
 ### 1.2 Secrets in Vault
 
 The `rhdh-oidc` entry in `values-secret.yaml.template` generates RHDH's
