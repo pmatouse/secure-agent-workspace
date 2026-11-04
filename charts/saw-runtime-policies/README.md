@@ -189,3 +189,12 @@ Cluster acceptance remains required before enabling workspace provisioning:
 The Python suite checks rendered objects, unsafe-input rejection and ordered
 ANP peer/port matching. It does not execute Kubernetes CEL or OVN; do not record
 the pending checks above as live results.
+
+## Gateway identity
+
+The credential proxy and governance service use gateway labels as network peers.
+Admission reserves the gateway label and ServiceAccount for the approved instance
+and controlling StatefulSet, accepts creates only from the Kubernetes StatefulSet
+controller, and prevents adding/removing this identity on existing Pods. Only
+trusted GitOps administrators may write that StatefulSet or its namespace RBAC.
+A namespace user able to deploy arbitrary StatefulSets is outside this trust model.

@@ -183,7 +183,7 @@ def test_identity_fences_cover_creation_and_label_removal_on_update():
     assert any('request.userInfo.username == "system:serviceaccount:saw-alice:saw-alice-gateway"'
                in check for check in checks)
     assert any("r.kind == 'Sandbox'" in check for check in checks)
-    assert all("r.controller" not in check for check in checks)  # stock supervisor owner is non-controlling
+    assert all("r.controller" not in check for check in checks if "r.kind == 'Sandbox'" in check)  # stock supervisor owner is non-controlling
     assert any("variables.sandboxAccount && variables.role in ['workload', 'supervisor']" in check for check in checks)
 
 
@@ -231,3 +231,12 @@ def test_duplicate_rule_names_are_rejected(tmp_path):
 
 def test_priority_zero_is_a_valid_explicit_allocation():
     assert render("--set", "network.priority=0")["AdminNetworkPolicy"]["spec"]["priority"] == 0
+
+
+def test_gateway_proxy_identity_requires_pinned_statefulset_and_controller():
+    checks = expressions(render())
+    assert any("r.kind == 'StatefulSet'" in c and "r.controller" in c and
+               'r.name == "saw-alice-gateway-gateway"' in c for c in checks)
+    assert any("variables.previousGatewayClaim == variables.gatewayClaim" in c for c in checks)
+    assert any("system:serviceaccount:kube-system:statefulset-controller" in c and
+               "request.operation != 'CREATE'" in c for c in checks)

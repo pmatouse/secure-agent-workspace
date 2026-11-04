@@ -37,7 +37,39 @@ spec:
       expression: >-
         variables.sandboxAccount || variables.role in ['workload', 'supervisor'] ||
         variables.previousSandboxAccount || variables.previousRole in ['workload', 'supervisor']
+    - name: gatewayClaim
+      expression: >-
+        (has(object.spec.serviceAccountName) && object.spec.serviceAccountName == {{ .Values.gatewayServiceAccount | toJson }}) ||
+        (has(object.metadata.labels) && 'openshell.pattern/role' in object.metadata.labels &&
+         object.metadata.labels['openshell.pattern/role'] == 'gateway')
+    - name: previousGatewayClaim
+      expression: >-
+        oldObject != null && ((has(oldObject.spec.serviceAccountName) &&
+        oldObject.spec.serviceAccountName == {{ .Values.gatewayServiceAccount | toJson }}) ||
+        (has(oldObject.metadata.labels) && 'openshell.pattern/role' in oldObject.metadata.labels &&
+         oldObject.metadata.labels['openshell.pattern/role'] == 'gateway'))
   validations:
+    - expression: >-
+        !variables.gatewayClaim || (has(object.spec.serviceAccountName) &&
+        object.spec.serviceAccountName == {{ .Values.gatewayServiceAccount | toJson }} &&
+        has(object.metadata.labels) && 'openshell.pattern/role' in object.metadata.labels &&
+        object.metadata.labels['openshell.pattern/role'] == 'gateway' &&
+        'app.kubernetes.io/instance' in object.metadata.labels &&
+        object.metadata.labels['app.kubernetes.io/instance'] == {{ .Values.gatewayId | toJson }} &&
+        has(object.metadata.ownerReferences) && object.metadata.ownerReferences.exists(r,
+          r.kind == 'StatefulSet' && r.apiVersion == 'apps/v1' && has(r.controller) && r.controller &&
+          r.name == {{ printf "%s-gateway" .Values.gatewayId | toJson }}))
+      message: Gateway identity requires the approved ServiceAccount, instance and controlling StatefulSet.
+      reason: Forbidden
+    - expression: >-
+        request.operation != 'UPDATE' || variables.previousGatewayClaim == variables.gatewayClaim
+      message: Pods cannot acquire or drop gateway identity after creation.
+      reason: Forbidden
+    - expression: >-
+        request.operation != 'CREATE' || !variables.gatewayClaim || request.userInfo.username in
+        ['system:serviceaccount:kube-system:statefulset-controller', 'system:kube-controller-manager']
+      message: Only the Kubernetes StatefulSet controller may create a gateway Pod.
+      reason: Forbidden
     - expression: >-
         !variables.runtimePod || (variables.sandboxAccount && variables.role in ['workload', 'supervisor'])
       message: OpenShell runtime Pods must preserve the approved ServiceAccount and role labels.
