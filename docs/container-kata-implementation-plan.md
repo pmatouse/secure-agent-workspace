@@ -688,19 +688,45 @@ guest status, but must not also apply the same OpenShell objects concurrently.
 Version/migrate existing identity ledgers explicitly; do not adopt a foreign
 object or recreate storage as a side effect of this refactor.
 
-### Controller API status and proposed boundary
+### Controller inputs: reuse current SAW; defer a new CRD
 
 No SAW controller CRD or watch loop is installed yet. The current `Workspace`,
 `Providers` and `Sandboxes` documents are **SAW profile YAML**, not Kubernetes
 custom resources. The existing runtime CRD is stock Agent Sandbox's
 `agents.x-k8s.io/v1beta1/Sandbox`, owned through OpenShell's driver.
 
-The proposed top-level `SecureAgentWorkspace` CRD should reference the same SAW
-profiles and approved deployment bindings, carry deployment mode and lifecycle
-intent, and expose observed generation/revision, conditions and endpoint status.
-Its name/schema remain proposals. Do not invent a second profile schema inside
-the CRD or make the controller own OpenShell-generated Sandbox CRs directly.
-CRD validation and controller status map to the shared engine's contract.
+**Decision: do not add our own CRD for the initial container/Kata integration.**
+A controller does not require a custom resource. Existing SAW already has two
+input paths: Git-owned user values, and the RHDH registry's `saw-ws-<user>`
+ConfigMaps feeding an ApplicationSet. Both render `saw-users`, Argo applications
+and the existing BOM/profile ConfigMaps. Reuse that intent and ownership model.
+
+The new runtime controller should watch its explicitly selected rendered
+profile/configuration/binding inputs and run the shared SAW engine. Validate a
+complete, coherent input revision before applying it. Record input identity and
+content revision; do not assume ConfigMaps provide CRD-style spec generation.
+Publish observed revision, phase, conditions and endpoints in a separate,
+controller-owned status object/ConfigMap. Never write status into Argo-owned
+desired-state ConfigMaps. Adapt RHDH readiness to that output.
+
+Argo/portal retain their declared infrastructure and workspace-deletion ownership;
+the runtime controller owns OpenShell application of the selected profile. Do not
+treat a missing input or deleted ConfigMap as authorization to purge PVCs or keys.
+Git-backed portal intent remains the separate D2 work item; watching ConfigMaps
+does not make the current registry Git-backed automatically.
+
+A thin `SecureAgentWorkspace` CRD remains an **optional future API**, appropriate
+if SAW deliberately introduces a unified workspace operator interface. Its value
+would be structural validation, dedicated resource RBAC, native spec/status and
+generation tracking, and discoverable workspace conditions. Watch/retry logic or
+GitOps alone does not justify it. This follows the Kubernetes
+[ConfigMap versus custom resource guidance](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#should-i-use-a-configmap-or-a-custom-resource).
+
+If introduced later, reuse the same profiles/core and migrate the registry/intent
+boundary explicitly. Do not create independently writable ConfigMap and CRD
+versions of the same workspace. The shared engine must be independent of input
+resource kind so this is an API frontend change. OpenShell continues to own its
+generated Sandbox CRs; the SAW controller must not compete for them.
 
 ## 6. Proposed configuration contract
 
@@ -898,7 +924,7 @@ current Kubernetes-only profile compiler. Use these concrete extraction steps:
 5. Replace the duplicate Kubernetes parsing/lifecycle code with these shared
    calls. Preserve its tested ownership, generation, retry and storage safeguards;
    migrate VM state deliberately rather than replacing it with an empty ledger.
-6. Add the thin CRD/watch/status controller frontend and complete missing
+6. Add the thin ConfigMap-watch/status controller frontend and complete missing
    provider, agent, harness, tool-gate, audit, UI and lifecycle capabilities.
 
 Package the **same pinned core revision** in the controller image and the verified
@@ -1261,7 +1287,8 @@ VM baseline branch/revision independently recoverable. Proposed sequence:
    scoped RBAC, policies and source-driven minimal runtime proof.
 5. **Shared SAW engine first:** extract VM profile/lifecycle semantics, replace
    duplicate Kubernetes logic, preserve signed packaging and add conformance
-   tests; then complete platform adapters and the thin CRD/controller frontend.
+   tests; then complete platform adapters and the ConfigMap-driven controller.
+   A new workspace CRD is deferred and is not an initial delivery requirement.
 6. **Container parity:** complete test matrix, failure recovery and docs.
 7. **Kata qualification:** workload guest feature proof and same test matrix;
    supervisor-in-Kata remains a separate future enhancement.

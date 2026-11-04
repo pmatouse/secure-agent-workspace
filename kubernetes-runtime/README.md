@@ -11,9 +11,11 @@ share the Kubernetes adapter. This extraction has **not** been implemented yet.
 
 No SAW controller CRD/watch loop exists yet; `Workspace`, `Providers` and
 `Sandboxes` inputs here are profile documents, not installed Kubernetes API kinds.
-The proposed controller CRD will reference the shared profile model and expose
-intent/status around the shared engine; the stock Agent Sandbox CR remains
-OpenShell-driver-owned.
+The initial controller will consume existing SAW rendered ConfigMap inputs and
+publish observed status separately; **a new SAW CRD is deferred**. The shared
+engine must be independent of input resource kind. A future unified workspace API
+could use a CRD after an explicit ownership/migration design; the stock Agent
+Sandbox CR remains OpenShell-driver-owned.
 
 This integration uses the stock OpenShell API and Kubernetes driver from
 [`305c8b3`](https://github.com/opendatahub-io/openshell/tree/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f)

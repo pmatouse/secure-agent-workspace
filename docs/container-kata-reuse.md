@@ -110,8 +110,9 @@ render, generic Ready response or portal selector does not establish full parity
 Next implementation priority is the [shared SAW engine](container-kata-implementation-plan.md#one-shared-saw-implementation-across-deployment-options):
 extract existing VM profile/lifecycle semantics and replace the duplicate subset
 in this foundation. The VM entry point and controller must use the same core;
-container/Kata share one platform adapter. Shared extraction and a SAW controller
-CRD remain planned, not delivered by the verification receipts below.
+container/Kata share one platform adapter. Shared extraction and the
+ConfigMap-driven controller remain planned, not delivered by the verification
+receipts below. A new SAW CRD is deferred; it is not required for this integration.
 
 ### Foundation verification receipt
 
