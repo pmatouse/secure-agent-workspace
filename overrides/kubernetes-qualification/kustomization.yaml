@@ -11,3 +11,4 @@ resources:
   - gateway-network-check.yaml
   - controller-inputs.yaml
   - controller.yaml
+  - toolbox-intent.yaml
