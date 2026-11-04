@@ -520,7 +520,13 @@ def test_tls_is_verified_everywhere_by_default(docs):
     assert "NODE_TLS_REJECT_UNAUTHORIZED" not in s["node"]
     assert s["node"]["NODE_EXTRA_CA_CERTS"] == "/opt/saw-ca/ca-bundle.crt"
     pod = s["patch"]["spec"]["template"]["spec"]
-    assert [c["name"] for c in pod["initContainers"]] == ["saw-ca-bundle"]
+    assert [c["name"] for c in pod["initContainers"]] == ["saw-ca-bundle", "saw-oidc-discovery"]
+    gate = pod["initContainers"][1]
+    assert gate["command"][2] == "https://openshell-keycloak-ingress-saw-keycloak.apps.example.com/realms/openshell"
+    assert gate["command"][3] == "/opt/saw-ca/ca-bundle.crt"
+    assert {v["name"] for v in gate["volumeMounts"]} == {"saw-ca", "saw-ca-sources"}
+    assert all(v["readOnly"] for v in gate["volumeMounts"])
+    assert gate["securityContext"]["allowPrivilegeEscalation"] is False
     assert pod["containers"][0]["name"] == "backstage-backend"
     assert {"name": "saw-ca", "mountPath": "/opt/saw-ca", "readOnly": True} in pod["containers"][0]["volumeMounts"]
     assert s["proxy"] == [True, True]
