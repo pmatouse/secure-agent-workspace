@@ -83,3 +83,24 @@ present. OSC 1.13's documented UEFI prerequisite is not met. Do not enable a
 `KataConfig` or override eligibility to label this a supported Kata test. A
 UEFI-provisioned worker is required for the documented path; no existing cluster
 or workload disk is reformatted by this qualification.
+
+
+Observed native-policy acceptance: CEL type checking returned no warnings;
+OVN reported `SetupSucceeded`. Running `python3 test-admission.py` from this
+directory with the site kubeconfig passed three server-side dry-run cases: an
+ordinary restricted Pod was admitted; forged workload and supervisor roles were
+rejected specifically by the runtime-identity policy. The script creates no
+Pods. This does not yet prove allowed runtime creation or packet enforcement.
+
+[Identity resync receipt](../../docs/evidence/glmhg-kubernetes-identity-resync-2026-11-04.json)
+records the six unchanged Secret UIDs, immutable settings and public CA
+fingerprints after a second successful Argo sync. No private keys or tokens are
+included.
+
+
+The candidate policy image build completed successfully through Argo/OpenShift:
+`image-registry.openshift-image-registry.svc:5000/saw-k8s-build/governance-interceptor@sha256:9f9ceabf338d0265cbedd78df6c27721b1616175c64dc022556d7554caa60b97`.
+This verifies full compilation and publication, not live policy behavior; the
+existing VM policy Deployment remains unchanged. The container dependency probe
+reached Ready under `restricted-v2`, a nonzero UID and no service-account token.
+Its first canary/PVC identities were captured before the GitOps suspend phase.

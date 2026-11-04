@@ -1,0 +1,48 @@
+{
+  "scope": "stock dependency and retained identity only",
+  "secrets": [
+    {
+      "namespace": "saw-k8s-trusted",
+      "name": "saw-k8s-test-admin",
+      "uid": "18e64dbf-9d73-4820-a06f-02554a57a257",
+      "immutable": true,
+      "publicCAFingerprint": "df6b98bfbb73509c77b1d58c7ac99132933d29e52f793c4d79e4fd502978f087"
+    },
+    {
+      "namespace": "saw-k8s-trusted",
+      "name": "saw-k8s-test-identity",
+      "uid": "f751fb7b-caa1-4ced-b812-851224f40890",
+      "immutable": true
+    },
+    {
+      "namespace": "saw-k8s-test",
+      "name": "saw-k8s-test-server",
+      "uid": "672e8965-5d55-4333-95d4-258307a1eb92",
+      "immutable": true,
+      "publicCAFingerprint": "df6b98bfbb73509c77b1d58c7ac99132933d29e52f793c4d79e4fd502978f087"
+    },
+    {
+      "namespace": "saw-k8s-test",
+      "name": "saw-k8s-test-client-ca",
+      "uid": "5fc9c59e-9bbb-404f-9c76-8544ac58370a",
+      "immutable": true,
+      "publicCAFingerprint": "df6b98bfbb73509c77b1d58c7ac99132933d29e52f793c4d79e4fd502978f087"
+    },
+    {
+      "namespace": "saw-k8s-test",
+      "name": "saw-k8s-test-jwt",
+      "uid": "6b64879d-d6d3-4f68-8a71-3e280c4dbfb6",
+      "immutable": true
+    },
+    {
+      "namespace": "saw-k8s-test",
+      "name": "saw-k8s-test-kek",
+      "uid": "89e2614d-b892-44ce-aeeb-114f62e1bab8",
+      "immutable": true
+    }
+  ],
+  "verifiedAt": "2026-11-04T21:46:24.218135+00:00",
+  "repeatSync": "Succeeded",
+  "identityUIDsRetained": true,
+  "publicCAFingerprintsRetained": true
+}

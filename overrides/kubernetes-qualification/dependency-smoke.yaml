@@ -44,7 +44,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
-  operatingMode: Running
+  operatingMode: Suspended
   podTemplate:
     metadata:
       labels:
