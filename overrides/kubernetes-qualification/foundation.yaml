@@ -1,0 +1,131 @@
+# Site qualification only. No gateway or agent workload is enabled by this foundation.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saw-k8s-trusted
+  labels:
+    saw.redhat.com/runtime-owner: d8ac361b-9898-4b16-ac35-2d15f86db76b
+    pod-security.kubernetes.io/enforce: restricted
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    argocd.argoproj.io/sync-wave: '-20'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saw-k8s-test
+  labels:
+    saw.redhat.com/runtime-owner: d8ac361b-9898-4b16-ac35-2d15f86db76b
+    pod-security.kubernetes.io/enforce: restricted
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    argocd.argoproj.io/sync-wave: '-20'
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bootstrap-only
+  namespace: saw-k8s-trusted
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 172.231.0.1/32
+    - ipBlock:
+        cidr: 10.10.10.10/32
+    - ipBlock:
+        cidr: 10.10.10.11/32
+    - ipBlock:
+        cidr: 10.10.10.12/32
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-dns
+      podSelector:
+        matchLabels:
+          dns.operator.openshift.io/daemonset-dns: default
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: UDP
+      port: 5353
+    - protocol: TCP
+      port: 53
+    - protocol: TCP
+      port: 5353
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-agent-sandbox
+  namespace: vp-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: e16968b8e37f1b4cb96597149bb3218792b34e06
+    path: charts/agent-sandbox
+    helm:
+      releaseName: saw-agent-sandbox
+      valuesObject:
+        enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-sandbox-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: 3
+    syncOptions:
+    - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-k8s-identity
+  namespace: vp-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: e16968b8e37f1b4cb96597149bb3218792b34e06
+    path: charts/saw-kubernetes-identity
+    helm:
+      releaseName: saw-k8s-test
+      valuesObject:
+        enabled: true
+        ownerID: d8ac361b-9898-4b16-ac35-2d15f86db76b
+        targetNamespace: saw-k8s-test
+        gateway: saw-k8s-test
+        adminDays: 30
+        serverSans:
+        - saw-k8s-test-gateway.saw-k8s-test.svc
+        - saw-k8s-test-gateway.saw-k8s-test.svc.cluster.local
+        - saw-k8s-test-gateway.saw-k8s-test.apps.cluster-glmhg.dyn.redhatworkshops.io
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-trusted
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: 3
+    syncOptions:
+    - CreateNamespace=true
