@@ -1,0 +1,19 @@
+# Nested lab storage makes initial operator image pulls slow. Keep this
+# recovery policy declarative; OLM owns failed unpack Job cleanup/retry.
+clusterGroup:
+  namespaces:
+    external-secrets-operator:
+      # clustergroup 0.9.58's map-form namespace helper does not forward
+      # OperatorGroup annotations. Render the same object via extraObjects.
+      operatorGroup: false
+  extraObjects:
+    external-secrets-operator-group:
+      apiVersion: operators.coreos.com/v1
+      kind: OperatorGroup
+      metadata:
+        name: external-secrets-operator-operator-group
+        namespace: external-secrets-operator
+        annotations:
+          operatorframework.io/bundle-unpack-timeout: 30m
+          operatorframework.io/bundle-unpack-min-retry-interval: 10m
+      # No targetNamespaces: preserve the existing all-namespaces scope.

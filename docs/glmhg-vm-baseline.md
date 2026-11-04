@@ -42,6 +42,42 @@ make check-oidc-ca
 ./pattern.sh make argo-healthcheck
 ```
 
+On this bastion the default rootless UID remap was too slow and was stopped
+before any Ansible task ran. The successful runner invocation uses the
+wrapper's existing input (no wrapper modification):
+
+```bash
+export VALUES_SECRET=/home/lab-user/.saw-private/glmhg/values-secret.yaml
+export EXTRA_ARGS="--userns=keep-id:uid=0,gid=0 --user=0:0 -v /home/lab-user:/root"
+./pattern.sh make install SSH_KEY_PATH=/home/lab-user/.saw-private/glmhg/sandbox-ssh
+```
+
+This is rootless Podman: container UID 0 maps to the unprivileged bastion user,
+not host root. It changes the installer runner only.
+
+### Operator bootstrap recovery
+
+The initial External Secrets bundle Job exceeded OLM's ten-minute deadline
+during cold image pulls on the nested lab. Vault initialized and unsealed,
+but its Kubernetes auth setup waits for the missing ESO service-account token.
+This run is not evidence of a clean first-pass installation.
+
+`values-cluster-glmhg.yaml` gives that OperatorGroup a 30-minute bundle timeout
+and a ten-minute minimum retry interval. OLM performs failed-job cleanup and
+retry; no Job, Subscription or InstallPlan is manually deleted. The root
+Application already includes this cluster-specific values file.
+
+The stock clustergroup 0.9.58 map-form namespace helper omits OperatorGroup
+annotations, so the override disables only that generated object and renders
+the same name, namespace and all-namespaces scope through `extraObjects`.
+Argo retains ownership of the same Kubernetes object. No chart fork is needed.
+See [OLM bundle retry documentation](https://olm.operatorframework.io/docs/troubleshooting/subscription/#subscriptions-failing-due-to-unpacking-errors)
+and [OLM's timeout annotation implementation](https://github.com/operator-framework/operator-lifecycle-manager/blob/master/pkg/controller/bundle/bundle_unpacker.go).
+
+Wait for ESO, Vault auth and secret loading before VM users. If the original
+installer times out, use the documented `./pattern.sh make load-secrets` after
+those dependencies are ready; do not create ad hoc Vault policies or tokens.
+
 The private values file must supply `inference.provider=openai`, the private API-key file, model `gpt-4.1-mini`, generated SSH-key file references and the standard generated RHDH OIDC/session fields. Omit the unused web-search entry. Use `VALUES_SECRET` to select that file explicitly; do not overwrite unrelated home-directory secrets.
 
 ## Verification receipt — 2026-11-04
