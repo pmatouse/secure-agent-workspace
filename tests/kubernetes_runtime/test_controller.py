@@ -150,6 +150,17 @@ def test_missing_boundary_verifier_fails_before_api_access(setup):
     assert api.calls == []
 
 
+@pytest.mark.parametrize("bad_name", ["a.-b", "a-.b", "a..b", "a.-.b"])
+def test_scope_requires_each_dns_subdomain_label_to_be_valid(bad_name):
+    with pytest.raises(ContractError, match="explicit Kubernetes names"):
+        Scope("saw-alice", bad_name, "intent", "status", OWNER_ID)
+
+
+def test_scope_accepts_valid_dotted_configmap_names():
+    scope = Scope("saw-alice", "profile.prod-1", "intent.prod-1", "status.prod-1", OWNER_ID)
+    assert scope.profile_name == "profile.prod-1"
+
+
 @pytest.mark.parametrize("missing", ["profile_name", "bindings_name"])
 def test_missing_or_deleted_input_never_implies_stop_or_purge(setup, missing):
     c, api, _, _, calls, _ = setup
@@ -371,6 +382,17 @@ def test_https_watch_uses_named_field_selector_and_reports_expired_version(https
     assert requests[0][1]["timeout"] == 10
     with pytest.raises(ContractError):
         list(client.watch(client.scope.profile_name, "old"))
+
+
+@pytest.mark.parametrize("error_object", [None, [], "private-error-details"])
+def test_malformed_watch_error_object_is_a_sanitized_api_failure(https_client, error_object):
+    client, _, _ = https_client
+    body = json.dumps({"type": "ERROR", "object": error_object}).encode() + b"\n"
+    client.opener = lambda *a, **kw: io.BytesIO(body)
+    with pytest.raises(ApiError) as error:
+        list(client.watch(client.scope.bindings_name, "old", timeout_seconds=5))
+    assert error.value.code == 0
+    assert str(error.value) == "Kubernetes API failure (0)"
 
 
 @pytest.mark.parametrize("change", [

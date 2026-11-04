@@ -329,7 +329,7 @@ def serve(*, scope, api_server, api_ca_file, projected_token_file,
 
 ## Evidence and remaining work
 
-The **30 frontend tests** exercise fake Kubernetes API snapshots, watches, 410
+The **38 frontend tests** exercise fake Kubernetes API snapshots, watches, 410
 recovery, bounded retry, CAS conflicts, ownership, generation/UID persistence,
 status sanitization and projected-token rotation. One test composes the real
 shared compiler and reconciler with a fake stock gateway through create, controller

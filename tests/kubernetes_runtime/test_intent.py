@@ -74,6 +74,17 @@ def test_generation_must_be_a_positive_integer(inputs, generation):
         build(inputs, generation=generation)
 
 
+@pytest.mark.parametrize("bad_name", ["a.-b", "a-.b", "a..b", "a.-.b"])
+def test_builder_never_emits_an_invalid_dns_subdomain_name(inputs, bad_name):
+    with pytest.raises(IntentError, match="name must be valid"):
+        build_intent(*inputs, name=bad_name, generation=1)
+
+
+def test_builder_accepts_valid_dotted_intent_name(inputs):
+    result = build_intent(*inputs, name="runtime-intent.prod-1", generation=1)
+    assert result["metadata"]["name"] == "runtime-intent.prod-1"
+
+
 def test_complete_profile_is_compiled_before_output(inputs):
     key = next(k for k in inputs[0]["data"] if k.endswith("sandbox.yaml"))
     doc = yaml.safe_load(inputs[0]["data"][key])

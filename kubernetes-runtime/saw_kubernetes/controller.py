@@ -26,7 +26,9 @@ MAX_BODY = 2 * 1024 * 1024
 MAX_DATA = 900 * 1024
 MANAGED = "saw.redhat.com/managed-by"
 CONTROLLER = "kubernetes-runtime-controller"
-NAME = re.compile(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\Z")
+# Kubernetes DNS subdomains require every dot-separated label, not only the
+# entire name, to start and end with an alphanumeric character.
+NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*\Z")
 KEY = re.compile(r"[A-Za-z0-9_.-]+\Z")
 CORE_PHASES = {"Pending", "Retry", "GenericReady", "Stopped"}
 
@@ -190,7 +192,10 @@ class ConfigMapClient:
                     if not isinstance(event, dict):
                         raise ApiError()
                     if event.get("type") == "ERROR":
-                        raise ApiError(event.get("object", {}).get("code", 0))
+                        error = event.get("object")
+                        if not isinstance(error, dict):
+                            raise ApiError()
+                        raise ApiError(error.get("code", 0))
                     yield event
         except (OSError, ValueError, UnicodeError, RecursionError):
             raise ApiError() from None

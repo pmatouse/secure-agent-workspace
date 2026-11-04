@@ -7,9 +7,6 @@
 # An image built before signing existed has no verifier at all: warn and
 # off still boot unverified (today's behavior for such an image), enforce
 # refuses, matching /usr/libexec/saw/verify-bundle's own contract.
-# Shared SAW code is embedded in apply_bom.py at chart render time. Copying
-# that verified file also carries the core into later runtime-user execution;
-# no unsigned saw_core.py import or extra golden-image dependency is needed.
 set -u
 if [[ -x /usr/libexec/saw/verify-bundle ]]; then
   exec /usr/libexec/saw/verify-bundle
