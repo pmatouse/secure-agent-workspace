@@ -100,6 +100,10 @@ portal:
   provisionerServiceAccount: saw-portal-provisioner
   # Python 3 with the standard library is all portal.py needs.
   image: registry.access.redhat.com/ubi9/python-311:latest
+  # Cold agent images on nested clusters may exceed the default. The portal
+  # still requires every expected UI route; this never marks a timeout Ready.
+  # Applies to newly created PipelineRuns, not a run already in progress.
+  sandboxReadyTimeoutMinutes: 30
   # A portal workspace is deleted with its VM when it is removed.
   pruneOnRemove: true
   # delete also removes the user's keys from Vault.

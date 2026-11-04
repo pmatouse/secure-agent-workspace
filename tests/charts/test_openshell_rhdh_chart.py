@@ -28,6 +28,23 @@ def one(docs, kind, name):
     return found[0]
 
 
+@pytest.mark.parametrize("minutes,wait,task", [(30, "1800", "32m0s"), (60, "3600", "62m0s"), (1, "60", "3m0s")])
+def test_bounded_site_guest_readiness_timeout(minutes, wait, task):
+    docs = render("--set", f"portal.sandboxReadyTimeoutMinutes={minutes}")
+    pipeline = one(docs, "Pipeline", "saw-workspace-create")
+    stage = next(t for t in pipeline["spec"]["tasks"] if t["name"] == "sandboxes")
+    assert stage["timeout"] == task
+    assert {p["name"]: p["value"] for p in stage["params"]}["timeout"] == wait
+    assert {p["name"]: p["value"] for p in stage["params"]}["action"] == "wait-ready"
+
+
+@pytest.mark.parametrize("minutes", ["0", "61", "false", "1.5", "unlimited"])
+def test_invalid_guest_readiness_timeout_fails_render(minutes):
+    result = run_helm([HELM, "template", "openshell-rhdh", str(CHART), "-n", "rhdh",
+                      "--set", f"portal.sandboxReadyTimeoutMinutes={minutes}"], capture_output=True, text=True)
+    assert result.returncode != 0 and not result.stdout.strip()
+
+
 @pytest.fixture(scope="module")
 def docs():
     return render()
