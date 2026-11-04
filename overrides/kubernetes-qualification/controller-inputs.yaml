@@ -1,0 +1,67 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata: {name: saw-runtime-controller, namespace: saw-k8s-build}
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata: {name: saw-runtime-controller-8341548, namespace: saw-k8s-build}
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/pmatouse/secure-agent-workspace.git
+      ref: 8341548ac96726254caf577e5a605d820cae06e2
+  strategy:
+    type: Docker
+    dockerStrategy: {dockerfilePath: kubernetes-runtime/Containerfile}
+  output:
+    to: {kind: ImageStreamTag, name: saw-runtime-controller:8341548ac967}
+  triggers: [{type: ConfigChange}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: toolbox-profile, namespace: saw-k8s-test}
+data:
+  profiles__input__toolbox__workspace.yaml: |
+    apiVersion: saw.redhat.com/v1alpha1
+    kind: Workspace
+    metadata: {name: toolbox}
+  profiles__input__toolbox__providers.yaml: |
+    apiVersion: saw.redhat.com/v1alpha1
+    kind: Providers
+    spec: {providers: []}
+  profiles__input__toolbox__sandbox.yaml: |
+    apiVersion: saw.redhat.com/v1alpha1
+    kind: Sandboxes
+    spec:
+      sandboxes:
+        - name: shell
+          type: generic
+          image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+          providers: []
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: toolbox-workspace
+  namespace: saw-k8s-test
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+  labels:
+    saw.redhat.com/runtime-owner: d8ac361b-9898-4b16-ac35-2d15f86db76b
+    openshell.ai/sandbox-attachable: 'true'
+    openshell.ai/sandbox-attachable-workspace: toolbox
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ocs-external-storagecluster-ceph-rbd
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: controller-ledger
+  namespace: saw-k8s-trusted
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ocs-external-storagecluster-ceph-rbd
+  resources: {requests: {storage: 1Gi}}

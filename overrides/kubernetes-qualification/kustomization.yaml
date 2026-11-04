@@ -9,3 +9,4 @@ resources:
   - proxy.yaml
   - gateway.yaml
   - gateway-network-check.yaml
+  - controller-inputs.yaml
