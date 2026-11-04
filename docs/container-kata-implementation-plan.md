@@ -154,6 +154,26 @@ Both container and Kata native-policy manifests were accepted by the live API
 with `oc create --dry-run=server`. No policy or RuntimeClass was created by that
 check. It establishes API/schema acceptance only, not CEL or OVN enforcement.
 
+Subsequent offline integration (`640bf6a`) passed **312 tests, one optional SDK
+module skipped**, on the Linux bastion: runtime/controller, public Make interface,
+gateway chart and identity-bootstrap chart. `make lint-static` also passed.
+The full Make suite encountered Linux-tool dependencies with macOS's older
+Make/Bash; the same suite passed on Linux without code workarounds. Test execution
+used `KUBECONFIG=/dev/null`; its temporary source checkout was removed afterward.
+The optional pinned-SDK wire suite was not rerun in this batch.
+
+Identity/bootstrap and shutdown source is pushed; live container/Kata qualification
+has not started. The site has prepared inactive foundation manifests under
+`overrides/kubernetes-qualification`, with immutable integration revision and
+separate trusted/runtime namespaces. They do not install a gateway or workload.
+The runtime shutdown path now stops only recorded identities without requiring
+renewed PVC attachment approval; `Running` still requires the full checks.
+
+The portal's default 30-minute guest-readiness wait is now a bounded site input
+(1–60 minutes). Default behavior is unchanged; the slow nested site selects 60
+for new runs. Active runs keep their original deadline and result. This does not
+weaken readiness or qualify a still-installing guest.
+
 ## 1. Objective and execution rules
 
 Install the current Secure Agent Workspace (SAW) through its documented **Validated
