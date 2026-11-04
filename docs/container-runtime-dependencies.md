@@ -158,3 +158,13 @@ including stored-version migration, before changing controllers.
 Source evidence: [release artifacts](https://github.com/kubernetes-sigs/agent-sandbox/releases/tag/v1.0.9),
 [controller health registration](https://github.com/kubernetes-sigs/agent-sandbox/blob/b1277676f8bf0e82ea299928997ecf5d696a92f1/cmd/agent-sandbox-controller/main.go),
 [OpenShell driver contract](https://github.com/opendatahub-io/openshell/blob/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f/crates/openshell-driver-kubernetes/README.md).
+
+## Trusted provider transport
+
+[`saw-kubernetes-proxy`](../charts/saw-kubernetes-proxy/README.md) packages the
+existing SAW proxy in a separate trusted namespace. ESO supplies provider keys;
+only the immutable public proxy CA is projected to the runtime namespace.
+The bootstrap reuses the existing CA and rejects conflicting projections.
+Gateway and supervisor use credential markers. This integration has local chart
+and trust-projection tests; live transport and full workspace qualification are
+separate gates.
