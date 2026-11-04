@@ -1,4 +1,4 @@
-# Generic stock gateway qualification; no workspace or agent profile is activated.
+# Stock gateway: HTTPS OIDC uses the observed public ingress VIP plus router nodes.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -82,6 +82,8 @@ spec:
                   cidr: 10.10.10.30/32
               - ipBlock:
                   cidr: 10.10.10.31/32
+              - ipBlock:
+                  cidr: 52.118.50.101/32
               ports:
               - protocol: TCP
                 port: 443
