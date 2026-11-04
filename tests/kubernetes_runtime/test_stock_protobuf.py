@@ -19,7 +19,7 @@ from openshell._proto import openshell_pb2
 
 from saw_kubernetes import ContractError, Reconciler, RpcError, compile_profile
 from saw_kubernetes.adapters import GrpcGateway, RPC_METHODS
-from test_runtime import FakeGateway, mutate, sandbox, source
+from .test_runtime import FakeGateway, mutate, sandbox, source
 
 
 class WireError(grpc.RpcError):
