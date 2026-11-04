@@ -1,6 +1,6 @@
 # glmhg VM baseline
 
-This branch is upstream `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` plus site configuration. It does not include the container/Kata implementation. Installation follows README Option A through the Validated Patterns utility container and Argo CD.
+This branch is upstream `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` plus site configuration and an optional Keycloak resource-values input. It does not include the container/Kata implementation. Installation follows README Option A through the Validated Patterns utility container and Argo CD. Component images and operator code remain stock.
 
 ## Site inputs
 
@@ -98,6 +98,22 @@ This tuning cannot guarantee outer-host CPU capacity. Require real operator,
 HyperConverged and VM readiness; an Argo Application reporting Healthy is not
 sufficient. If contention persists, the RHDP infrastructure needs more available
 CPU or relocation before this environment can qualify the baseline.
+
+The SAW Keycloak chart additionally exposes optional `keycloak.resources`,
+forwarded unchanged to the supported Keycloak CR `spec.resources`. Its empty
+default preserves the original render; existing-server mode never modifies the
+shared server. The lab requests `500m` CPU while preserving the operator's
+`1700Mi` memory request and `2Gi` memory limit, with no CPU limit. The RHBK
+operator owns the resulting rollout. This is a chart input addition, not a
+Keycloak binary, probe, realm or authentication change. It is the one integration
+code addition to this VM baseline; do not describe the branch as site-values-only.
+See [Keycloak resource requirements](https://www.keycloak.org/operator/advanced-configuration#_resource_requirements).
+
+Recovery results so far: standard `make load-secrets` exited zero, Vault's
+ClusterSecretStore reports Ready, RHDH ExternalSecrets report SecretSynced,
+both tuned `virt-operator` replicas became Ready, and realm import reports
+Done/Job Complete. Full HyperConverged, identity server and portal readiness
+remain required before the two VM acceptance users are deployed.
 
 The private values file must supply `inference.provider=openai`, the private API-key file, model `gpt-4.1-mini`, generated SSH-key file references and the standard generated RHDH OIDC/session fields. Omit the unused web-search entry. Use `VALUES_SECRET` to select that file explicitly; do not overwrite unrelated home-directory secrets.
 

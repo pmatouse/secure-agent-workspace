@@ -1,5 +1,13 @@
 # Nested lab storage makes initial operator image pulls slow. Keep this
 # recovery policy declarative; OLM owns failed unpack Job cleanup/retry.
+keycloak:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1700Mi
+    limits:
+      memory: 2Gi
+
 clusterGroup:
   subscriptions:
     openshift-virtualization:
