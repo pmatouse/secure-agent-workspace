@@ -258,10 +258,14 @@ Run **one active reconciler per installation**, with its state on persistent,
 private storage. The filesystem lock coordinates processes sharing that state;
 it is not a distributed lease or an HA design. Retain the state with gateway DB
 and identity. The boundary verifier must actually check the site's ANP/admission
-foundation and gateway/governance identity and policy. This foundation does not
-provide that site-specific callback. A no-op used in unit tests is not suitable
-for deployment; TLS, resource labels or `GenericReady` alone do not prove those
-boundaries.
+foundation and gateway/governance identity and policy. The in-cluster entry point wires the verifier in `saw_kubernetes.boundary` to
+the Kubernetes API. It compares approved object UIDs and spec/data digests,
+checks admission type checking, OVN zone realization and rule priority, and
+requires completed gateway, governance and proxy rollouts. Inspect the policies
+and effective permissions before approving the initial snapshot. Rerun the
+review after upgrades or object replacement. The offline administrator command
+`python3 -m saw_kubernetes.audit config.json` emits candidate pins. Keep approval
+outside the controller. Verify packet-level isolation independently.
 
 ## Persistence and remaining gaps
 
@@ -281,9 +285,15 @@ purge workflow.
 Remaining before full B5/B6/D1 delivery: credential-proxy marker adapter and
 rotation, all agent launch/harness/tool/audit adapters, provider-update readiness,
 profile migrations, retained-volume initialization, UI/relay integration, portal lifecycle
-status wiring, production controller assembly/build/deployment manifests, and live
-positive/negative tests. The ConfigMap watcher and status publisher themselves are
-implemented and tested against simulated Kubernetes/gateway APIs.
+status wiring, and end-to-end acceptance of each supported agent.
+The [controller chart](../charts/saw-kubernetes-controller) runs one controller in
+the trusted namespace using an immutable image, a retained ledger PVC, a projected
+API token and the gateway mTLS identity. GitOps owns the profile and intent.
+The controller owns only the data in the precreated status ConfigMap. Configure
+Argo to ignore that field on the named object and respect differences on sync.
+The workload receives neither controller identity. Build the controller with
+`kubernetes-runtime/Containerfile` from repository root. Its build stage verifies
+the upstream SDK source hashes before generating the gRPC client.
 `Stopped` now uses a separate shutdown path: namespace ownership/UID, authenticated
 gateway version/driver, and previously retained workspace/sandbox IDs must match.
 It can stop known resources after attachment approval is revoked or a boundary
