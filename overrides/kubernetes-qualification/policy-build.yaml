@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/pmatouse/secure-agent-workspace.git
-    targetRevision: 5bd188a91ec23fc1f780003d9e6cd701e196a137
+    targetRevision: a5d65cbaa75b6bf1e00b704424707e42a2d8a942
     path: image-builder-charts/helm/governance-interceptor-image
     helm:
       releaseName: saw-k8s-policy-build
@@ -18,12 +18,12 @@ spec:
             uri: https://github.com/NVIDIA/OpenShell.git
             ref: 6648bd0c290efbc41ba131ee9831ee45cd431f94
         build:
-          name: governance-interceptor-5bd188a
+          name: governance-interceptor-a5d65cb
           configChangeTrigger: true
           builderImage: docker.io/library/rust@sha256:4ec71e955e6c08aeb238885083222ddff79d82eb87654a96c76e38e94da1a53b
           runtimeImage: registry.access.redhat.com/ubi9-micro@sha256:7325ffb45d8401b227033dc26c567e138c919731ed2f8119e921ddba71835f87
         output:
-          imageStreamTag: governance-interceptor:kubernetes-5bd188a
+          imageStreamTag: governance-interceptor:kubernetes-a5d65cb
   destination:
     server: https://kubernetes.default.svc
     namespace: saw-k8s-build
