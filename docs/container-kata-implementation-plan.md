@@ -64,12 +64,62 @@ item, not something this plan pretends stock SAW already does.
 - Freeze one pushed branch head for each acceptance run. Later source changes
   start a new run record; do not change the tested branch underneath a run.
 
+### Storage budget and cleanup after every step
+
+The planning workstation had approximately **14 GiB free** on 2026-11-04. Treat
+that as an observation, not a future capacity guarantee. Record local, runner and
+cluster storage independently before each substantial operation. The next step
+must fit its estimated **peak**, including expanded archives, temporary layers and
+copies, while preserving a configurable local safety reserve (initial default:
+10 GiB). If the estimate is unknown or cannot fit, stop and move that operation to
+a prepared Linux runner or the approved cluster/CI builder; do not fill the laptop
+and clean it only after failure.
+
+Use the existing checkout plus fetched refs for research; avoid duplicate full
+checkouts, model downloads, image layers and VM disk exports. Execute the unchanged
+SAW Pattern commands on the prepared Linux runner if their required Podman utility
+image cannot fit locally. Offloading the command does not replace its official
+installation workflow. Build/publish images in CI or OpenShift where supported;
+keep only source, small manifests and sanitized receipts locally. Do not retain
+local qcow2/OCI tar exports when the verified artifact is already in the registry.
+
+At **every A/B/C/D gate**, and after each download/build/test operation:
+
+1. Record used/free bytes and the step's exact artifact inventory/owner.
+2. Capture the minimal sanitized success/failure evidence and durable state needed
+   for recovery; verify any published artifact digest before removing its source.
+3. Remove only verified disposable objects owned by this run and not consumed by
+   the next step: unpacked archives, temporary build contexts, completed temporary
+   transfers, redundant clean research checkouts and bounded disposable caches.
+4. Check storage again; report retained state, removed artifacts and reclaimed size.
+   Gate completion includes this checkpoint, not merely functional test success.
+
+| Artifact | Cleanup/retention rule |
+| --- | --- |
+| Source checkout | Keep one working checkout; remove duplicates only after checking for unique/uncommitted files and confirming required commits are published |
+| Download/archive/build scratch | Delete exact per-run paths after verification/publication; retain no duplicate expanded copy without a next-step consumer |
+| Local image/build cache | Remove only task-owned unused image/layer/cache references after consumers finish; no global `podman system prune`, Docker prune or unrelated cache deletion |
+| Cluster build/test Jobs and Pods | Collect sanitized results, then delete only completed run-owned temporary resources or use declared TTL/history limits; do not remove a failed run's evidence before capture |
+| Registry images | Apply explicit retention to unreferenced intermediates; preserve all digests used by live workloads, tests, desired Git state or the rollback window |
+| Logs/reports | Bound and sanitize logs; retain concise immutable receipts. Compress needed diagnostics; never retain raw Secret dumps |
+| Credentials/keys/authority or gateway state | Preserve required durable private state with protected backup. Delete temporary credential copies only after their consumer finishes; never treat persistent keys as disposable cache |
+| VM disks, workspace/audit PVCs and baseline canary | Preserve by default. Deleting these to make space invalidates persistence/regression evidence; explicit purge is a separate declared operation |
+
+Cluster PVC quotas, node ephemeral storage and registry capacity need their own
+budget. StorageClass reclamation, garbage collection and registry pruning are not
+instantaneous; observe actual free space rather than counting a delete request as
+reclamation. If cluster capacity cannot support the baseline plus a candidate,
+reduce concurrent **test scheduling** through the declared harness, not by deleting
+reference data or weakening the acceptance matrix. Never delete unrelated prior
+projects or their private state just because a directory is old.
+
 ## 2. Research locks and source map
 
 | Repository | Researched revision | Purpose |
 | --- | --- | --- |
 | `validatedpatterns-sandbox/secure-agent-workspace` | `c9691be3ff0a9a2dde4fee91514b5215bbcb9275` | Exact current VM functionality and install flow |
 | `opendatahub-io/openshell` | `305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f`, tag `v0.1.2-rhaiv.6` | SAW-pinned driver, supervisor and runtime semantics |
+| `validatedpatterns-sandbox/secure-agent-workspace`, `codex-saw-k8s` | `5fe6a3bc22ae34aa739d0f10bfc2bd5f48252d57` | Prior Codex-only Kubernetes implementation; selective porting source |
 | `pmatouse/coco-pattern`, `rhoai-confidential-qwen` | `8193b8759e813d643fdf50829c192e1826335a5e` | Optional future inference integration, not an installation prerequisite |
 
 Before implementing on a newer revision, explicitly recheck the following files
@@ -94,6 +144,76 @@ initiator and adds other supervisor topologies.
 Pinned upstream links: [SAW source](https://github.com/validatedpatterns-sandbox/secure-agent-workspace/tree/c9691be3ff0a9a2dde4fee91514b5215bbcb9275),
 [OpenShell Kubernetes driver](https://github.com/opendatahub-io/openshell/tree/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f/crates/openshell-driver-kubernetes),
 [selected CoCo source](https://github.com/pmatouse/coco-pattern/tree/8193b8759e813d643fdf50829c192e1826335a5e).
+
+### Reuse assessment: existing `codex-saw-k8s` implementation
+
+We are not starting the Kubernetes work from nothing. The existing branch has a
+substantial source implementation to mine for adapters and test scenarios. On the
+research date it has **10 unique commits and is 524 commits behind main**, with merge base
+`d2b623a825f47d45cd4de18c26f771e627a23f37`. These are graph-comparison results,
+not evidence that the branch intentionally deleted features added later on main.
+Keep current main as the implementation base; do not replace its tree with the old
+branch or bulk-import its older VM/auth/governance configuration.
+
+The existing branch targets **Codex sessions**, OpenShell **0.0.116**, gateway TOML
+schema **1**, Agent Sandbox **1.0.2**, and Kubernetes `topology = "combined"`.
+Current SAW pins **0.1.2-rhaiv.6** and the researched Kubernetes driver already
+provides distinct supervisor/workload Pods. Therefore the earlier chart is a
+reference implementation, not a deployable drop-in or proof of full SAW/Kata parity.
+
+| Existing code | Reuse decision | Required adaptation |
+| --- | --- | --- |
+| `charts/openshell-saw-kubernetes` | Port chart structure and gateway/state/service/route concepts | Render current schema/images, current protocol, restricted UID/SCC, separate supervisor, deterministic secret references and current SAW ownership |
+| `charts/agent-sandbox` | Reuse packaging pattern; inspect vendored manifest as a candidate | Verify upstream provenance and compatible CRD/controller release, pin image digests, and add ownership/health gates; 1.0.2 is not presumed compatible with the new pin |
+| `services/saw-codex-api/controller.py` | Reuse backend-dispatch, identity and lifecycle ideas; port small helpers with tests | Replace imperative Helm ownership with the plan's GitOps/reconciler contract; add durable generation/status/recovery and retention; do not install a competing Codex controller |
+| `services/saw-codex-api/{app.py,auth.py,k8s.py,keycloak.py}` | Evaluate authenticated ownership and shell descriptor helpers | Revalidate issuer+subject/session UID binding, least privilege and current OIDC/PKI flows; keep Keycloak admin credentials outside tenant runtime |
+| `cli/src/codex_saw/{openshell_adapter.py,ssh.py,desktop.py}` | Optional useful shell/SSH transport and per-invocation configuration patterns | Update 0.0.116 CLI metadata/token assumptions; integrate with current SAW CLI without replacing RHDH; desktop integration is optional |
+| `charts/openshell-saw-kubernetes/templates/job-provision.yaml` | Reuse only the API-driven provisioning sequence as a design reference | Reimplement through current shared BOM adapter, real lifecycle conditions, credential markers and idempotent reconciler; do not copy the shell script wholesale |
+| `charts/saw-bom/profiles/codex`, Codex image recipe | Candidate additional agent profile | Digest/signature inventory, current harness/tool-gate/governance contract, explicit feature qualification; not a substitute for current profiles |
+| `tests/test-access-control.sh`, `tests/test-multiuser-isolation.sh` | Reuse test scenarios and assertions | Adapt to current APIs, owner model, safe cleanup and backend parameterization; inspect actual backend exercised before counting coverage |
+
+Do **not** carry these old implementation choices into the new backend:
+
+- Combined supervisor/agent topology: it cannot produce the requested separate
+  supervisor Kata VM. Keep the current split implementation.
+- `anyuid`/`privileged` SCC bindings and fixed UID/GID assumptions in the old
+  controller/chart. Qualify current restricted contexts and namespace-assigned IDs.
+- Ingress-only chart policies as proof of egress enforcement. Apply and test the
+  current plan's workload fence, controlled supervisor egress and credential boundary.
+- Real inference keys mounted into the provisioning Job or passed in CLI credential
+  arguments; incomplete key-isolation and secret-output behavior must be replaced.
+- Auth/provider steps with `|| true`, insecure TLS probes, credential-prefix logging,
+  generated `bwrap` bypass scripts or hardcoded disabled inner approval settings.
+  Review the actual security model of each supported agent instead of suppressing
+  failures to make startup pass.
+- Broad cleanup that deletes session namespaces/storage without the new retention
+  contract, or existing-key regeneration that breaks retained gateway state.
+- Mutable `latest` image references or assumed workspace size values that are not
+  actually wired into the rendered driver/workload specification.
+- Per-session Helm installs and imperative Keycloak/deployment environment updates
+  as the final implementation of a full GitOps request lifecycle.
+
+The earlier design doc and actual source differ in places: the chart runs a
+governance sidecar while the design describes a shared interceptor; backend defaults
+are inconsistent between components; and `desiredState` is present in the schema
+but the controller has create/delete/status handlers, not the documented stop/start
+update handler. Owner/backend immutability also needs explicit enforcement rather
+than relying on the prose. Reuse verified create/delete/status ideas, not a claim
+that the complete lifecycle is implemented. Treat source as the behavior to inspect
+and tests as claims to verify. The existing access-control suite provisions the VM
+chart; no Kubernetes-specific session E2E suite or execution receipt was identified
+in the reviewed branch. Commit messages
+and provisioning-time claims are not reproducible E2E receipts. No old live result
+qualifies the new images, RHDH flows, storage/credential boundaries or Kata guests.
+
+**Add reuse gate B0 before B1:** enumerate the 10 branch commits and candidate
+functions/templates; classify each as port/adapt/drop; write current-version tests
+before or with each selected port. Maintain a provenance map with old commit/path,
+new path, intentional changes and evidence. Do not cherry-pick the large initial
+feature commit without separating unrelated/obsolete changes. This reuses prior
+work while retaining the exact VM baseline requirement and all acceptance gates.
+
+Source: [prior implementation at the reviewed commit](https://github.com/validatedpatterns-sandbox/secure-agent-workspace/tree/5fe6a3bc22ae34aa739d0f10bfc2bd5f48252d57).
 
 ## 3. Cluster and operator inputs
 
@@ -1038,6 +1158,6 @@ Release is complete only when:
 Start at A1, record the chosen source/cluster/site identities, and complete A10.
 Do not skip directly to a Kubernetes sandbox. If the upstream SAW or OpenShell
 version changed, update the source lock and revalidate the listed implementation
-assumptions first. Then execute B1–B6, C1–C2 and D1–D2 with their gates; E remains
-optional. Leave a per-gate pass/fail/not-run receipt and the exact next action for
+assumptions first. Then execute reuse gate B0, B1–B6, C1–C2 and D1–D2 with their
+gates; E remains optional. Leave a per-gate pass/fail/not-run receipt and the exact next action for
 another model, harness or human operator.
