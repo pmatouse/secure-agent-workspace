@@ -20,12 +20,16 @@ spec:
   project: default
   source:
     repoURL: https://github.com/pmatouse/secure-agent-workspace.git
-    targetRevision: a92774d26fd4bd1b2d0a7fd5cdf2b5bd87d2ddaa
+    targetRevision: 9701d2b30342a705a57e3ce38fedb05ea9ede030
     path: charts/saw-workspace-relay
     helm:
       releaseName: saw-agent-ui
       valuesObject:
         enabled: true
+        subject: 7ae33856-a818-4849-bdcb-3508930e381c
+        gatewayNamespace: saw-k8s-test
+        gateway: saw-k8s-test
+        imageBuildNamespace: saw-k8s-build
         clientID: saw-relay-glmhg-agent
         keycloakNamespace: saw-keycloak
         keycloakAdminSecret: openshell-keycloak-initial-admin
@@ -53,6 +57,39 @@ spec:
         installationID: d8ac361b-9898-4b16-ac35-2d15f86db76b
         host: sawk8sowner-agent-openclaw-ui.apps.cluster-glmhg.dyn.redhatworkshops.io
         sdkImage: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:afb8f2397d2787b1726272201c68ac9f6631c8b13274b1c935304146c3176322
+        egress:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: openshift-dns
+            podSelector:
+              matchLabels:
+                dns.operator.openshift.io/daemonset-dns: default
+          ports:
+          - protocol: UDP
+            port: 53
+          - protocol: UDP
+            port: 5353
+          - protocol: TCP
+            port: 53
+          - protocol: TCP
+            port: 5353
+        - to:
+          - ipBlock:
+              cidr: 10.10.10.10/32
+          - ipBlock:
+              cidr: 10.10.10.11/32
+          - ipBlock:
+              cidr: 10.10.10.12/32
+          - ipBlock:
+              cidr: 10.10.10.30/32
+          - ipBlock:
+              cidr: 10.10.10.31/32
+          - ipBlock:
+              cidr: 10.10.10.101/32
+          ports:
+          - protocol: TCP
+            port: 443
   destination: {server: https://kubernetes.default.svc, namespace: saw-ui-agent}
   ignoreDifferences:
   - {group: "", kind: Secret, name: relay-credentials, namespace: saw-ui-agent, jsonPointers: [/data]}
