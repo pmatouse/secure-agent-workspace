@@ -98,3 +98,19 @@ def test_multiple_catalog_sandboxes_receive_distinct_storage_and_ui_namespaces()
     for writer in writers:
         identity=writer["spec"]["source"]["helm"]["valuesObject"]["identity"]
         assert identity["workspace"]+"/"+identity["sandbox"] in targets
+
+
+def test_model_gate_claim_is_shared_only_for_the_publisher_and_agent():
+    audit = SITE["stack"]["audit"]["values"]
+    # Use the same per-registration Helm values projection as the nested Applications.
+    target = dict(workspace="default", sandbox="notebook", ui=True, base=U,
+                  relayID=REG, subjectMap="saw-portal-relay-subject", modelInput="inference.model")
+    site = {**SITE, "lifecycleVersion": 1, "targets": {"default/notebook": target}}
+    manifests = render("saw-portal-container", U, "saw-"+U, {
+        "site": site, "owner": U, "registration": REG, "installationID": user()["installationID"],
+        "ownerSubject": SITE["subject"], "vaultPrefix": user()["vaultPrefix"], "global": GLOBAL})
+    writer, = [r for r in manifests if r["kind"]=="Application" and r["spec"]["source"]["path"]=="charts/saw-audit-writer"]
+    claims = {r["metadata"]["name"]:r["spec"] for r in child(writer) if r["kind"]=="PersistentVolumeClaim"}
+    assert claims["saw-gate-"+U]["accessModes"] == ["ReadWriteMany"]
+    assert claims["saw-gate-"+U]["storageClassName"] == audit["exchangeStorageClass"]
+    assert claims["workspace-"+U]["accessModes"] == claims[U+"-history"]["accessModes"] == ["ReadWriteOnce"]
