@@ -285,3 +285,102 @@ portal:
               username: '@OWNER@'
               workspace: agent
               sandbox: audited
+      enrollment:
+        approved:
+          binding:
+            sha256: 8907af47370ca8debab0687f93fe04645891532122e584f6588691c8b3c0bd44
+            uid: 648df712-e7a8-4670-acaa-bc6444801545
+          deny:
+            sha256: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+            uid: b5674e8b-8abd-42e5-b73c-95010d059184
+          gateway:
+            sha256: dca7c7c26e0a463d9283ab1d9ff97360125491ad5e4cb9771e1c4fe40041d4a5
+            uid: 01694048-8027-48d1-b43f-4cd9ce6cf694
+          gatewayConfig:
+            sha256: 0293ad7b7a53acefcfba5907e6c3b31bf005076a756a7076fadf4a0ab62162c6
+            uid: 8ea65369-d520-43c9-acbd-e1586018cbb8
+          gatewayNetwork:
+            sha256: d33d24b94cd849d13ff2f2670186787d8e070690e332e9fca2f279742b437b1d
+            uid: caf0b203-9732-4b98-9893-fb847d5577bc
+          gatewayService:
+            sha256: b698ac64929a491cb23e3e4a2a436d47728ffdb62f9b7bdad24f9f9397990bc3
+            uid: b52bca69-8771-4c4a-9f10-a5cd2d5be76d
+          governance:
+            sha256: 73497be5126e5de86a248a8417db321e5a4fdec24036875354d6ae412cf81464
+            uid: e72b776d-501b-4712-9cfd-6fa417152669
+          governancePolicy:
+            sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+            uid: 9ed4c1c3-c8a0-4b16-8799-4b958c6a5c83
+          governanceProfiles:
+            sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+            uid: 1b213f52-e115-434e-916b-cfa888b8aacd
+          governanceService:
+            sha256: ea86f6d4b7cf245aea3737a2da867e3b2903548e720704decfe5e822ec021d03
+            uid: 57b1b15f-faea-40b5-baba-7a1febc31c57
+          network:
+            sha256: aa6173f511ff30d017c320a84e8d1e577e7b056be1f11258d618817b82529615
+            uid: 27c88e6a-9055-4169-a56d-699cdc3d599e
+          proxy:
+            sha256: 173b0e3c735449e49f1c0cdd82ce9138faeac7ad1504975154dab1ba08e705a4
+            uid: 880ffbe4-34a8-4c4c-83c8-6153e576bb59
+          proxyNetwork:
+            sha256: 4e0c80d56b38edb56dff4935721b174528d32dcf72b95d84428dc3a27e1851d2
+            uid: a42036d0-faf3-4033-b238-e6dfcd41b715
+          proxyPolicy:
+            sha256: 994c67a07d21e9f8e81849ba56cee59a977885a3106313bb19346826b44e81d0
+            uid: 76027dbc-d7dd-4f20-8b82-884653c08767
+          publicCA:
+            sha256: 325a4f0c0f453efa0b1c68cf247153c8370d739ce8caa9b240414c5a2184012e
+            uid: 82b6151e-0d53-414b-bde3-646ed7ff1c12
+          validation:
+            sha256: d39420fead08d3208849bc26571d7110d5e3c2db95880db18bdda3ff992aaae5
+            uid: 32e492a0-f771-4c97-ad5c-992047a4d56e
+        buildNamespace: saw-k8s-build
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:cb037ee4047bccf2971853646bf20e1b5bcf6d8213e77f78fdf555d502233044
+        intent:
+          bindings:
+            approvedCredentialFreeProviders: []
+            bindings:
+              agent/audited:
+                browser:
+                  origin: https://sawk8sowner-agent-audited-ui.apps.cluster-glmhg.dyn.redhatworkshops.io
+                  ownerLogin: sawk8sowner
+                resources:
+                  limits:
+                    cpu: '2'
+                    memory: 4Gi
+                  requests:
+                    cpu: 500m
+                    memory: 1Gi
+                toolGate:
+                  audit:
+                    claimName: saw-audit-sawk8sowner
+                    readOnly: false
+                    uid: b28c6a54-a204-4766-83da-59e21e395119
+                  ownerLogin: sawk8sowner
+                  receiptKey: MCowBQYDK2VwAyEATc0lkCN6J0hD88TBrLFLL5hSo7h9Zr4pKC+Mcdu3tL0=
+                  trusted:
+                    claimName: saw-gate-sawk8sowner
+                    readOnly: true
+                    uid: 4fd1737d-ab51-492e-a17c-2fa68a4acf87
+                workspace:
+                  claimName: workspace-sawk8sowner
+                  readOnly: false
+                  uid: e9311024-5c95-430c-99de-678caa45886f
+            gatewayVersion: 0.1.2-rhaiv.6
+            mode: container
+            namespace: saw-sawk8sowner
+            namespaceUID: 670be73a-a332-46af-be11-1683b532ecd0
+            openAIProxySecret: inference
+            ownerID: bdeddc47-2615-58ab-b61b-bc72b5fd425f
+            ownerSubject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
+          desiredState: Running
+          generation: 1
+          profileRef:
+            name: saw-bom-profiles
+            planSHA256: ce90e137abc37b734aab79642b220fdac1ed3386127ddb70745f52c40ec6ffa3
+            sha256: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
+            uid: 9a6e9635-7b5d-4796-a630-a8a7ae581dca
+          schemaVersion: 1
+        registration: c8428d7ea7b13a9e
+        revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
