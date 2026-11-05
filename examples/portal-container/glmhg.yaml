@@ -1,4 +1,3 @@
-# Example site inventory; enables only the named test user when installed.
 portal:
   deploymentModes:
   - vm
@@ -272,7 +271,7 @@ portal:
             route:
               enabled: false
         audit:
-          revision: 263e00fc640c4f5acbe0dc61413090e38eeb0874
+          revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
           values:
             enabled: true
             trustedNamespace: '@ARCHIVE@'
