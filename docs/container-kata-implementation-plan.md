@@ -1655,3 +1655,12 @@ catalog displays Running or Stopped only for matching ownership, mode and
 observed generation. Unknown and Reconciling distinguish missing observations
 from a pending change. This describes the runtime; inference and tool tests
 remain separate observations.
+
+On OpenShift 4.22.20, the stock OpenClaw qualification Job completed under
+`restricted-v2` with allow, deny, approval-required and timeout-rejected audit
+records. The separate PVC sealer could not start in a namespace enforcing Pod
+Security `restricted`. The audit history has therefore not been qualified for the
+application workspace. The candidate preparation grant was removed. The live
+RHDH catalog generator read the container intent and status and reported
+`Running` for its owner. This verifies the catalog integration independently of
+tool dispatch.

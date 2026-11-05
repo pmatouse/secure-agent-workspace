@@ -36,3 +36,10 @@ installation and UID checks. Provision a new gate claim for a new bundle.
 The optional controller binding prepares the OpenClaw plugin configuration.
 The application tool deny list stays in force until the live gateway dispatch,
 approval, audit retention and tamper tests pass.
+
+On the `glmhg` OpenShift 4.22.20 test, SCC and native admission policy
+installation succeeded. Pod Security Admission then rejected the Job before
+a Pod started because its namespace enforces `restricted`. The capability is
+outside that profile. A matching SCC alone is insufficient. Keep this chart
+disabled in a restricted workspace namespace. The isolated grant, Job and
+disposable PVC were pruned after this check.
