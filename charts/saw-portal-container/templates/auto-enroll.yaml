@@ -94,7 +94,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata: {name: bootstrap-scripts, namespace: {{ $t }}}
 data:
-  config.json: {{ dict "registration" $r "installation" .Values.installationID "user" $g "subject" .Values.ownerSubject "governance" $gov "reference" $a.reference "profileSHA256" ($s.selectedDigest | default $a.profileSHA256) "targets" $targets "lifecycleVersion" ($s.lifecycleVersion | default 0) "modelInputs" ($s.modelInputs | default dict) "resources" $a.resources "domain" .Values.global.clusterDomain | toJson | quote }}
+  config.json: {{ dict "registration" $r "installation" .Values.installationID "user" $g "subject" .Values.ownerSubject "governance" $gov "reference" $a.reference "profileSHA256" ($s.selectedDigest | default $a.profileSHA256) "targets" $targets "providerPolicy" ($s.providerPolicy | default dict) "lifecycleVersion" ($s.lifecycleVersion | default 0) "modelInputs" ($s.modelInputs | default dict) "resources" $a.resources "domain" .Values.global.clusterDomain | toJson | quote }}
 {{ (.Files.Glob "files/*.py").AsConfig | indent 2 }}
 ---
 apiVersion: networking.k8s.io/v1

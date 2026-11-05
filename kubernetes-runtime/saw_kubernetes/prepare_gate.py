@@ -30,13 +30,20 @@ def publish(root, identity, receipt_key=None, *, model=None, generation=None):
     assets = Path(shared.__file__).parent
     files, _, digest, _ = shared.tool_gate_bundle(assets, identity, receipt_key)
     target = root / "bundle"
+    publish_tree(root, target, files, model_selector=model is not None)
+    if model is not None:
+        publish_model(root, target, model, generation)
+    return digest
+
+
+def publish_tree(root, target, files, *, model_selector=False):
     if not target.exists():
         with tempfile.TemporaryDirectory(dir=root) as scratch:
             tmp = Path(scratch) / "bundle"
             tmp.mkdir(mode=0o755)
             for rel, (data, _) in files.items():
                 path = tmp / rel
-                path.parent.mkdir(exist_ok=True)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(data)
                 path.chmod(0o444)
             # The final nonempty tree is never overwritten, including concurrent publishers.
@@ -47,10 +54,16 @@ def publish(root, identity, receipt_key=None, *, model=None, generation=None):
             except OSError:
                 if not target.is_dir():
                     raise
-    verify(target, files, model_selector=model is not None)
-    if model is not None:
-        publish_model(root, target, model, generation)
-    return digest
+    verify(target, files, model_selector=model_selector)
+
+
+def publish_harness(root, bom, name, expected_digest):
+    from .harness import bundle_tree, read_bundles
+    _, raw, index = shared.read_profile_files(bom)
+    bundle = read_bundles(raw, index).get(name)
+    if not bundle or bundle.name != name or bundle.digest != expected_digest:
+        raise ValueError("mounted BOM does not match enrolled harness")
+    publish_tree(root, root / ("harness-" + bundle.digest.removeprefix("sha256:")), bundle_tree(bundle))
 
 
 def publish_model(root, target, model, generation):
@@ -84,6 +97,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("owner", "subject", "workspace", "sandbox"):
         parser.add_argument("--" + key, required=True)
+    parser.add_argument("--harness", nargs=2, metavar=("NAME", "DIGEST"))
     parser.add_argument("--model")
     parser.add_argument("--model-generation",type=int)
     receipt = parser.add_mutually_exclusive_group()
@@ -96,4 +110,6 @@ if __name__ == "__main__":
         from .receipt import receipt_key
         args.receipt_key = receipt_key(args.writer_service, args.writer_namespace, args.writer_ca)
     os.umask(0o022)
+    if args.harness:
+        publish_harness(Path("/volume"), Path("/bom"), *args.harness)
     print(publish(Path("/volume"), shared.tool_gate_identity(args.owner, args.subject, args.workspace, args.sandbox), args.receipt_key, model=args.model, generation=args.model_generation))

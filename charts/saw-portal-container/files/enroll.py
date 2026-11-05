@@ -42,6 +42,15 @@ def once(x):
     if digest(profile["data"])!=x["profileSHA256"]:raise ValueError("unapproved BOM")
     def pvc(name,ro):
         return dict(claimName=name,uid=obj("persistentvolumeclaim",name)["metadata"]["uid"],readOnly=ro)
+    harnesses = {}
+    if "harness-index.yaml" in profile["data"]:
+        from saw_kubernetes.core import shared
+        from saw_kubernetes.harness import binding_for, read_bundles
+        documents, raw, index = shared.split_bom_files(profile["data"])
+        bundles = read_bundles(raw, index)
+        harnesses = {ws.name+"/"+sb.name: binding_for(sb, bundles)
+                     for _, ws in shared.enabled_workspaces(shared.parse_profiles(documents))
+                     for sb in ws.sandboxes if sb.enabled and sb.harness_ref}
     slots={}
     for key, target in x["targets"].items():
         base=target["base"]
@@ -51,12 +60,18 @@ def once(x):
               "resources":x["resources"]}
         if x.get("lifecycleVersion") == 1 and target.get("modelInput"):
             slot["toolGate"]["modelSelector"] = True
+        if key in harnesses:
+            slot["toolGate"]["harness"] = harnesses[key]
         if target["ui"]:
             host="-".join((u,target["workspace"],target["sandbox"],"ui"))
             slot["browser"]={"ownerLogin":u,"origin":"https://"+host+".apps."+x["domain"]}
         slots[key]=slot
     bindings=dict(ownerID=ident,namespace=ns,namespaceUID=nsobj["uid"],ownerSubject=sub,mode="container",
        gatewayVersion="0.1.2-rhaiv.6",openAIProxySecret="inference",approvedCredentialFreeProviders=[],bindings=slots)
+    if x.get("providerPolicy"):
+        bindings["proxyBindings"] = [{"secret": b["secret"], "key": b["key"], "type": typ,
+                                      "refresh": bool(b.get("refresh"))}
+                                     for b in x["providerPolicy"]["bindings"] for typ in b["providers"]]
     if x.get("modelInputs"):
         bindings["modelInputs"]=x["modelInputs"]
     plan=compile_profile_files(profile["data"],bindings)

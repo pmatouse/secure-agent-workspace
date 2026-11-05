@@ -13,6 +13,8 @@ import uuid
 from pathlib import Path, PurePosixPath
 
 from .core import shared
+from . import harness
+from . import provider as governed
 
 SOURCE_REVISION = "305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f"
 OWNER = "saw.redhat.com/runtime-owner"
@@ -78,7 +80,7 @@ def _storage(binding, workspace):
     volumes, mounts, refs = [volume], [mount], [reference]
     if "toolGate" in binding:
         gate = binding["toolGate"]
-        mapping(gate, {"trusted", "audit", "ownerLogin", "receiptKey", "modelSelector"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
+        mapping(gate, {"trusted", "audit", "ownerLogin", "receiptKey", "modelSelector", "harness"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
         name(gate["ownerLogin"], "toolGate ownerLogin", 63)
         for field, volume_name, path, readonly in [
             ("trusted", "saw-gate", "/sandbox/.saw/trusted", True),
@@ -155,7 +157,7 @@ def _openai_inference(workspace, sandbox, config):
         return inputs.get(secret + "." + key, "")
     info = shared.resolve_inference(workspace, sandbox, read_model, lambda *_: None,
                                     forbidden={(config.get("openAIProxySecret"), "api_key")})
-    if (sandbox.providers != ["openai"] or info["providerRef"] != "openai"
+    if ((sandbox.providers != ["openai"] and not config.get("proxyBindings")) or "openai" not in sandbox.providers or info["providerRef"] != "openai"
             or info["protocol"] != "openai" or info["baseUrl"] != "https://api.openai.com/v1"
             or info.get("models") or info["timeoutSeconds"]
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", info["model"])):
@@ -174,7 +176,9 @@ def compile_profile_files(files, config):
                                           for k, v in files.items()):
         raise ContractError("profile data must be a mapping of flat file names to YAML text")
     try:
-        profiles = shared.parse_profiles(files, strict=True, document_check=_check_document_capabilities)
+        documents, raw_harness, index = shared.split_bom_files(files)
+        bundles = harness.read_bundles(raw_harness, index)
+        profiles = shared.parse_profiles(documents, strict=True, document_check=_check_document_capabilities)
         shared.validate_profiles(profiles, governed=True)
     except shared.InstallerError:
         # Parser errors may contain input snippets. The controller publishes
@@ -182,7 +186,7 @@ def compile_profile_files(files, config):
         raise ContractError("profile documents fail shared SAW schema or semantic validation") from None
     mapping(config, {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode",
                      "workloadRuntimeClass", "workloadRuntimeClassUID", "bindings",
-                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes", "modelInputs"},
+                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes", "modelInputs", "proxyBindings"},
             {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode", "bindings",
              "approvedCredentialFreeProviders", "gatewayVersion"}, "administrator configuration")
     try:
@@ -225,11 +229,16 @@ def compile_profile_files(files, config):
             # materialization or OAuth refresh adapter yet.
             entry = {"metadata": {"name": provider.name, "labels": {
                 MANAGED: "kubernetes-runtime", OWNER: owner}}, "type": provider.type}
-            if provider.refresh_strategy or provider.credentials_spec or provider.credential_secret_key != "api_key":
+            if not config.get("proxyBindings") and (provider.refresh_strategy or provider.credentials_spec or provider.credential_secret_key != "api_key"):
                 raise ContractError("provider requires an unported credential/refresh capability or approval")
             if provider.credential_free:
                 if provider.type not in approved:
                     raise ContractError("credential-free provider requires administrator approval")
+            elif config.get("proxyBindings"):
+                try:
+                    entry["credentials"] = governed.checked_marker(provider, config["proxyBindings"])
+                except ValueError as exc:
+                    raise ContractError(str(exc)) from exc
             elif (provider.type == provider.name == "openai" and config.get("openAIProxySecret")
                   and provider.credential_secret == config["openAIProxySecret"]):
                 secret = name(provider.credential_secret, "approved OpenAI proxy binding", 63)
@@ -246,16 +255,28 @@ def compile_profile_files(files, config):
                 continue
             name(sandbox.name, "sandbox")
             command = ["sh", "-c", "sleep infinity"]
-            if sandbox.harness_ref or sandbox.env or sandbox.model or sandbox.agent != "openclaw":
+            if sandbox.env or sandbox.model or sandbox.agent != "openclaw":
                 raise ContractError("harness/UI/inference/env capability is not yet ported to Kubernetes")
             if sandbox.ui and (sandbox.type not in ("openclaw","nemoclaw") or sandbox.ui != {"route": True}
                                or not bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")):
                 raise ContractError("UI route capability requires the matching approved OpenClaw browser binding")
             if sandbox.type in ("openclaw", "nemoclaw"):
-                if not any(p["type"] == "openai" and p.get("credentials") for p in providers):
+                inference_provider = next((p for p in workspace.providers if p.enabled and p.name in sandbox.providers
+                                           and p.type == "nvidia" and p.model), None)
+                nvidia = inference_provider is not None and not sandbox.inference and bool(config.get("proxyBindings"))
+                if not nvidia and not any(p["type"] == "openai" and p.get("credentials") for p in providers):
                     raise ContractError("openclaw requires a bound OpenAI provider")
-                info = _openai_inference(workspace, sandbox, config)
+                if nvidia:
+                    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,180}", inference_provider.model):
+                        raise ContractError("invalid NVIDIA inference model")
+                    info = {"model": inference_provider.model}
+                else:
+                    info = _openai_inference(workspace, sandbox, config)
                 script = Path(__file__).with_name("openclaw.sh").read_text()
+                if nvidia:
+                    script = script.replace("https://api.openai.com/v1", "https://integrate.api.nvidia.com/v1")
+                    script = script.replace("${OPENAI_API_KEY}", "${NVIDIA_API_KEY}")
+                    script = script.replace("providers: {openai:", "providers: {nvidia:").replace("'openai/' + model", "'nvidia/' + model")
                 browser = bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")
                 extra = ""
                 if browser is not None:
@@ -330,6 +351,19 @@ exec openclaw gateway""")
                             "scopes:['operator.read','operator.write','operator.approvals']")
                 command[2] = command[2].replace("const target = process.env.OPENCLAW_CONFIG_PATH;",
                     script.replace("@SAW_GATE_DIGEST@", gate_digest) + "\nconst target = process.env.OPENCLAW_CONFIG_PATH;")
+            gate = bindings[key].get("toolGate", {})
+            try:
+                expected_harness = harness.binding_for(sandbox, bundles)
+                if expected_harness != gate.get("harness"):
+                    raise ContractError("sandbox harness differs from its enrolled binding")
+                if expected_harness:
+                    if not gate.get("receiptKey") or sandbox.type not in ("openclaw", "nemoclaw"):
+                        raise ContractError("harness requires an enrolled agent and signed tool gate")
+                    provider_types = {p.type for p in workspace.providers if p.enabled and p.name in sandbox.providers}
+                    catalog = {t: governed.requirements(t)[1] for t in provider_types if t in governed.SUPPORTED}
+                    harness.configure(command, driver, bundles[expected_harness["name"]], workspace, sandbox, catalog)
+            except shared.InstallerError as exc:
+                raise ContractError(str(exc)) from exc
             if runtime:
                 driver["pod"] = {"runtime_class_name": runtime}
             spec = {"template": {"image": sandbox.image, "driver_config": {"kubernetes": driver}},
@@ -379,5 +413,5 @@ def _check_document_capabilities(document, kind):
     # so the Kubernetes path cannot silently drop UI/harness requirements.
     if kind == "Sandboxes":
         for entry in document.get("spec", {}).get("sandboxes", []):
-            if entry.get("enabled", True) and "harnessRequired" in entry:
-                raise ContractError("UI/harness capability is not yet ported to Kubernetes")
+            if entry.get("enabled", True) and entry.get("harnessRequired") and not entry.get("harnessRef"):
+                raise ContractError("required harness capability has no harnessRef")

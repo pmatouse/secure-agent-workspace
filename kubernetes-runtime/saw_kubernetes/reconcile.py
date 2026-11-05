@@ -16,6 +16,7 @@ import tempfile
 from types import SimpleNamespace
 
 from .core import shared
+from . import provider as governed
 
 from .compiler import ContractError, MANAGED, OWNER, REVISION, SOURCE_REVISION, digest, request_id
 
@@ -228,11 +229,12 @@ class Reconciler:
             if marker_provider:
                 slots = profile.get("credentials", [])
                 endpoints = profile.get("endpoints", [])
-                if (provider_type != "openai" or profile.get("id") != "openai"
+                slot, hosts = governed.requirements(provider_type)
+                if (profile.get("id") != provider_type
                         or profile.get("source") != "interceptor/governance" or len(slots) != 1
-                        or slots[0].get("env_vars") != ["OPENAI_API_KEY"] or slots[0].get("name") != "api_key"
-                        or len(endpoints) != 1 or endpoints[0].get("host") != "api.openai.com"
-                        or endpoints[0].get("port") != 443 or endpoints[0].get("enforcement") != "NETWORK_ENFORCEMENT_MODE_ENFORCE"):
+                        or slots[0].get("env_vars") != slot["env_vars"] or slots[0].get("name") != slot["name"]
+                        or sorted(e.get("host") for e in endpoints) != hosts
+                        or any(e.get("port") != 443 or e.get("enforcement") != "NETWORK_ENFORCEMENT_MODE_ENFORCE" for e in endpoints)):
                     raise ContractError("OpenAI profile differs from the approved inference boundary")
                 continue
             if (profile.get("id") != provider_type or profile.get("credentials")
@@ -354,7 +356,7 @@ class Reconciler:
             recorded = state.get("proxyProviderRevisions", {}).get(f"{ws['name']}/{pname}")
             if recorded != {"version": existing["metadata"].get("resource_version"), "request": digest(provider)}:
                 raise ContractError("proxy provider ownership or credential revision requires explicit recovery")
-            expected_credentials = {"OPENAI_API_KEY": "REDACTED"}
+            expected_credentials = dict.fromkeys(provider["credentials"], "REDACTED")
         if (existing.get("type") != provider["type"] or existing.get("config") or existing.get("profile_workspace")
                 or existing.get("credentials", {}) != expected_credentials or existing.get("credential_handles")):
             raise ContractError("provider drift or unexpected credential state requires explicit recovery")

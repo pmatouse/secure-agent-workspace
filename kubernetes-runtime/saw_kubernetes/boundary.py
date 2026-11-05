@@ -85,17 +85,21 @@ def verify(config, plan, get):
                 or fingerprint(obj[field]) != expected["sha256"]):
             raise BoundaryError("ChangedBoundary:" + key)
         observed[key] = obj
-    markers = {p["credentials"]["OPENAI_API_KEY"] for w in plan.get("workspaces", [])
-               for p in w["providers"] if p.get("credentials")}
-    if markers:
-        policy = json.loads(observed["proxyPolicy"]["data"]["config.json"])
-        if (policy["markerPrefix"] != "saw-cred" or policy["profiles"].get("openai") != ["api.openai.com"]
-                or "api.openai.com" not in policy["allowHosts"]):
-            raise BoundaryError("OpenAIProxyPolicyMismatch")
-        approved_markers = {f"saw-cred.{b['secret']}.api_key" for b in policy["bindings"]
-                            if b.get("key") == "api_key" and b.get("providers") == ["openai"]}
-        if not markers <= approved_markers:
-            raise BoundaryError("OpenAIProxyBindingMismatch")
+    from . import provider as governed
+    for workspace in plan.get("workspaces", []):
+        for provider in workspace["providers"]:
+            credentials = provider.get("credentials")
+            if credentials:
+                policy = json.loads(observed["proxyPolicy"]["data"]["config.json"])
+                kind = provider.get("type", "openai")
+                if kind != "openai":
+                    import yaml
+                    live = observed["governanceProfiles"]["data"].get(kind + ".yaml", "")
+                    if yaml.safe_load(live) != governed.document(kind):
+                        raise BoundaryError("ProviderGovernanceMismatch")
+                if not governed.check_policy(provider.get("type", "openai"), credentials, policy):
+                    raise BoundaryError("OpenAIProxyBindingMismatch" if provider.get("type", "openai") == "openai"
+                                        else "ProviderProxyBindingMismatch")
     vap = observed["validation"]
     status = vap.get("status", {})
     if (status.get("observedGeneration") != vap["metadata"]["generation"]

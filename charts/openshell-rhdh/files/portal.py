@@ -1698,6 +1698,10 @@ def generator_params(workspaces, defaults, read=None, catalog=None):
                 managed = ws.get("lifecycleVersion") == 1
                 site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected], model_lifecycle=managed),
                       "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
+                boundary = site.get("profileBoundaries", {}).get(selected)
+                if boundary:
+                    site = {**site, "providerPolicy": boundary["providerPolicy"],
+                            "automaticEnrollment": {**site["automaticEnrollment"], "reference": boundary["reference"]}}
                 if managed:
                     site.update(lifecycleVersion=1, modelInputs=ws["initialModelInputs"],
                                 requestedModels=ws.get("modelInputs", {}), desiredState=ws["desiredState"],

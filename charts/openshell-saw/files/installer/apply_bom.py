@@ -669,7 +669,6 @@ tree_digest = _saw_core.tree_digest
 # mount; how podman reports the mount (see sandbox_harness_mount). The 0.1.x
 # admission rules above are from the v0.1.2 source.
 
-HARNESS_MOUNT = "/sandbox/harness"
 HARNESS_MARKER = ".saw-harness-revision"  # written into the volume with the bundle
 HARNESS_VOLUME_PREFIX = "saw-harness-"
 HARNESS_VOLUME_LABEL = "saw.redhat.com/harness-volume"
@@ -691,14 +690,8 @@ OPENCLAW_EXEC_ENV = ("OPENCLAW_HOME=/sandbox SQLITE_TMPDIR=/sandbox/.openclaw/st
                      "TMPDIR=/sandbox/.openclaw/state OPENCLAW_NIX_MODE=0")
 # mcp.json env/header value: exactly ${VAR}, or Authorization-style
 # "Bearer ${VAR}". Any other prefix could smuggle a literal secret.
-MCP_PLACEHOLDER_ONLY = re.compile(
-    r"^(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|Bearer \$\{[A-Za-z_][A-Za-z0-9_]*\})$",
-    re.IGNORECASE)
 # A stdio arg naming a credential-ish flag with a literal value, e.g.
 # "--api-key=sk-live-...". The "--flag value" two-token form is not covered.
-MCP_ARG_CREDENTIAL_RE = re.compile(
-    r"^--?[\w-]*(?:key|token|secret|password|passwd|auth)[\w-]*=(?P<value>.*)$",
-    re.IGNORECASE)
 # The podman driver's workload container (its supervisor has the same
 # sandbox labels but not the user's mounts): isolation.rs WORKLOAD_FILTER.
 WORKLOAD_ROLE_LABEL = "openshell.ai/isolation-role=sandbox"
@@ -746,12 +739,6 @@ def sandbox_mounts_json(ws, sb):
     return json.dumps({"podman": {"mounts": sandbox_mounts(ws, sb)}}, separators=(",", ":"))
 
 
-def safe_rel_path(rel, where):
-    """A bundle-relative POSIX path: no absolute, no empty or '.'/'..' segment."""
-    parts = rel.split("/")
-    if not rel or rel.startswith("/") or any(part in ("", ".", "..") for part in parts):
-        raise InstallerError(f"{where}: unsafe path {rel!r}")
-    return rel
 
 
 def read_harness_tar(path):
@@ -852,143 +839,7 @@ def read_volume_tree(root):
 
 
 def describe_harness_tree(files, inline=False):
-    """What OpenClaw has to be pointed at, and what governance must allow.
-
-    Reads harness.yaml (metadata, spec.agent, and the governance entries in
-    spec.plugins / spec.mcpServers) and mcp.json. OpenClaw never reads
-    harness.yaml; it is the installer's view of the bundle. Returns:
-      name, agent
-      skills               the bundle has skills/
-      agentPluginsBundle   plugin.json at the root (OpenClaw loads skills/ and
-                           mcp.json from the bundle root)
-       mcp                  the bundle has mcp.json
-       mcpServers           server names declared in mcp.json
-       pluginDirs           native plugins under plugins/
-       governance           [{kind, name, governanceProfile, hosts}] to check
-                            against the gateway's catalog and the sandbox's
-                            providers
-
-    Keys never travel in a bundle. A plugin or MCP server that calls a
-    service names the provider profile (governanceProfile) that governs it;
-    the sandbox must have a provider of that type, which gives the process
-    the profile's env var holding a placeholder, and the sandbox's egress
-    proxy puts the real key in only for the profile's endpoints and
-    binaries. `inline` bundles come from a ConfigMap, which keeps no file
-    modes, so a stdio server cannot run a bundled file directly.
-    """
-    doc = _yaml(files["harness.yaml"][0].decode("utf-8"), "harness.yaml")
-    spec = doc.get("spec") or {}
-    name = (doc.get("metadata") or {}).get("name", "")
-    mcp_server_names = []
-    mcp_configs = {}
-    if "mcp.json" in files and "plugin.json" not in files:
-        raise InstallerError(
-            f"harness '{name}': mcp.json with no plugin.json at the bundle root; OpenClaw only "
-            "reads a bundle's mcp.json when the bundle root is on plugins.load.paths, which "
-            "openclaw_harness_config only sets for an Agent Plugins bundle. Add a plugin.json "
-            "at the bundle root")
-    plugin_dirs = sorted({rel.split("/")[1] for rel in files
-                          if rel.startswith("plugins/") and rel.count("/") >= 2})
-    declared_plugins = {item.get("name") for item in spec.get("plugins") or []}
-    for plugin in plugin_dirs:
-        if plugin not in declared_plugins:
-            log(f"WARN: harness '{name}': plugin '{plugin}' has no entry in harness.yaml "
-                "spec.plugins; its egress, if any, is enforced at runtime by the sandbox "
-                "proxy, not checked here")
-    governance = []
-    for item in spec.get("plugins") or []:
-        if item.get("governanceProfile"):
-            governance.append({"kind": "plugin", "name": item.get("name", ""),
-                               "governanceProfile": item["governanceProfile"], "hosts": []})
-    declared = {m.get("name"): m for m in spec.get("mcpServers") or []}
-    for server, decl in sorted(declared.items()):
-        stale = sorted(k for k in ("credentialSecret", "credentialSecretKey", "credentialEnvVar")
-                       if k in decl)
-        if stale:
-            raise InstallerError(
-                f"harness '{name}': mcp server '{server}' sets {', '.join(stale)}; keys no longer "
-                "reach the sandbox that way. Set governanceProfile to the provider type whose "
-                "key the server needs and give the sandbox a provider of that type: the server "
-                "reads a placeholder from the provider's env var (for example BRAVE_API_KEY) "
-                "and the sandbox's egress proxy adds the real key")
-    if "mcp.json" in files:
-        try:
-            servers = json.loads(files["mcp.json"][0]).get("mcpServers") or {}
-        except ValueError as exc:
-            raise InstallerError(f"harness '{name}': mcp.json is not valid JSON ({exc})") from None
-        mcp_server_names = sorted(servers)
-        mcp_configs = {k: v for k, v in servers.items() if isinstance(v, dict)}
-        for server, conf in sorted(servers.items()):
-            if not isinstance(conf, dict) or conf.get("type") not in ("stdio", "streamable-http", "sse"):
-                raise InstallerError(
-                    f"harness '{name}': mcp.json server '{server}' needs \"type\": \"stdio\", "
-                    "\"streamable-http\" or \"sse\" (OpenClaw ignores it otherwise)")
-            for field in ("env", "headers"):
-                for key, value in (conf.get(field) or {}).items():
-                    if not isinstance(value, str) or not MCP_PLACEHOLDER_ONLY.match(value):
-                        raise InstallerError(
-                            f"harness '{name}': mcp.json server '{server}' {field} '{key}' is not "
-                            "a bare ${VAR} placeholder (e.g. \"Bearer ${VAR}\"); a literal secret "
-                            "must not ship in a bundle's mcp.json, the ConfigMap or the image")
-            for arg in conf.get("args") or []:
-                match = isinstance(arg, str) and MCP_ARG_CREDENTIAL_RE.match(arg)
-                if match and not MCP_PLACEHOLDER_ONLY.match(match.group("value")):
-                    raise InstallerError(
-                        f"harness '{name}': mcp.json server '{server}' arg {arg!r} looks like a "
-                        "credential flag with a literal value; use --flag=${VAR} instead")
-            if isinstance(conf.get("url"), str):
-                creds = urlsplit(conf["url"])
-                if creds.username or creds.password:
-                    raise InstallerError(
-                        f"harness '{name}': mcp.json server '{server}' url has a literal "
-                        "credential in it (user:pass@host); a literal secret must not ship "
-                        "in a bundle's mcp.json, the ConfigMap or the image")
-            profile = (declared.get(server) or {}).get("governanceProfile", "")
-            if conf["type"] == "stdio":
-                command = conf.get("command")
-                if inline and isinstance(command, str) and "${PLUGIN_ROOT}" in command:
-                    raise InstallerError(
-                        f"harness '{name}': mcp server '{server}' runs {command!r}, a file in the "
-                        "bundle; an inline bundle keeps no file modes, so run it through its "
-                        "interpreter (for example command: node, args: [${PLUGIN_ROOT}/...]) "
-                        "or ship the bundle as an image")
-                # A stdio server runs inside the sandbox, under its policy. It
-                # needs a governanceProfile only when it calls a service.
-                if profile:
-                    governance.append({"kind": "MCP server", "name": server,
-                                       "governanceProfile": profile, "hosts": []})
-                else:
-                    log(f"WARN: harness '{name}': stdio MCP server '{server}' has no "
-                        "governanceProfile; its egress, if any, is enforced at runtime by "
-                        "the sandbox proxy, not checked here")
-                continue
-            host = urlsplit(conf.get("url") or "").hostname
-            if not host:
-                raise InstallerError(f"harness '{name}': mcp.json server '{server}' has no url host")
-            if not profile:
-                raise InstallerError(
-                    f"harness '{name}': remote MCP server '{server}' ({host}) needs a "
-                    "governanceProfile in harness.yaml spec.mcpServers")
-            governance.append({"kind": "MCP server", "name": server,
-                               "governanceProfile": profile, "hosts": [host]})
-    bundle_id = name
-    if "plugin.json" in files:
-        try:
-            bundle_id = json.loads(files["plugin.json"][0].decode("utf-8")).get("name") or name
-        except (ValueError, AttributeError):
-            pass
-    return {
-        "name": name,
-        "bundleId": bundle_id,
-        "agent": spec.get("agent", "openclaw"),
-        "skills": any(rel.startswith("skills/") for rel in files),
-        "agentPluginsBundle": "plugin.json" in files,
-        "mcp": "mcp.json" in files,
-        "mcpServers": mcp_server_names,
-        "mcpConfigs": mcp_configs,
-        "pluginDirs": plugin_dirs,
-        "governance": governance,
-    }
+    return _saw_core.describe_harness_tree(files, inline, warn=log)
 
 
 def parse_provider_profile_catalog(output):
@@ -1022,106 +873,17 @@ def in_cluster_host(host):
     return len(labels) >= 3 and (labels[2:3] == ["svc"] and labels[3:] in ([], ["cluster", "local"]))
 
 
-def host_allowed(host, patterns):
-    """A profile endpoint host may be a glob (*-aiplatform.googleapis.com);
-    ports are not part of the match. Each `*` is one DNS label (no dots)."""
-    host = (host or "").split(":")[0].lower()
-    for pattern in patterns:
-        regex = re.escape((pattern or "").split(":")[0].lower()).replace(r"\*", r"[^.]*")
-        if re.fullmatch(regex, host):
-            return True
-    return False
+host_allowed = _saw_core.host_allowed
 
 
-def openclaw_harness_config(info):
-    """OpenClaw config that makes it load the mounted bundle.
-
-    An Agent Plugins bundle (plugin.json at the root) brings its skills/ and
-    mcp.json (MCP servers) with it, so the bundle root goes on
-    plugins.load.paths. Otherwise skills/ is an extra skill directory.
-    plugins/ holds native OpenClaw plugins (tool code); OpenClaw discovers
-    every plugin under it from the one parent path, so adding or removing a
-    plugin in the bundle needs no config change (checked live on OpenClaw
-    2026.9.5).
-    """
-    config = {}
-    paths = []
-    if info["agentPluginsBundle"]:
-        paths.append(HARNESS_MOUNT)
-    elif info["skills"]:
-        config["skills.load.extraDirs"] = [f"{HARNESS_MOUNT}/skills"]
-    if info["pluginDirs"]:
-        paths.append(f"{HARNESS_MOUNT}/plugins")
-    if paths:
-        config["plugins.load.paths"] = paths
-    return config
 
 
-# OpenClaw (2026.9.x) expands only ${PLUGIN_ROOT}, ${PLUGIN_DATA} and
-# ${CLAUDE_PLUGIN_ROOT} in a bundle's mcp.json; any other ${VAR} reaches the
-# server as literal text, and a stdio server inherits only HOME, LOGNAME,
-# PATH, SHELL, TERM and USER. So a bundle server never sees its provider's
-# placeholder (Slack answers invalid_auth) or the sandbox's CA settings (TLS
-# through the egress proxy fails). openclaw.json does expand ${VAR} from the
-# gateway's environment, which has both, and a server defined under
-# mcp.servers replaces the bundle's server of the same name (found live: the
-# daily-briefing Slack reader works only this way).
-BUNDLE_ROOT_PLACEHOLDERS = ("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}")
-# The CA settings OpenShell gives a sandbox's processes when it has the proxy
-# CA (openshell-sandbox child_env::tls_env_vars). Only the ones the sandbox
-# really has are passed on: OpenClaw leaves an unset ${VAR} as literal text,
-# and REQUESTS_CA_BUNDLE='${REQUESTS_CA_BUNDLE}' breaks every HTTPS call.
-MCP_TRUST_ENV = ("NODE_EXTRA_CA_CERTS", "DENO_CERT", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
-                 "CURL_CA_BUNDLE", "GIT_SSL_CAINFO")
-MCP_SERVER_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+MCP_TRUST_ENV = _saw_core.MCP_TRUST_ENV
 SAW_MCP_STATE = "/sandbox/.openclaw/saw-mcp-servers.json"
 
 
 def harness_mcp_servers(info, trust_env=()):
-    """{name: mcp.servers entry} re-declaring the bundle's MCP servers in
-    openclaw.json, where OpenClaw expands ${VAR}. Stdio servers also get the
-    CA settings named in trust_env (the ones the sandbox has), so they trust
-    the egress proxy. Paths resolve as OpenClaw resolves them for a bundle
-    (root: the harness mount)."""
-    if info is None or not info.get("agentPluginsBundle"):
-        return {}
-    root = HARNESS_MOUNT
-    data = f"/sandbox/.openclaw/saw-plugin-data/{info['bundleId']}"
-
-    def expand(value):
-        if not isinstance(value, str):
-            return value
-        for placeholder in BUNDLE_ROOT_PLACEHOLDERS:
-            value = value.replace(placeholder, root)
-        return value.replace("${PLUGIN_DATA}", data)
-
-    out = {}
-    for name, conf in sorted((info.get("mcpConfigs") or {}).items()):
-        if not MCP_SERVER_NAME_RE.match(name):
-            log(f"WARN: harness '{info['name']}': MCP server name {name!r} cannot be "
-                "re-declared in openclaw.json; it keeps the bundle's literal env")
-            continue
-        kind = conf.get("type")
-        if kind == "stdio":
-            command = conf.get("command")
-            if isinstance(command, str) and command.startswith("./"):
-                command = f"{root}/{command[2:]}"
-            entry = {"command": expand(command),
-                     "args": [expand(a) for a in conf.get("args") or []],
-                     "env": {"PLUGIN_ROOT": root, "PLUGIN_DATA": data,
-                             **{var: f"${{{var}}}" for var in trust_env},
-                             **{k: expand(v) for k, v in (conf.get("env") or {}).items()}}}
-            if conf.get("cwd"):
-                entry["cwd"] = expand(conf["cwd"])
-        elif kind in ("streamable-http", "sse"):
-            if not conf.get("headers"):
-                continue        # nothing for OpenClaw to expand: the bundle's own entry works
-            entry = {"url": expand(conf.get("url")), "transport": kind,
-                     "headers": {k: expand(v) for k, v in conf["headers"].items()}}
-        else:
-            continue
-        out[name] = entry
-    return out
+    return _saw_core.harness_mcp_servers(info, trust_env, warn=log)
 
 
 def mcp_trust_env_probe():
@@ -1131,126 +893,15 @@ def mcp_trust_env_probe():
     return f'for v in {names}; do [ -n "$(printenv "$v")" ] && echo "$v"; done; true'
 
 
-def harness_plugin_ids(info):
-    """The OpenClaw plugin ids the harness brings: the bundle's (plugin.json
-    name) and each native plugin under plugins/."""
-    ids = [info["bundleId"]] if info["agentPluginsBundle"] else []
-    return ids + list(info["pluginDirs"])
 
 
-def mcp_registration_failures(output, declared):
-    """Inspect reports configuration registration, never MCP process readiness.
-
-    Kept pure so the E2E script can apply the same checks to inspection JSON.
-    Names in descriptions or diagnostics are not evidence of registration.
-    """
-    try:
-        report = json.loads(output)
-        plugin = report["plugin"]
-        servers = report["mcpServers"]
-        diagnostics = report.get("diagnostics") or []
-        if not isinstance(plugin, dict) or not isinstance(servers, list) or not isinstance(diagnostics, list):
-            raise ValueError("invalid inspection shape")
-        if plugin.get("status") != "loaded" or plugin.get("enabled") is False or plugin.get("error"):
-            return ["OpenClaw bundle runtime inspection reports an error or disabled bundle"]
-        if any(isinstance(d, dict) and d.get("level") == "error" for d in diagnostics):
-            return ["OpenClaw bundle runtime inspection reports error diagnostics"]
-        registered = {entry["name"] for entry in servers
-                      if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-                      and not entry.get("unsupported")}
-    except (ValueError, TypeError, KeyError):
-        return ["could not parse OpenClaw MCP registration inspection JSON"]
-    missing = sorted(set(declared) - registered)
-    return ([f"OpenClaw does not list MCP server(s) {', '.join(missing)} as registered"]
-            if missing else [])
+mcp_registration_failures = _saw_core.mcp_registration_failures
 
 
-def parse_harness_files(files):
-    """Build bundles from flat ConfigMap keys harness__<bundle>__<hash>, plus
-    one harness__<bundle>__map key per bundle mapping each hash to its
-    relpath (content-addressed: the key no longer encodes the path, so it
-    never hits the iso9660/Joliet 64-character filename limit regardless of
-    how deep or long a bundle's paths are; see templates/configmap-bom.yaml).
-
-    The digest is computed, never authored here: the pin lives in
-    sandbox.yaml harnessRef, outside the hashed tree. Relpaths from the map
-    get the same .. / empty / absolute checks as read_harness_tar.
-    """
-    raw_by_bundle, maps = {}, {}
-    for key, raw in files.items():
-        parts = key.split("__")
-        if len(parts) != 3 or parts[0] != "harness":
-            raise InstallerError(f"unexpected harness file name: {key}")
-        bundle, token = parts[1], parts[2]
-        if token == "map":
-            try:
-                maps[bundle] = json.loads(raw.decode("utf-8"))
-            except (ValueError, UnicodeDecodeError) as exc:
-                raise InstallerError(
-                    f"harness bundle {bundle!r}: map is not valid JSON ({exc})") from None
-        else:
-            raw_by_bundle.setdefault(bundle, {})[token] = raw
-    bundles = {}
-    for name in sorted(raw_by_bundle):
-        path_map = maps.get(name)
-        if path_map is None:
-            raise InstallerError(f"harness bundle {name!r} has no path map (harness__{name}__map)")
-        tree = {}
-        for hash_, raw in raw_by_bundle[name].items():
-            rel = path_map.get(hash_)
-            if rel is None:
-                raise InstallerError(
-                    f"harness bundle {name!r}: key 'harness__{name}__{hash_}' is not in its path map")
-            tree[safe_rel_path(rel, f"harness bundle {name!r} path map")] = raw
-        if "harness.yaml" not in tree:
-            raise InstallerError(f"harness bundle {name!r} has no harness.yaml")
-        doc = _yaml(tree["harness.yaml"].decode("utf-8"), f"harness/{name}/harness.yaml")
-        spec = doc.get("spec") or {}
-        bundles[name] = HarnessBundle(
-            name=(doc.get("metadata") or {}).get("name", name),
-            agent=spec.get("agent", "openclaw"),
-            digest=tree_digest(tree),
-            files={rel: base64.b64encode(raw).decode() for rel, raw in tree.items()},
-        )
-    return bundles
 
 
-def pinned_bundle(sb, bundles):
-    """The inline bundle a sandbox's harnessRef.name points at. The bundle
-    and the pin ship in the same ConfigMap, so harnessRef.digest is
-    optional; when it is set it must match."""
-    ref = sb.harness_ref or {}
-    bundle = bundles.get(ref.get("name"))
-    if bundle is None:
-        raise InstallerError(f"sandbox '{sb.name}' references unknown harness bundle "
-                             f"'{ref.get('name')}'")
-    want = ref.get("digest") or ""
-    if want and want != bundle.digest:
-        raise InstallerError(
-            f"harnessRef digest mismatch for sandbox '{sb.name}': sandbox.yaml says {want}, "
-            f"the bundle hashes to {bundle.digest}")
-    return bundle
 
 
-def check_harness_index(bundles, index):
-    """harness-index.yaml holds the digest Helm computed for each shipped
-    bundle; the installer recomputes it from the files it read. A mismatch
-    means the chart and the installer disagree on the tree_digest contract
-    or on the files (an encoding change on the way), so nothing is trusted."""
-    listed = (index or {}).get("bundles") or {}
-    for name, digest in sorted(listed.items()):
-        bundle = bundles.get(name)
-        if bundle is None:
-            raise InstallerError(f"harness-index.yaml lists bundle '{name}', but no files for it "
-                                 "were shipped")
-        if digest != bundle.digest:
-            raise InstallerError(
-                f"harness bundle '{name}': the chart computed {digest}, the installer "
-                f"{bundle.digest}; the files changed on the way or the tree_digest contract "
-                "differs between templates/configmap-bom.yaml and apply_bom.py")
-    for name in sorted(set(bundles) - set(listed)):
-        if listed or index:
-            raise InstallerError(f"harness bundle '{name}' is missing from harness-index.yaml")
 
 
 def agent_mounts_planned(profiles):
@@ -3727,27 +3378,7 @@ class ProfileApplier:
             return
         catalog = self.governance_catalog(ws)
         attached = {p.type for p in self.usable(ws) if p.name in sb.providers}
-        for item in info["governance"]:
-            profile = item["governanceProfile"]
-            what = f"harness '{info['name']}' {item['kind']} '{item['name']}'"
-            if profile not in catalog:
-                raise InstallerError(
-                    f"{what} names governanceProfile '{profile}', which the gateway does not "
-                    f"serve in workspace '{ws.name}'; refusing to fill the harness of sandbox "
-                    f"'{sb.name}'")
-            if profile not in attached:
-                raise InstallerError(
-                    f"{what} names governanceProfile '{profile}', but sandbox '{sb.name}' has no "
-                    f"provider of type '{profile}'; add one to the workspace's providers.yaml and "
-                    "to the sandbox's providers (its endpoints and key reach the sandbox only "
-                    "through a provider)")
-            for host in item["hosts"]:
-                if not host_allowed(host, catalog[profile]):
-                    allowed = ", ".join(sorted(catalog[profile])) or "none"
-                    raise InstallerError(
-                        f"{what} reaches {host}, which governanceProfile '{profile}' does not "
-                        f"allow (allowed: {allowed}); refusing to fill the harness of "
-                        f"sandbox '{sb.name}'")
+        _saw_core.check_harness_governance(ws, sb, info, catalog, attached)
 
     def expected_harness_digest(self, volume, bundle, source):
         """Trusted tree digest for `volume`, or None when none is known yet.
