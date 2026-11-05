@@ -1562,3 +1562,26 @@ def test_linked_container_catalog_entry_is_owned_and_links_only_to_the_site(port
     entry = next(d for d in docs if d["metadata"]["name"] == "linked-alice-agent-ui")
     assert entry["spec"]["owner"] == "user:default/alice"
     assert entry["metadata"]["links"] == [{"title":"OpenClaw UI","icon":"web","url":"https://alice-agent-ui.apps.example.com"}]
+
+
+def test_linked_runtime_tracks_owner_and_current_generation(portal):
+    ref = {"namespace":"runtime", "intent":"intent", "status":"status", "installationID":"instance",
+           "ownerSubject":"subject", "mode":"container"}
+    status = {"phase":"GenericReady", "observedGeneration":3}
+    intent = {"generation":3, "desiredState":"Running", "bindings":{
+        "namespace":"runtime", "ownerID":"instance", "ownerSubject":"subject", "mode":"container"}}
+    class Reader:
+        def call(self, method, path, ok404):
+            assert method == "GET" and ok404
+            assert path in ["/api/v1/namespaces/runtime/configmaps/" + n for n in ("intent","status")]
+            n = path.rsplit("/", 1)[1]
+            labels = {"saw.redhat.com/runtime-owner":"instance"}
+            if n == "status":
+                labels["saw.redhat.com/managed-by"] = "kubernetes-runtime-controller"
+            return {"metadata":{"labels":labels}, "data":{n+".json":json.dumps(intent if n=="intent" else status)}}
+    reader = Reader()
+    assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Running"
+    intent["generation"] += 1
+    assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Reconciling"
+    intent["bindings"]["ownerSubject"] = "someone-else"
+    assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Unknown"

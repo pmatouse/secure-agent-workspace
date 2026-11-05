@@ -1646,3 +1646,12 @@ Its scratch log covers the plugin interface only. Acceptance of the production
 workspace also requires a real tool invocation, authenticated approval and an
 append-only record that survives workspace replacement. Portal create/update/delete
 and the UEFI worker prerequisite have separate acceptance gates.
+
+For linked container and Kata workspaces the portal can read the same intent and
+status ConfigMaps as the controller. Configure `portal.linkedWorkspaces[].runtime`
+with `namespace`, `intent`, `status`, `installationID`, `ownerSubject` and
+`mode`. Its service account receives GET on those two named ConfigMaps. The
+catalog displays Running or Stopped only for matching ownership, mode and
+observed generation. Unknown and Reconciling distinguish missing observations
+from a pending change. This describes the runtime; inference and tool tests
+remain separate observations.
