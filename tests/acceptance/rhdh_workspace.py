@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import time
 import urllib.parse as u
 import urllib.request as r
 from html.parser import HTMLParser
@@ -28,6 +29,7 @@ def main():
     p.add_argument("--user", required=True)
     p.add_argument("--key-file", type=Path)
     p.add_argument("--task")
+    p.add_argument("--wait", type=int, default=0, help="poll a status task with the same authenticated session")
     a = p.parse_args()
     root, issuer = a.origin.rstrip("/"), a.issuer.rstrip("/")
     if not re.fullmatch(r"https://[a-z0-9.-]+", root) or not re.fullmatch(r"https://[a-z0-9.-]+/realms/[A-Za-z0-9._-]+", issuer):
@@ -71,7 +73,11 @@ def main():
         with r.build_opener(NoRedirect()).open(req, timeout=30) as res:
             return json.load(res)
     if a.action == "status":
-        task = api("/api/scaffolder/v2/tasks/"+a.task)
+        deadline=time.monotonic()+min(max(a.wait,0),3600)
+        while True:
+            task=api("/api/scaffolder/v2/tasks/"+a.task)
+            if task["status"] not in ("open","processing") or time.monotonic()>=deadline:break
+            time.sleep(6)
         print(json.dumps({"task":a.task,"status":task["status"]})); return
     template = ("delete" if a.action == "delete" else "create") + "-saw-workspace"
     entity = api("/api/catalog/entities/by-name/template/default/"+template)

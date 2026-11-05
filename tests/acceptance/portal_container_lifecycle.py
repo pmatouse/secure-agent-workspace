@@ -26,6 +26,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for k in ("user","portal","issuer","domain","openclaw-version","password-file","key-file"):
         p.add_argument("--"+k,required=True)
+    p.add_argument("--resume-create",nargs=2,metavar=("TASK_UUID","REGISTRATION"),help="resume observation of this exact owner registration after a client interruption")
     a=p.parse_args()
     if not re.fullmatch(r"[a-z0-9]([-a-z0-9]{0,17}[a-z0-9])?",a.user) or not re.fullmatch(r"[a-z0-9.-]+",a.domain):
         p.error("explicit owner and cluster domain required")
@@ -42,12 +43,20 @@ def main():
         return json.loads(d.get("user.json","{}"))
     if get("ingress.config.openshift.io","cluster").get("spec",{}).get("domain") != "apps."+a.domain:
         raise RuntimeError("current oc context does not match the requested application domain")
-    if reg() or get("namespace",ns):raise RuntimeError("refusing existing workspace or namespace")
+    if a.resume_create:
+        task_id,expected=a.resume_create
+        if not re.fullmatch("[a-f0-9-]{36}",task_id) or not re.fullmatch("[a-f0-9]{16}",expected) or not reg().get("vaultPrefix","").endswith("/"+ns+"/"+expected) or reg().get("intentGeneration")!=1:
+            raise RuntimeError("refusing to resume a different registration or update")
+    elif reg() or get("namespace",ns):raise RuntimeError("refusing existing workspace or namespace")
     def rh(action,*more):
         return json.loads(run(sys.executable,str(HERE/"rhdh_workspace.py"),action,"--user",a.user,
             "--origin",a.portal,"--issuer",a.issuer,*more,stdin=pw))
     def done(task):
-        state=rh("status","--task",task)["status"]
+        try:state=rh("status","--task",task,"--wait","90")["status"]
+        except subprocess.CalledProcessError:
+            # Bounded read-only reauthentication after timeout/session loss.
+            # Never repeat create/update/delete submissions.
+            return False
         if state in ("failed","cancelled"):raise RuntimeError("RHDH task "+task+" "+state)
         return state=="completed"
     def submit(action):
@@ -55,7 +64,11 @@ def main():
         print(action,result["task"],flush=True)
         eventually(lambda:done(result["task"]),action+" task",3600)
         return result["task"]
-    tasks={"create":submit("create")}
+    if a.resume_create:
+        eventually(lambda:done(task_id),"owner create task",1800)
+        if not reg()["vaultPrefix"].endswith("/"+expected):raise RuntimeError("registration changed")
+        tasks={"create":task_id}
+    else:tasks={"create":submit("create")}
     registration=reg()["vaultPrefix"].rsplit("/",1)[-1]
     if not re.fullmatch("[a-f0-9]{16}",registration):raise RuntimeError("invalid registration")
     archive="saw-history-"+registration
