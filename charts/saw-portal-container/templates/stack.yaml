@@ -19,6 +19,9 @@ kind: Namespace
 metadata:
   name: {{ $name }}
   labels:
+    {{- if eq $dest "ephemeral" }}
+    openshell.pattern/saw: "true"
+    {{- end }}
     saw.redhat.com/runtime-owner: {{ $ownerID | quote }}
     saw.redhat.com/registration: {{ $reg | quote }}
     saw.redhat.com/portal-owner: {{ $u | quote }}
