@@ -20,7 +20,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/pmatouse/secure-agent-workspace.git
-    targetRevision: 1ad4e6ab470f4932caa12fa3427e09767ddd55ee
+    targetRevision: d2dd9ac23c1f03b901e9556a5dbf5f3ad42c8306
     path: charts/saw-workspace-relay
     helm:
       releaseName: saw-agent-ui
