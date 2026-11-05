@@ -16,3 +16,4 @@ resources:
   - workspace-relay.yaml
   - tool-gate-check.yaml
   - tool-gate-build.yaml
+  - audit-qualification.yaml

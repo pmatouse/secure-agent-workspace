@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-audit-qualification
+  namespace: vp-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+spec:
+  project: default
+  sources:
+  - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: fb158a7a0b4a1c4884bbe08d82dd7379d42f3421
+    path: charts/saw-tool-audit-init
+    helm:
+      valuesObject:
+        enabled: true
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:bdf89476240a8740c545706ced0fa5f818b9d5cdcf28928af812bb2dc7f00ec8
+        auditClaim: saw-audit-qualification
+  - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: site/glmhg-vm-baseline
+    path: overrides/audit-qualification
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-runtime-smoke
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,186 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: saw-audit-qualification
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: ocs-external-storagecluster-ceph-rbd-immediate
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: saw-audit-qualification-pull
+  namespace: saw-k8s-build
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
+rules:
+- apiGroups:
+  - image.openshift.io
+  resources:
+  - imagestreams/layers
+  resourceNames:
+  - saw-runtime-controller
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: saw-audit-qualification-pull
+  namespace: saw-k8s-build
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: saw-audit-qualification-pull
+subjects:
+- kind: ServiceAccount
+  name: saw-audit-init-34e4d4d2b8529c2a
+  namespace: saw-runtime-smoke
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: saw-audit-probe-2bb37efc3015
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+immutable: true
+data:
+  check.py: "import errno, json, os, sys\nfrom pathlib import Path\nfrom uuid import\
+    \ uuid4\nlog = Path(\"/audit/log/tool-actions.jsonl\")\nmode = sys.argv[1]\nif\
+    \ mode == \"write\":\n    with log.open(\"a\") as f:\n        f.write(json.dumps({\"\
+    probe\": str(uuid4())}) + \"\\n\")\n        f.flush()\n        os.fsync(f.fileno())\n\
+    else:\n    records = [json.loads(x) for x in log.read_text().splitlines()]\n \
+    \   assert len(records) >= 1 and all(\"probe\" in r for r in records)\n    def\
+    \ forbidden(op):\n        try:\n            op()\n        except PermissionError\
+    \ as error:\n            assert error.errno == errno.EPERM\n            return\n\
+    \        raise RuntimeError(\"audit history could be changed\")\n    forbidden(lambda:\
+    \ os.close(os.open(log, os.O_WRONLY)))\n    with log.open(\"a\") as out:\n   \
+    \     forbidden(lambda: os.ftruncate(out.fileno(), 0))\n    forbidden(log.unlink)\n\
+    \    print(json.dumps({\"previousPodRecords\":len(records), \"openWithoutAppend\"\
+    :\"EPERM\",\n                      \"truncate\":\"EPERM\", \"unlink\":\"EPERM\"\
+    , \"uid\":os.getuid()}))\n"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: saw-audit-write
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        saw.redhat.com/audit-probe: 'true'
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroupChangePolicy: OnRootMismatch
+      volumes:
+      - name: audit
+        persistentVolumeClaim:
+          claimName: saw-audit-qualification
+      - name: check
+        configMap:
+          name: saw-audit-probe-2bb37efc3015
+      containers:
+      - name: check
+        image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+        command:
+        - python3
+        - /check/check.py
+        - write
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: audit
+          mountPath: /audit
+        - name: check
+          mountPath: /check
+          readOnly: true
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: saw-audit-verify
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        saw.redhat.com/audit-probe: 'true'
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroupChangePolicy: OnRootMismatch
+      volumes:
+      - name: audit
+        persistentVolumeClaim:
+          claimName: saw-audit-qualification
+      - name: check
+        configMap:
+          name: saw-audit-probe-2bb37efc3015
+      containers:
+      - name: check
+        image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+        command:
+        - python3
+        - /check/check.py
+        - verify
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: audit
+          mountPath: /audit
+        - name: check
+          mountPath: /check
+          readOnly: true
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: saw-audit-probes
+  namespace: saw-runtime-smoke
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
+spec:
+  podSelector:
+    matchLabels:
+      saw.redhat.com/audit-probe: 'true'
+  policyTypes:
+  - Ingress
+  - Egress
