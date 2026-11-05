@@ -13,7 +13,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   namespace: {{ $ns }}
-  name: {{ if eq $name "exchange" }}saw-audit-{{ $base }}{{ else if eq $name "gate" }}saw-gate-{{ $base }}{{ else }}{{ $base }}-{{ $name }}{{ end }}
+  name: {{ if eq $name "exchange" }}saw-audit-{{ $base }}{{ else if eq $name "gate" }}saw-gate-{{ $base }}{{ else if eq $name "workspace" }}workspace-{{ $base }}{{ else }}{{ $base }}-{{ $name }}{{ end }}
   annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
   {{- if ne $name "history" }}
   labels:
