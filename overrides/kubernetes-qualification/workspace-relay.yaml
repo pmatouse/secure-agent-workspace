@@ -51,7 +51,7 @@ spec:
           -----END CERTIFICATE-----
         workspace: agent
         workspaceID: 386f3c54-0d5a-46c9-8935-bf772fc1d957
-        sandbox: openclaw
+        sandbox: openclaw-ui
         ownerSubject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
         ownerLogin: sawk8sowner
         installationID: d8ac361b-9898-4b16-ac35-2d15f86db76b
