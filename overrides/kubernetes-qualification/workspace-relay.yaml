@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saw-ui-agent
+  labels:
+    openshell.pattern/saw: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    saw.redhat.com/runtime-owner: d8ac361b-9898-4b16-ac35-2d15f86db76b
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: saw-ui-agent}
+spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: {name: saw-agent-ui, namespace: vp-gitops}
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: a92774d26fd4bd1b2d0a7fd5cdf2b5bd87d2ddaa
+    path: charts/saw-workspace-relay
+    helm:
+      releaseName: saw-agent-ui
+      valuesObject:
+        enabled: true
+        clientID: saw-relay-glmhg-agent
+        keycloakNamespace: saw-keycloak
+        keycloakAdminSecret: openshell-keycloak-initial-admin
+        trustedNamespace: saw-k8s-trusted
+        issuer: https://openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io/realms/openshell
+        gatewayEndpoint: https://saw-k8s-test-gateway.saw-k8s-test.svc:17670
+        gatewayAdminSecret: saw-k8s-test-admin
+        gatewayCA: |
+          -----BEGIN CERTIFICATE-----
+          MIIBnTCCAUOgAwIBAgIUFxn53HzpA1lQfMG7q4lD5Ut9gc0wCgYIKoZIzj0EAwIw
+          KzEVMBMGA1UEAwwMb3BlbnNoZWxsLWNhMRIwEAYDVQQKDAlvcGVuc2hlbGwwIBcN
+          NzUwMTAxMDAwMDAwWhgPNDA5NjAxMDEwMDAwMDBaMCsxFTATBgNVBAMMDG9wZW5z
+          aGVsbC1jYTESMBAGA1UECgwJb3BlbnNoZWxsMFkwEwYHKoZIzj0CAQYIKoZIzj0D
+          AQcDQgAE03wZUPPFQ/sC6w4g+oTMXbT7uVWTF1sdXQgZhritIt+g9fsWitKQM3st
+          indrxZqsCWfCGdscF7vCgAv0tkfgUqNDMEEwDwYDVR0PAQH/BAUDAwcGADAdBgNV
+          HQ4EFgQUz1D3SI+fZr7OxnLVwKQRd9XHL1kwDwYDVR0TAQH/BAUwAwEB/zAKBggq
+          hkjOPQQDAgNIADBFAiEA6TX1tXQi/yLwTA68a6Ujol5jELdDl8xUdaXVCGQVdiMC
+          IF+7teCLdizBZUGxlbVNUpuFkBT6ZnUFP8+1H3vygIa1
+          -----END CERTIFICATE-----
+        workspace: agent
+        workspaceID: 386f3c54-0d5a-46c9-8935-bf772fc1d957
+        sandbox: openclaw
+        ownerSubject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
+        ownerLogin: sawk8sowner
+        installationID: d8ac361b-9898-4b16-ac35-2d15f86db76b
+        host: sawk8sowner-agent-openclaw-ui.apps.cluster-glmhg.dyn.redhatworkshops.io
+        sdkImage: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:afb8f2397d2787b1726272201c68ac9f6631c8b13274b1c935304146c3176322
+  destination: {server: https://kubernetes.default.svc, namespace: saw-ui-agent}
+  ignoreDifferences:
+  - {group: "", kind: Secret, name: relay-credentials, namespace: saw-ui-agent, jsonPointers: [/data]}
+  syncPolicy:
+    automated: {prune: false, selfHeal: true}
+    syncOptions: [RespectIgnoreDifferences=true]
