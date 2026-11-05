@@ -421,7 +421,7 @@ portal:
             ports:
             - protocol: TCP
               port: 443
-          revision: dd01e14aa6773307878a8207ebd72909fa3a5802
+          revision: 00ea624d092762ff41f6950f25b9c82d84aa9757
           gatewayCA: '-----BEGIN CERTIFICATE-----
 
             MIIBnDCCAUOgAwIBAgIUDTuIXD45Wak3Uij13zl81G+OlFYwCgYIKoZIzj0EAwIw
