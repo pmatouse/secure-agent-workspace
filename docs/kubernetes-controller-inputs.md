@@ -366,3 +366,11 @@ installation, controller credentials and persistent state, generic-workload
 positive/negative lifecycle tests, workload-only Kata verification, and completion
 of the missing agent/harness/credential/UI/RHDH lifecycle adapters. This frontend
 does not close those gaps or enable container/Kata provisioning in the portal.
+
+For a controller or image change, generate the new intent with `--pin-plan`
+from the reviewed source revision. This binds the compiled gateway request
+(including workload environment, command, image and PVC attachment) to the
+intent. An older controller rejects the new reference format or reports
+`CompiledPlanMismatch` before issuing a mutation. Wait for the new controller
+Deployment rollout before publishing the intent. Use a higher generation for
+the change. Legacy intents remain readable.

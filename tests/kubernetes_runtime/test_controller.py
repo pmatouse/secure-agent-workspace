@@ -410,3 +410,13 @@ def test_invalid_admin_input_never_reaches_compiler_or_core(setup, change):
     update_intent(setup, change)
     assert c.reconcile_once()["reason"] == "InvalidInputs"
     assert not compiled and not calls
+
+
+def test_plan_pin_fences_old_compiler_before_mutation(setup):
+    c, _, _, _, calls, verified = setup
+    update_intent(setup, lambda i: i["profileRef"].update(planSHA256="a"*64))
+    c.compile_files = lambda files, bindings: {"revision": "b"*64}
+    assert c.reconcile_once()["reason"] == "CompiledPlanMismatch"
+    assert not calls and not verified
+    c.compile_files = lambda files, bindings: {"revision": "a"*64}
+    assert c.reconcile_once()["phase"] == "GenericReady"

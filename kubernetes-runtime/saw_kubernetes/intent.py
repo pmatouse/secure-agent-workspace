@@ -80,7 +80,8 @@ def _previous(value, namespace, name, owner):
             or intent["bindings"].get("namespace") != namespace):
         raise IntentError("previous intent has an invalid schema")
     reference = intent["profileRef"]
-    if (not isinstance(reference, dict) or set(reference) != {"name", "uid", "sha256"}
+    if (not isinstance(reference, dict) or set(reference) not in ({"name", "uid", "sha256"}, {"name", "uid", "sha256", "planSHA256"})
+            or ("planSHA256" in reference and not re.fullmatch(r"[0-9a-f]{64}", str(reference["planSHA256"])))
             or not _name(reference["name"]) or not _uuid(reference["uid"])
             or not isinstance(reference["sha256"], str)
             or not re.fullmatch(r"[0-9a-f]{64}", reference["sha256"])):
@@ -88,7 +89,7 @@ def _previous(value, namespace, name, owner):
     return intent
 
 
-def build_intent(profile, bindings, *, name, generation, desired_state="Running", previous=None):
+def build_intent(profile, bindings, *, name, generation, desired_state="Running", previous=None, pin_plan=False):
     """Validate locally and return the controller's exact ConfigMap envelope.
 
     Observed metadata is required, but a local file is not authenticated cluster
@@ -113,12 +114,14 @@ def build_intent(profile, bindings, *, name, generation, desired_state="Running"
     if len(canonical(data).encode()) > MAX_DATA:
         raise IntentError("profile data exceeds the controller size bound")
     try:
-        compile_profile_files(data, bindings)
+        plan = compile_profile_files(data, bindings)
     except Exception:
         raise IntentError("profile or bindings are unsupported or invalid for this runtime") from None
     intent = {"schemaVersion": 1, "generation": generation, "desiredState": desired_state,
               "profileRef": {"name": meta["name"], "uid": meta["uid"], "sha256": digest(data)},
               "bindings": bindings}
+    if pin_plan:
+        intent["profileRef"]["planSHA256"] = plan["revision"]
     if previous is not None:
         old = _previous(previous, meta["namespace"], name, bindings["ownerID"])
         if old["profileRef"]["name"] != meta["name"] or old["profileRef"]["uid"] != meta["uid"]:
@@ -165,11 +168,12 @@ def main(argv=None):
     parser.add_argument("--name", required=True, help="Allowlisted controller intent ConfigMap name")
     parser.add_argument("--generation", required=True, type=int)
     parser.add_argument("--desired-state", choices=["Running", "Stopped"], default="Running")
+    parser.add_argument("--pin-plan", action="store_true", help="Require the deployed compiler to produce exactly this plan before applying")
     parser.add_argument("--previous-intent", help="Optional existing intent ConfigMap JSON for update/generation checks")
     try:
         args = parser.parse_args(argv)
         result = build_intent(_read(args.profile_configmap, json_only=True), _read(args.bindings),
-                              name=args.name, generation=args.generation, desired_state=args.desired_state,
+                              name=args.name, generation=args.generation, desired_state=args.desired_state, pin_plan=args.pin_plan,
                               previous=_read(args.previous_intent, json_only=True) if args.previous_intent else None)
         output = json.dumps(result, indent=2, sort_keys=True)
     except IntentError as exc:

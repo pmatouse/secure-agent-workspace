@@ -265,7 +265,7 @@ class Controller:
                 or intent["bindings"].get("namespace") != self.scope.namespace):
             raise InputError("InvalidInputs")
         reference = intent["profileRef"]
-        if (not isinstance(reference, dict) or set(reference) != {"name", "uid", "sha256"}
+        if (not isinstance(reference, dict) or set(reference) not in ({"name", "uid", "sha256"}, {"name", "uid", "sha256", "planSHA256"})
                 or reference["name"] != self.scope.profile_name):
             raise InputError("InvalidInputs")
         profile = self.api.get(self.scope.profile_name)
@@ -331,6 +331,8 @@ class Controller:
                     or previous.get("generation") == intent["generation"] and previous.get("revision") != revision):
                 raise InputError("StaleOrConflictingGeneration")
             plan = self.compile_files(copy.deepcopy(files), copy.deepcopy(intent["bindings"]))
+            if "planSHA256" in intent["profileRef"] and plan["revision"] != intent["profileRef"]["planSHA256"]:
+                raise InputError("CompiledPlanMismatch")
             if intent["desiredState"] == "Running":
                 try:
                     self.verify_boundary(plan)
