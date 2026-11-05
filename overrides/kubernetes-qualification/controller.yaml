@@ -13,7 +13,7 @@ spec:
       releaseName: saw-k8s-test
       valuesObject:
         enabled: true
-        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:2c65c6059a46070adc10615cab2c518108dc83b67fcb1d5baefc895e9fc1cab8
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:afb8f2397d2787b1726272201c68ac9f6631c8b13274b1c935304146c3176322
         configuration:
           gateway: saw-k8s-test
           namespace: saw-k8s-test
