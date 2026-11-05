@@ -229,13 +229,13 @@ class Reconciler:
             if marker_provider:
                 slots = profile.get("credentials", [])
                 endpoints = profile.get("endpoints", [])
-                slot, hosts = governed.requirements(provider_type)
+                slot, hosts = governed.requirements(provider_type, plan.get("customInferenceURL"))
                 if (profile.get("id") != provider_type
                         or profile.get("source") != "interceptor/governance" or len(slots) != 1
                         or slots[0].get("env_vars") != slot["env_vars"] or slots[0].get("name") != slot["name"]
                         or sorted(e.get("host") for e in endpoints) != hosts
                         or any(e.get("port") != 443 or e.get("enforcement") != "NETWORK_ENFORCEMENT_MODE_ENFORCE" for e in endpoints)):
-                    raise ContractError("OpenAI profile differs from the approved inference boundary")
+                    raise ContractError(f"{provider_type} profile differs from the approved inference boundary")
                 continue
             if (profile.get("id") != provider_type or profile.get("credentials")
                     or not profile.get("source", "").startswith("interceptor/")):

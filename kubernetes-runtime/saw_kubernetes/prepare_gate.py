@@ -68,7 +68,7 @@ def publish_harness(root, bom, name, expected_digest):
 
 def publish_model(root, target, model, generation):
     """Fence concurrent or replayed GitOps Jobs on the per-sandbox gate volume."""
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", model) or type(generation) is not int or generation < 1:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}", model) or type(generation) is not int or generation < 1:
         raise ValueError("invalid model selection")
     selected = {"generation":generation, "model":model}
     path = target / "model.json"

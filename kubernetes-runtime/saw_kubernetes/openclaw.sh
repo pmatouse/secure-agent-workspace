@@ -13,10 +13,10 @@ const model = process.argv[2];
 const config = {
   gateway: {mode: 'local', bind: 'loopback', port: 18789,
             auth: {mode: 'token', token: crypto.randomBytes(32).toString('hex')}},
-  models: {providers: {openai: {baseUrl: 'https://api.openai.com/v1',
-    api: 'openai-completions', apiKey: '${OPENAI_API_KEY}',
+  models: {providers: {@SAW_PROVIDER_KEY@: {baseUrl: @SAW_BASE_URL@,
+    @SAW_TIMEOUT@api: 'openai-completions', apiKey: '${@SAW_KEY_ENV@}',
     models: [{id: model, name: model}]}}},
-  agents: {defaults: {model: {primary: 'openai/' + model},
+  agents: {defaults: {model: {primary: '@SAW_PROVIDER_ID@/' + model},
     workspace: '/sandbox/workspace/project'}},
   tools: {deny: ['*']}
 };

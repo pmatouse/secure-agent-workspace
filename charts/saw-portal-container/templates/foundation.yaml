@@ -29,6 +29,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: default-deny, namespace: {{ $runtime }}, annotations: {argocd.argoproj.io/sync-wave: "-1"}}
 spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
+{{- $customSecret := "" }}
 {{- $sources := dict "inference" (list "api_key") }}
 {{- with (.Values.site | default dict).providerPolicy }}
 {{- $sources = dict }}
@@ -37,6 +38,7 @@ spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
 {{- if .refresh }}
 {{- range .refresh.material }}{{- $fields = append $fields . }}{{- end }}
 {{- else }}{{- $fields = append $fields .key }}{{- end }}
+{{- if has "custom-inference" .providers }}{{- $customSecret = .secret }}{{- end }}
 {{- $_ := set $sources .secret ($fields | uniq | sortAlpha) }}
 {{- end }}
 {{- end }}
@@ -50,7 +52,18 @@ metadata:
 spec:
   refreshInterval: 1m
   secretStoreRef: {kind: ClusterSecretStore, name: {{ $.Values.secretStore | quote }}}
+  {{- if eq $customSecret $secret }}
+  target:
+    name: {{ $secret }}
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      mergePolicy: Merge
+      data:
+        url: {{ required "custom inference requires the enrolled site URL" $.Values.site.customInferenceURL | quote }}
+  {{- else }}
   target: {name: {{ $secret }}, creationPolicy: Owner}
+  {{- end }}
   data:
     {{- range $fields }}
     - secretKey: {{ . }}

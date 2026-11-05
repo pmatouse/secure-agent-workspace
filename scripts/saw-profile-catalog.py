@@ -186,6 +186,9 @@ def catalog():
                                   "uiRoute": bool(ui.get("route", False)),
                                   "harnessRequired": bool(sb.get("harnessRef") and sb.get("harnessRequired"))})
                 model_ref = secret_ref((sb.get("inference") or {}).get("model"))
+                endpoint_ref = secret_ref((sb.get("inference") or {}).get("baseUrl"))
+                if endpoint_ref and sb["inference"].get("providerRef") == "custom-inference":
+                    sandboxes[-1]["endpointInput"] = ".".join(endpoint_ref)
                 if model_ref:
                     sandboxes[-1]["modelInput"] = ".".join(model_ref)
             workspaces.append({"name": name, "description": description, "enabled": enabled,
@@ -381,7 +384,17 @@ def render_template(cat, for_user=False):
                 props[name] = prop
                 if field.get("required"):
                     required.append(name)
-        one_of.append({"properties": props, "required": required})
+        case = {"properties": props, "required": required}
+        if any(sb.get("endpointInput") for ws in prof["workspaces"] for sb in ws["sandboxes"]):
+            # The keyed custom-endpoint container has one credential destination.
+            # Keep web-search fields on the existing VM form only.
+            search = {form_name("web-search", f["key"]) for f in prof["secrets"].get("web-search", {}).get("fields", [])}
+            if search:
+                vm_fields = {k: props.pop(k) for k in sorted(search)}
+                case["required"] = [k for k in required if k not in search]
+                case["allOf"] = [{"if": {"properties":{"deploymentMode":{"const":"vm"}}},
+                                  "then": {"properties":vm_fields, "required":[k for k in required if k in search]}}]
+        one_of.append(case)
     names = sorted(profiles)
     template = {
         "apiVersion": "scaffolder.backstage.io/v1beta3",

@@ -95,11 +95,11 @@ def verify(config, plan, get):
             if credentials:
                 policy = json.loads(observed["proxyPolicy"]["data"]["config.json"])
                 kind = provider.get("type", "openai")
-                if kind != "openai":
+                if kind not in {"openai", "custom-inference"}:
                     live = observed["governanceProfiles"]["data"].get(kind + ".yaml", "")
                     if yaml.safe_load(live) != governed.document(kind):
                         raise BoundaryError("ProviderGovernanceMismatch")
-                if not governed.check_policy(kind, credentials, policy):
+                if not governed.check_policy(kind, credentials, policy, plan.get("customInferenceURL")):
                     raise BoundaryError("OpenAIProxyBindingMismatch" if kind == "openai"
                                         else "ProviderProxyBindingMismatch")
     vap = observed["validation"]

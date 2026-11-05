@@ -72,6 +72,8 @@ def once(x):
         bindings["proxyBindings"] = [{"secret": b["secret"], "key": b["key"], "type": typ,
                                       "refresh": bool(b.get("refresh"))}
                                      for b in x["providerPolicy"]["bindings"] for typ in b["providers"]]
+    if x.get("customInferenceURL"):
+        bindings["customInferenceURL"] = x["customInferenceURL"]
     if x.get("modelInputs"):
         bindings["modelInputs"]=x["modelInputs"]
     plan=compile_profile_files(profile["data"],bindings)

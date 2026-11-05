@@ -148,15 +148,49 @@ def compile_profile(profile_dir, config):
     return compile_profile_files(files, config)
 
 
-def _openai_inference(workspace, sandbox, config):
+def _openclaw_startup(kind, info):
+    # Preserve previously enrolled command bytes for the two original providers.
+    slot, hosts = governed.requirements(kind, info.get("baseUrl"))
+    endpoint = info.get("baseUrl") or f"https://{hosts[0]}/v1"
+    custom = kind == "custom-inference"
+    timeout = info.get("timeoutSeconds", 0)
+    return (Path(__file__).with_name("openclaw.sh").read_text()
+            .replace("@SAW_PROVIDER_KEY@", json.dumps(kind) if custom else kind)
+            .replace("@SAW_BASE_URL@", json.dumps(endpoint) if custom else repr(endpoint))
+            .replace("@SAW_TIMEOUT@", f"timeoutSeconds: {timeout}, " if timeout else "")
+            .replace("@SAW_KEY_ENV@", slot["env_vars"][0])
+            .replace("@SAW_PROVIDER_ID@", kind))
+
+
+def _compatible_inference(workspace, sandbox, config):
     """Use the VM BOM resolver, with public model inputs from the approved binding."""
     inputs = config.get("modelInputs", {})
+    ref = (sandbox.inference or {}).get("providerRef")
+    custom = ref == "custom-inference"
+    endpoint = config.get("customInferenceURL") if custom else None
+    if custom:
+        try:
+            governed.custom_host(endpoint)
+        except (ValueError, TypeError) as exc:
+            raise ContractError("custom inference endpoint is not approved") from exc
     def read_model(secret, key):
         if secret != config.get("openAIProxySecret") or key == "api_key":
             raise ContractError("model input is outside the public inference binding")
+        if custom and key == "url":
+            return endpoint
+        if custom and key != "model":
+            raise ContractError("unapproved custom inference input")
         return inputs.get(secret + "." + key, "")
-    info = shared.resolve_inference(workspace, sandbox, read_model, lambda *_: None,
-                                    forbidden={(config.get("openAIProxySecret"), "api_key")})
+    try:
+        info = shared.resolve_inference(workspace, sandbox, read_model, lambda *_: None,
+                                        forbidden={(config.get("openAIProxySecret"), "api_key")})
+    except shared.InstallerError as exc:
+        raise ContractError("invalid sandbox inference inputs") from exc
+    if custom:
+        if (ref not in sandbox.providers or info["baseUrl"] != endpoint or info["protocol"] != "openai"
+                or info.get("models") or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}", info["model"])):
+            raise ContractError("custom inference inputs differ from approved endpoint or protocol")
+        return info
     if ((sandbox.providers != ["openai"] and not config.get("proxyBindings")) or "openai" not in sandbox.providers or info["providerRef"] != "openai"
             or info["protocol"] != "openai" or info["baseUrl"] != "https://api.openai.com/v1"
             or info.get("models") or info["timeoutSeconds"]
@@ -186,7 +220,7 @@ def compile_profile_files(files, config):
         raise ContractError("profile documents fail shared SAW schema or semantic validation") from None
     mapping(config, {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode",
                      "workloadRuntimeClass", "workloadRuntimeClassUID", "bindings",
-                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes", "modelInputs", "proxyBindings"},
+                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes", "modelInputs", "proxyBindings", "customInferenceURL"},
             {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode", "bindings",
              "approvedCredentialFreeProviders", "gatewayVersion"}, "administrator configuration")
     try:
@@ -231,11 +265,13 @@ def compile_profile_files(files, config):
             if not config.get("proxyBindings") and (provider.refresh_strategy or provider.credentials_spec or provider.credential_secret_key != "api_key"):
                 raise ContractError("provider requires an unported credential/refresh capability or approval")
             if provider.credential_free:
+                if provider.type == "custom-inference":
+                    raise ContractError("custom inference requires a bound credential")
                 if provider.type not in approved:
                     raise ContractError("credential-free provider requires administrator approval")
             elif config.get("proxyBindings"):
                 try:
-                    entry["credentials"] = governed.checked_marker(provider, config["proxyBindings"])
+                    entry["credentials"] = governed.checked_marker(provider, config["proxyBindings"], config.get("customInferenceURL"))
                 except ValueError as exc:
                     raise ContractError(str(exc)) from exc
             elif (provider.type == provider.name == "openai" and config.get("openAIProxySecret")
@@ -263,19 +299,18 @@ def compile_profile_files(files, config):
                 inference_provider = next((p for p in workspace.providers if p.enabled and p.name in sandbox.providers
                                            and p.type == "nvidia" and p.model), None)
                 nvidia = inference_provider is not None and not sandbox.inference and bool(config.get("proxyBindings"))
-                if not nvidia and not any(p["type"] == "openai" and p.get("credentials") for p in providers):
+                custom = (sandbox.inference or {}).get("providerRef") == "custom-inference"
+                expected_type = "custom-inference" if custom else "openai"
+                if not nvidia and not any(p["type"] == expected_type and p.get("credentials") for p in providers):
                     raise ContractError("openclaw requires a bound OpenAI provider")
                 if nvidia:
                     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,180}", inference_provider.model):
                         raise ContractError("invalid NVIDIA inference model")
                     info = {"model": inference_provider.model}
                 else:
-                    info = _openai_inference(workspace, sandbox, config)
-                script = Path(__file__).with_name("openclaw.sh").read_text()
-                if nvidia:
-                    script = script.replace("https://api.openai.com/v1", "https://integrate.api.nvidia.com/v1")
-                    script = script.replace("${OPENAI_API_KEY}", "${NVIDIA_API_KEY}")
-                    script = script.replace("providers: {openai:", "providers: {nvidia:").replace("'openai/' + model", "'nvidia/' + model")
+                    info = _compatible_inference(workspace, sandbox, config)
+                kind = "nvidia" if nvidia else expected_type
+                script = _openclaw_startup(kind, info)
                 browser = bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")
                 extra = ""
                 if browser is not None:
@@ -333,6 +368,8 @@ if (!Number.isSafeInteger(selection.generation) || selection.generation < 1 ||
   throw new Error('invalid published model');
 const model = selection.model;
 """)
+                    if custom:
+                        command[2] = command[2].replace("[A-Za-z0-9._-]{0,99}", r"[A-Za-z0-9._\/-]{0,99}")
                     script = script.replace("for (const path of treeFiles(root).sort()) {",
                         "for (const path of treeFiles(root).sort()) {\n  if (path === root + '/model.json') continue;")
                 if receipt_key:
@@ -389,6 +426,8 @@ exec openclaw gateway""")
             "runtimeClass": {"name": runtime, "uid": config.get("workloadRuntimeClassUID", "")},
             "claims": sorted(all_refs, key=lambda r: (r["workspace"], r["name"])),
             "workspaces": sorted(workspaces, key=lambda w: w["name"])}
+    if any(p["type"] == "custom-inference" for w in workspaces for p in w["providers"]):
+        plan["customInferenceURL"] = config["customInferenceURL"]
     retired = config.get("retiredSandboxes", {})
     if not isinstance(retired, dict):
         raise ContractError("retiredSandboxes must map workspace/sandbox names to retained IDs")

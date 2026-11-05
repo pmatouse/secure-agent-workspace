@@ -125,3 +125,63 @@ stated (`openai`): the installer cannot infer it for a profile of your own.
   custom endpoints.
 - NemoClaw sandboxes onboard their own provider settings; the profile only
   ships an OpenClaw sandbox.
+
+## Container deployment
+
+The container backend uses the same `custom-inference` BOM, input resolver and
+credential broker. The shipped notebook has no browser route. Its OpenClaw
+agent can be used through the normal OpenShell workspace access path. The
+container implementation currently supports **one keyed HTTPS endpoint on port
+443 per registration**, with a DNS hostname and a base path ending in `/v1`.
+
+1. Install the extra OpenShell governance profile described above in the
+   workspace gateway's governance deployment. For this container contract its
+   single enforced endpoint must match the site host, and its `api_key`
+   credential must declare `CUSTOM_INFERENCE_API_KEY`. The controller checks
+   the platform-scoped profile returned by the gateway before creating the sandbox.
+2. Pin a supporting controller image and the notebook image approved for the
+   site's OpenShift UID range. In the existing container owner's site YAML add
+   the rendered BOM digest to `automaticEnrollment.approvedProfiles`. Supply the
+   profile-specific reviewed boundary and endpoint, for example:
+
+   ```yaml
+   profileBoundaries:
+     custom-inference:
+       inferenceBaseURL: https://models.example.com/v1
+       allowHosts: [models.example.com]
+       reference: <reviewed boundary map for this owner and proxy configuration>
+   ```
+
+3. In RHDH choose **Container** and **custom-inference**. Enter the endpoint URL,
+   the served model ID and the provider API key. The portal compares the URL
+   to the site value before writing to Vault. Web search is disabled for this
+   dedicated broker. Changing endpoint requires a fresh registration.
+4. ESO merges the enrolled URL into the broker's trusted Secret and reads only
+   the API key from Vault. OpenClaw receives a marker. The stock broker uses the
+   Secret's URL to bind that marker to one host. The shared BOM resolver supplies
+   the model and timeout (300 seconds in the shipped profile). With model lifecycle
+   enabled, model updates use the existing publication and restart flow.
+
+### Run the controlled endpoint test
+
+Use the tested runtime image digest and an OpenShift namespace with permission to
+pull it and the pinned notebook image. From the repository root:
+
+```sh
+ns=saw-k8s-build
+id=check-$(date +%s)
+python3 tests/acceptance/custom_inference_fixture.py --runtime-image "$RUNTIME_IMAGE" --suffix "$id" |
+  oc -n "$ns" create -f -
+oc -n "$ns" wait --for=condition=complete "job/custom-inference-$id" --timeout=16m
+oc -n "$ns" logs "job/custom-inference-$id" -c agent
+oc -n "$ns" logs "job/custom-inference-$id" -c endpoint
+oc -n "$ns" delete job,configmap,networkpolicy -l "saw.redhat.com/fixture=custom-inference-$id"
+```
+
+The Job compiles the actual BOM with the packaged runtime and runs the stock SAW
+broker, OpenClaw notebook and an isolated OpenAI-compatible HTTPS responder.
+It uses a fresh random key and private fixture CAs. An accepted response requires
+the rewritten bearer credential and the requested model ID. The client verifies
+the challenge response and requires HTTP 403 for a CONNECT to a second hostname.
+The Job checks application and broker behavior. RHDH owner enrollment and a
+production model server are separate qualification steps.

@@ -139,6 +139,7 @@
           "sandboxes": [
             {
               "enabled": true,
+              "endpointInput": "inference.url",
               "harnessRequired": false,
               "modelInput": "inference.model",
               "name": "notebook",

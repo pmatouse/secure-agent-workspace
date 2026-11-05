@@ -57,9 +57,16 @@ spec:
             inference__url: {title: 'inference: Endpoint base URL (OpenAI-compatible, ending in /v1)',
               type: string, pattern: '^https?://'}
             inference__model: {title: 'inference: Model', type: string}
-            web_search__api_key: {title: 'web-search: API key', type: string, 'ui:field': Secret, description: Stored
-                in Vault for your workspace only (provider brave)}
-          required: [inference__api_key, inference__url, inference__model, web_search__api_key]
+          required: [inference__api_key, inference__url, inference__model]
+          allOf:
+          - if:
+              properties:
+                deploymentMode: {const: vm}
+            then:
+              properties:
+                web_search__api_key: {title: 'web-search: API key', type: string, 'ui:field': Secret,
+                  description: Stored in Vault for your workspace only (provider brave)}
+              required: [web_search__api_key]
         - properties:
             profile: {const: data-science}
             uiRoutes: {title: Sandbox web UIs, type: 'null', description: 'Published on their own route,

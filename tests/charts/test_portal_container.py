@@ -135,3 +135,21 @@ def test_personal_assistant_uses_the_vm_proxy_policy_and_trusted_secret_projecti
         assert {e["secretKey"] for e in secrets[name]["spec"]["data"]}==keys
     proxy,=[r for r in resources if r["kind"]=="Application" and r["spec"]["source"]["path"]=="charts/saw-kubernetes-proxy"]
     assert proxy["spec"]["source"]["helm"]["valuesObject"]["credentialSecretNames"]==sorted(secrets)
+
+
+def test_custom_inference_projection_pins_broker_url_and_keeps_key_private():
+    url="https://models.fixture.test/v1"
+    owner={**user(),"profiles":["custom-inference"],"webSearch":{"enabled":False}}
+    site={**SITE,"providerAllowHosts":["models.fixture.test"],"customInferenceURL":url,
+          "automaticEnrollment":{**SITE["automaticEnrollment"],"approvedProfiles":{"custom-inference":"a"*64}}}
+    root=render("saw-users","portal-ws-"+U,"saw-portal",{"global":GLOBAL,"users":[owner],"containerSites":{U:site}})
+    app,=[a for a in root if a.get("spec",{}).get("source",{}).get("path")=="charts/saw-portal-container"]
+    resources=child(app)
+    broker,=[r for r in resources if r["kind"]=="ConfigMap" and r["metadata"]["name"].endswith("-proxy-policy")]
+    policy=json.loads(broker["data"]["config.json"])
+    assert policy["allowHosts"]==["models.fixture.test"] and not policy["profiles"].get("custom-inference")
+    assert policy["bindings"]==[{"providers":["custom-inference"],"key":"api_key","secret":"inference"}]
+    es,=[r for r in resources if r["kind"]=="ExternalSecret"]
+    assert es["metadata"]["namespace"]=="saw-ctl-"+REG
+    assert es["spec"]["target"]["template"]=={"engineVersion":"v2","mergePolicy":"Merge","data":{"url":url}}
+    assert [e["secretKey"] for e in es["spec"]["data"]]==["api_key"]

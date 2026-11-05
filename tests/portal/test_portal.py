@@ -1697,3 +1697,26 @@ def test_owner_state_change_is_generation_scoped_and_does_not_touch_vault(portal
     assert state("saw-req-6", "start", 2) == 0
     assert portal.read_entry(fake.objects[REGISTRY]) == {**entry, "intentGeneration": 3}
     assert json.dumps(fake.vault, sort_keys=True) == vault_before
+
+
+def test_custom_endpoint_is_approved_before_writing_vault(portal, world, monkeypatch):
+    fake, signer = world
+    url="https://models.fixture.test/v1"
+    boundary={"allowHosts":["models.fixture.test"],"inferenceBaseURL":url}
+    site={"subject":"478fdd1f-8db9-41e8-97ad-b563215c89e9","profileBoundaries":{"custom-inference":boundary},
+          "automaticEnrollment":{"approvedProfiles":{"custom-inference":"a"*64}}}
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES",'["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES",json.dumps({"alice":site}))
+    def submit(name,endpoint):
+        request = ds_request(signer,deploymentMode="container",profile="custom-inference",
+                             **{"inference.url":endpoint,"inference.model":"org/model","inference.api_key":"private-test-key"})
+        request.pop("web-search.api_key")
+        fake.request(name,request)
+        return portal.main(["create",name])
+    assert submit("saw-req-bad","https://elsewhere.example/v1") != 0
+    assert not fake.vault and REGISTRY not in fake.objects
+    assert submit("saw-req-good",url) == 0
+    entry=portal.read_entry(fake.objects[REGISTRY])
+    assert entry["customInferenceURL"]==url and entry["modelInputs"]=={"inference.model":"org/model"}
+    assert "private-test-key" not in json.dumps(entry)
+    assert entry["webSearch"] == {"enabled":False} and not any("web-search" in k for k in fake.vault)
