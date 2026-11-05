@@ -445,3 +445,5 @@ portal:
             -----END CERTIFICATE-----
 
             '
+          subject: 4d60feb2-9f4a-4f48-82ae-f84cb7e295c6
+          workspaceID: 4e6d6588-823e-470e-9de7-ee14f4a8ba20
