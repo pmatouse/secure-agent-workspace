@@ -1,0 +1,44 @@
+{{- $u := required "verified registration owner required" .Values.owner -}}
+{{- $id := required "registration required" .Values.registration -}}
+{{- if or (gt (len $u) 19) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $u)) (not (regexMatch "^[0-9a-f]{16}$" $id)) }}{{ fail "invalid portal owner or registration" }}{{ end }}
+{{- $subject := required "resolved ownerSubject required" .Values.ownerSubject }}
+{{- if not (regexMatch "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$" $subject) }}{{ fail "invalid ownerSubject" }}{{ end }}
+{{- $runtime := printf "saw-%s" $u }}
+{{- $trusted := printf "saw-ctl-%s" $id }}
+{{- if ne .Release.Namespace $runtime }}{{ fail "release namespace must match workspace owner" }}{{ end }}
+{{- $prefix := required "owner-scoped vaultPrefix required" .Values.vaultPrefix }}
+{{- if not (regexMatch (printf "^[a-zA-Z0-9_-]+/data/([a-zA-Z0-9_-]+/)*saw-%s/%s$" $u $id) $prefix) }}{{ fail "vaultPrefix must match the owner and registration" }}{{ end }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $trusted }}
+  labels:
+    saw.redhat.com/runtime-owner: {{ required "installationID required" .Values.installationID | quote }}
+    saw.redhat.com/portal-owner: {{ $u | quote }}
+    saw.redhat.com/registration: {{ $id | quote }}
+    pod-security.kubernetes.io/enforce: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: {{ $trusted }}, annotations: {argocd.argoproj.io/sync-wave: "-1"}}
+spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: {{ $runtime }}, annotations: {argocd.argoproj.io/sync-wave: "-1"}}
+spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: inference
+  namespace: {{ $trusted }}
+spec:
+  refreshInterval: 1m
+  secretStoreRef: {kind: ClusterSecretStore, name: {{ .Values.secretStore | quote }}}
+  target: {name: inference, creationPolicy: Owner}
+  data:
+    - secretKey: api_key
+      remoteRef: {key: {{ printf "%s/inference" $prefix | quote }}, property: api_key}

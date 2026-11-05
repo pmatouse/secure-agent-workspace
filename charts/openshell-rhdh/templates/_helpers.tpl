@@ -127,6 +127,7 @@ from the release is enough and keeps renders stable.
 {{- /* The governance engine decides each gateway's bindings (docs/apf.md). */ -}}
 {{- if .Values.global.governance -}}{{- $_ := set $g "governance" (deepCopy .Values.global.governance) -}}{{- end -}}
 {{- $_ := set $v "global" $g -}}
+{{- $_ := set $v "containerSites" (.Values.portal.containerSites | default dict) -}}
 {{- $labels := deepCopy (index $v "namespaceLabels" | default dict) -}}
 {{- $_ := set $labels "saw.redhat.com/portal" "true" -}}
 {{- $_ := set $v "namespaceLabels" $labels -}}
@@ -146,4 +147,51 @@ from the release is enough and keeps renders stable.
 {{- end -}}
 {{- $found | default "rhdh.redhat.com/v1alpha5" -}}
 {{- end -}}
+{{- end -}}
+
+{{/* Operator-owned request policy; never derive it from a user request. */}}
+{{- define "openshell-rhdh.deploymentModes" -}}
+{{- $modes := .Values.portal.deploymentModes -}}
+{{- if not (kindIs "slice" $modes) -}}
+{{- fail "portal.deploymentModes must be a list containing vm" -}}
+{{- end -}}
+{{- $seen := dict -}}
+{{- range $mode := $modes -}}
+{{- if not (kindIs "string" $mode) -}}
+{{- fail "portal.deploymentModes must contain only strings" -}}
+{{- end -}}
+{{- if not (has $mode (list "vm" "container" "kata")) -}}
+{{- fail "portal.deploymentModes supports vm, container, kata; confidential is not implemented" -}}
+{{- end -}}
+{{- if hasKey $seen $mode -}}{{- fail "portal.deploymentModes must not contain duplicates" -}}{{- end -}}
+{{- $_ := set $seen $mode true -}}
+{{- end -}}
+{{- if not (hasKey $seen "vm") -}}{{- fail "portal.deploymentModes must include default vm" -}}{{- end -}}
+{{- toJson $modes -}}
+{{- end -}}
+
+{{/* Generated forms have vm as their safe default; project the administrator's
+allowlist into both forms without enabling privileged form parameters. */}}
+{{- define "openshell-rhdh.createTemplate" -}}
+{{- $root := .root -}}
+{{- $template := $root.Files.Get .path | fromYaml -}}
+{{- $step := last $template.spec.parameters -}}
+{{- $modes := include "openshell-rhdh.deploymentModes" $root | fromJsonArray -}}
+{{- $_ := set $step.properties.deploymentMode "enum" $modes -}}
+{{- /* Hide the pilot profile on VM-only installations. The backend also checks it. */ -}}
+{{- if or (not (has "container" $modes)) (not $root.Values.portal.containerSites) -}}
+{{- $ids := list -}}{{- $names := list -}}
+{{- range $i, $id := $step.properties.profile.enum -}}
+{{- if ne $id "audited-openclaw" -}}{{- $ids = append $ids $id -}}{{- $names = append $names (index $step.properties.profile.enumNames $i) -}}{{- end -}}
+{{- end -}}
+{{- $_ := set $step.properties.profile "enum" $ids -}}{{- $_ := set $step.properties.profile "enumNames" $names -}}
+{{- $cases := list -}}
+{{- range $case := $step.dependencies.profile.oneOf -}}{{- if ne $case.properties.profile.const "audited-openclaw" -}}{{- $cases = append $cases $case -}}{{- end -}}{{- end -}}
+{{- $_ := set $step.dependencies.profile "oneOf" $cases -}}
+{{- end -}}
+{{- $labels := dict "vm" "Virtual machine" "container" "Container (audited OpenClaw)" "kata" "Kata (not yet available)" -}}
+{{- $names := list -}}
+{{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
+{{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}
+{{- include "openshell-rhdh.readinessTemplate" (dict "root" $root "template" $template) -}}
 {{- end -}}

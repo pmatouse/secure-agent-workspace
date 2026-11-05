@@ -346,7 +346,8 @@ def render_template(cat, for_user=False):
     the workspace, until its sandbox UIs answer), then the pipeline's log."""
     profiles = cat["profiles"]
     one_of, string_data = [], {"action": "create", "token": "${{ secrets.backstageToken }}",
-                               "profile": "${{ parameters.profile }}"}
+                               "profile": "${{ parameters.profile }}",
+                               "deploymentMode": "${{ parameters.deploymentMode }}"}
     if for_user:
         string_data["forUser"] = FOR_USER
     who = FOR_USER if for_user else USER_NAME
@@ -389,7 +390,7 @@ def render_template(cat, for_user=False):
             "description": ("Administrators: a Secure Agent Workspace for a user, yourself included, with "
                             "the keys you enter for them; for a user who has one, it changes its profile "
                             "or keys. Keys go to Vault, not to Git." if for_user else
-                            "Your own Secure Agent Workspace: a VM with OpenShell and the OpenClaw / "
+                            "Your own Secure Agent Workspace with OpenShell and the OpenClaw / "
                             "NemoClaw sandboxes of a SAW-BOM profile. If you have one, this changes its "
                             "profile or keys. Keys go to Vault, not to Git."),
             "tags": ["openshell", "openclaw", "nemoclaw", "secure-agent-workspace"]
@@ -406,8 +407,13 @@ def render_template(cat, for_user=False):
                 "title": "Workspace profile",
                 "description": ("The workspace is named after the user (namespace saw-<user>)." if for_user
                                 else "The workspace is named after you (namespace saw-<your user name>)."),
-                "required": ["profile"],
-                "properties": {"profile": {
+                "required": ["profile", "deploymentMode"],
+                "properties": {"deploymentMode": {
+                    "title": "Deployment", "type": "string", "enum": ["vm"],
+                    "enumNames": ["Virtual machine"], "default": "vm",
+                    "description": "Available deployment options are set by your administrator. "
+                                   "An existing workspace keeps its deployment type."},
+                    "profile": {
                     "title": "Profile", "type": "string", "enum": names,
                     "enumNames": [f"{n}: {profiles[n]['description']}" if profiles[n]["description"]
                                   else n for n in names],

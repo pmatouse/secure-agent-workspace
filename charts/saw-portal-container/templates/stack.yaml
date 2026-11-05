@@ -1,0 +1,95 @@
+{{- /* The site supplies reviewed values for the stock charts. No tpl: owner input
+       must never become a Helm program or choose a source, namespace or chart. */ -}}
+{{- $site := .Values.site | default dict }}
+{{- $stack := $site.stack | default dict }}
+{{- if $stack }}
+{{- $u := .Values.owner }}
+{{- $reg := .Values.registration }}
+{{- $runtime := .Release.Namespace }}
+{{- $trusted := printf "saw-ctl-%s" $reg }}
+{{- $archive := printf "saw-history-%s" $reg }}
+{{- $g := .Values.global }}
+{{- $ownerID := required "installationID required" .Values.installationID }}
+{{- $ui := printf "saw-ui-%s" $reg }}
+{{- $map := dict "RUNTIME" $runtime "TRUSTED" $trusted "ARCHIVE" $archive "UI" $ui "OWNER" $u "SUBJECT" .Values.ownerSubject "INSTALLATION" $ownerID "DOMAIN" $g.clusterDomain }}
+{{- range $name, $dest := dict $archive "retained" $ui "ephemeral" }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $name }}
+  labels:
+    saw.redhat.com/runtime-owner: {{ $ownerID | quote }}
+    saw.redhat.com/registration: {{ $reg | quote }}
+    saw.redhat.com/portal-owner: {{ $u | quote }}
+    pod-security.kubernetes.io/enforce: restricted
+  {{- if eq $dest "retained" }}
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false', argocd.argoproj.io/sync-wave: "-2"}
+  {{- else }}
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+  {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: {{ $name }}, annotations: {argocd.argoproj.io/sync-wave: "-1"}}
+spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: identity-api, namespace: {{ $trusted }}}
+spec:
+  podSelector: {matchLabels: {openshell.pattern/role: identity-bootstrap}}
+  policyTypes: [Egress]
+  egress: {{ $stack.proxy.values.network.bootstrapEgress | toJson }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ printf "saw-%s-governance" $reg }}, namespace: {{ required "governance namespace required" $site.governanceNamespace }}}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: governance-interceptor}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $runtime }}}}
+          podSelector: {matchLabels: {app.kubernetes.io/instance: {{ $u }}, openshell.pattern/role: gateway}}
+      ports: [{port: 18081, protocol: TCP}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: {{ $u }}-proxy-policy, namespace: {{ $trusted }}}
+data:
+  config.json: |
+    {"allowHosts":["api.openai.com"],"bindings":[{"key":"api_key","providers":["openai"],"secret":"inference"}],"markerPrefix":"saw-cred","profiles":{"openai":["api.openai.com"]}}
+{{- $charts := dict "identity" (list "saw-kubernetes-identity" $trusted) "policy" (list "saw-runtime-policies" $runtime) "proxy" (list "saw-kubernetes-proxy" $trusted) "gateway" (list "openshell-saw-kubernetes" $runtime) "audit" (list "saw-audit-writer" $archive) }}
+{{- range $key, $c := $charts }}
+{{- $item := required (printf "missing site.stack.%s" $key) (get $stack $key) }}
+{{- if not (regexMatch "^[a-f0-9]{40}$" ($item.revision | default "")) }}{{ fail "each infrastructure chart must be pinned to a Git commit" }}{{ end }}
+{{- $values := $item.values | toJson }}
+{{- range $k, $v := $map }}
+{{- $values = replace (printf "@%s@" $k) $v $values }}
+{{- end }}
+{{- if regexMatch "@[A-Z_]+@" $values }}{{ fail "unknown site value placeholder" }}{{ end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ printf "saw-c-%s-%s" $reg $key }}
+  namespace: {{ $g.vpArgoNamespace }}
+  labels: {saw.redhat.com/registration: {{ $reg | quote }}, openshell.pattern/owner: {{ $u | quote }}}
+  finalizers: [resources-finalizer.argocd.argoproj.io/foreground]
+spec:
+  project: {{ $site.project | default "default" }}
+  destination: {server: 'https://kubernetes.default.svc', namespace: {{ index $c 1 }}}
+  source:
+    repoURL: {{ $g.repoURL | quote }}
+    targetRevision: {{ $item.revision }}
+    path: charts/{{ index $c 0 }}
+    helm:
+      releaseName: {{ $u }}
+      valuesObject: {{ $values }}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    retry: {limit: 8}
+{{- end }}
+{{- end }}

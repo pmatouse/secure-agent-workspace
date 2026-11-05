@@ -6,7 +6,13 @@ kind: Namespace
 metadata:
   name: {{ printf "saw-%s" $user.name }}
   labels:
+    {{- if eq (dig "deployment" "mode" "vm" ($user.values | default dict)) "container" }}
+    pod-security.kubernetes.io/enforce: restricted
+    saw.redhat.com/runtime-owner: {{ required "installationID required" $user.installationID | quote }}
+    saw.redhat.com/registration: {{ $user.registration | quote }}
+    {{- else }}
     openshell.pattern/saw: "true"
+    {{- end }}
     openshell.pattern/owner: {{ $user.name | quote }}
     argocd.argoproj.io/managed-by: {{ include "saw-users.argoNamespace" $ | quote }}
     {{- range $k, $v := $.Values.namespaceLabels | default dict }}
