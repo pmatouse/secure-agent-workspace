@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-05",
+  "cluster": "glmhg",
+  "backend": "container",
+  "profile": "data-science",
+  "registration": "c65fc17f4c52de1a",
+  "siteRevision": "41d7fe710cf63a805ef1e6ee965827a0fda9df13",
+  "runtimeImage": "sha256:966c76c969f074ea088e1499d40fd8d993ecb4df527239736df554d9d726c6d0",
+  "owner": "sawk8sowner",
+  "fixture": "c65fc17f5701d438",
+  "pipelines": [
+    {
+      "operation": "create",
+      "generation": 1,
+      "run": "saw-create-hclq8",
+      "tekton": "Succeeded",
+      "finished": "15:48:57Z"
+    },
+    {
+      "operation": "update with unavailable CUDA model",
+      "generation": 2,
+      "run": "saw-create-dz5qc",
+      "tekton": "Succeeded",
+      "finished": "16:09:42Z"
+    },
+    {
+      "operation": "update with account-enabled models",
+      "generation": 3,
+      "run": "saw-create-6tzbq",
+      "tekton": "Succeeded",
+      "finished": "16:34:36Z"
+    },
+    {
+      "operation": "stop",
+      "generation": 4,
+      "run": "saw-create-j7xlc",
+      "tekton": "Succeeded",
+      "finished": "16:57:24Z"
+    },
+    {
+      "operation": "start",
+      "generation": 5,
+      "run": "saw-create-j6z26",
+      "tekton": "Succeeded",
+      "finished": "17:25:11Z"
+    },
+    {
+      "operation": "delete",
+      "generation": null,
+      "run": "saw-delete-k8hg2",
+      "tekton": "Succeeded",
+      "finished": "17:45:03Z"
+    }
+  ],
+  "checks": [
+    "Both workspaces initially served gpt-4.1-mini and processed allowed reads plus owner-denied and owner-approved exec requests.",
+    "Fresh chats after model rollover and after owner start matched unique nonces and had provider response IDs. Replacement Pods used the original OpenShell object IDs and PVC UIDs.",
+    "Stop reached Stopped with zero workload and supervisor Pods. Both relays scaled to zero. Owner status omitted chat links and owner CLI read the stop pipeline log.",
+    "Each sandbox retained its canary and denied-deletion fixture. The approved-deletion fixture stayed absent.",
+    "After foreground deletion, a separate restricted verification Job mounted each archive read-only and recovered the original ordered records. The registry and runtime/control/UI namespaces were removed.",
+    "Three baseline VM instances were Running at the final check."
+  ],
+  "qualificationNotes": [
+    "Initial rollout surfaced superseded publication Jobs. The site enabled scoped Argo pruning before the successful model update. Retained archives opt out of pruning.",
+    "The provider returned 404 for gpt-4.1-nano despite runtime readiness. An owner-submitted update selected gpt-4o-mini. Acceptance resumed on the same registration using file, object and archive evidence captured before the corrected update.",
+    "The two installed agent versions use different transcript schemas. The verifier reads the specific synthetic session and checks the recorded provider response model. Status polling recovered from intermittent connection refusals."
+  ],
+  "slots": {
+    "default/notebook": {
+      "model": "gpt-4.1",
+      "observedResponseModel": "gpt-4.1-2025-04-14",
+      "archivePVCUID": "6ab787a2-e81c-40f7-bf34-488b6b502729",
+      "records": 5,
+      "orderedAuditSHA256": "a43240371e061d94dd827c56b08d7d8500e48e381a24a5008cb7dbbdbdd75993"
+    },
+    "cuda-dev/cuda-sandbox": {
+      "model": "gpt-4o-mini",
+      "observedResponseModel": "gpt-4o-mini-2024-07-18",
+      "archivePVCUID": "70ec977c-924a-4ab8-942d-682ea110d5eb",
+      "records": 5,
+      "orderedAuditSHA256": "4c9580628f8aa9b9cacfe5eaaf73d12cd2bd1a1a20f5f825c0af0afdf7e6ab7a"
+    }
+  }
+}

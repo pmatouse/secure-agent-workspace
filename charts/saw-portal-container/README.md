@@ -68,6 +68,8 @@ flowchart LR
 
 **Data-science validation (glmhg, 2026-11-05).** RHDH completed create, update and delete. Both owner chats read unique canaries, denied and approved disposable deletions, and answered fresh prompts after update. Each restricted read-only verifier recovered five matching audit records after delete. The update reapplied the selected models. See the [live receipt](../../tests/acceptance/data-science-container-validation-2026-11-05.json) for both archive hashes, pipeline times and the original notebook permission failure.
 
+**Model and power lifecycle on glmhg.** Both data-science chats served their newly selected models after rollover and again after owner stop/start. OpenShell object IDs, PVC UIDs and canary contents survived the new Pods. Each archive retained five matching audit records after workspace deletion. The live test resumed on the same registration after correcting an unavailable provider model. [Validation record](../../tests/acceptance/owner-model-lifecycle-2026-11-05.json)
+
 ### Repeat the owner lifecycle
 
 Use an enrolled **disposable owner with no current registration or runtime namespace**. Use an operator `oc` context for the same cluster. The harness needs read access to registration/runtime state, workspace exec for test fixtures, and permission to run a restricted read-only verification Job in the resulting audit namespace. These permissions are for the test observer, not the RHDH user.

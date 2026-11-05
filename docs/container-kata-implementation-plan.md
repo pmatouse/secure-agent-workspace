@@ -1,6 +1,6 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **VM inference/model recovery verified; portal model update verified through the documented restart; portal status/deletion gaps remain; ordinary container owner create/update/delete verified for audited OpenClaw and both data-science sandboxes (2026-11-05); Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
+Status: **VM inference/model recovery verified; portal model update verified through the documented restart; portal status/deletion gaps remain; ordinary container owner create/update/delete verified for audited OpenClaw and data-science. The two-sandbox data-science run also verified model rollover, CLI stop/start/status/logs, fresh inference and audit persistence on 2026-11-05; Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
 Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
 
@@ -1382,6 +1382,8 @@ to emulate gateway terminal functionality.
 **Gate D1:** create/update/stop/start/delete, owner checks, UI links, logs and error
 reporting work for VM/container/Kata through RHDH and CLI. Malicious mode, owner,
 PVC, RuntimeClass and credential-reference inputs are refused.
+
+On glmhg, the ordinary-container data-science path passed owner create, per-sandbox model update, stop, start and delete. Both chats produced provider-identified completions after restart. The extended power test used the two-slot data-science profile. VM owner-CLI power parity, Kata qualification and the Git-backed registry remain open. [Live evidence](../tests/acceptance/owner-model-lifecycle-2026-11-05.json)
 
 ### D2. Full Git-backed workspace intent
 
