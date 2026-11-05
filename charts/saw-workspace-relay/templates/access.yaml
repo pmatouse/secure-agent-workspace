@@ -1,6 +1,6 @@
 {{- if and .Values.enabled .Values.subject }}
 {{- $v := .Values }}{{- $n := .Release.Name }}{{- $ui := .Release.Namespace }}
-{{- if or (eq $v.subject $v.ownerSubject) (not $v.workspaceID) (not $v.ownerSubject) (not $v.gatewayNamespace) }}{{ fail "distinct relay subject, owner and explicit gateway/workspace identities required" }}{{ end }}
+{{- if or (eq $v.subject $v.ownerSubject) (and (not $v.workspaceID) (not $v.publishSubject)) (not $v.ownerSubject) (not $v.gatewayNamespace) }}{{ fail "distinct relay subject, owner and explicit gateway/workspace identities required" }}{{ end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata: {name: {{ $n }}, namespace: {{ $v.trustedNamespace }}}
@@ -79,7 +79,8 @@ spec:
         command: [python3, /scripts/bind.py]
         env:
         - {name: WORKSPACE, value: {{ $v.workspace }}}
-        - {name: WORKSPACE_ID, value: {{ $v.workspaceID }}}
+        - {name: WORKSPACE_ID, value: {{ $v.workspaceID | default "" | quote }}}
+        - {name: DISCOVER_ID, value: {{ ternary "true" "false" ($v.publishSubject | default false) | quote }}}
         - {name: OWNER, value: {{ $v.ownerSubject }}}
         - {name: SUBJECT, value: {{ $v.subject }}}
         - {name: INSTALLATION, value: {{ $v.installationID }}}

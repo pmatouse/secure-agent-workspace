@@ -1531,11 +1531,50 @@ def cleanup(max_age=REQUEST_MAX_AGE):
 
 # -- ApplicationSet plugin generator --------------------------------------------
 
-def generator_params(workspaces, defaults):
+def enrolled_site(site, ws, read):
+    """Only the trusted bootstrap publishes bindings; images, code and endpoints always come from Git."""
+    a = site.get("automaticEnrollment")
+    if not a or not read:
+        return site
+    reg, install = ws["registration"], ws["installationID"]
+    ns = "saw-ctl-" + reg
+    def publication(name):
+        try:
+            obj = read(f"/api/v1/namespaces/{ns}/configmaps/{name}")
+        except HttpError as exc:
+            if exc.code == 403:  # before the initial reader Role exists
+                return {}
+            raise
+        if not obj or not obj.get("data"):
+            return {}
+        meta=obj["metadata"]
+        if obj.get("immutable") is not True or meta.get("deletionTimestamp") or meta.get("labels",{}).get("saw.redhat.com/runtime-owner")!=install:
+            raise PortalError("invalid registration publication")
+        return obj["data"]
+    fresh = {k:v for k,v in site.items() if k!="enrollment"}
+    data=publication("saw-portal-enrollment")
+    if not data:
+        return fresh
+    bound=json.loads(data["binding.json"])
+    if set(bound)!={"registration","intent","approved","gatewayCA"} or bound["registration"]!=reg or set(bound["approved"])!=set(a["reference"]):
+        raise PortalError("invalid published enrollment")
+    intent=bound["intent"]
+    if intent["bindings"]["ownerID"]!=install or intent["bindings"]["namespace"]!="saw-"+ws["name"] or intent["bindings"]["ownerSubject"]!=ws["ownerSubject"] or intent["profileRef"]["sha256"]!=a["profileSHA256"]:
+        raise PortalError("published intent does not belong to this workspace")
+    sub=publication("saw-portal-relay-subject").get("subject","")
+    if sub and (not re.fullmatch(r"[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}",sub) or sub==ws["ownerSubject"]):
+        raise PortalError("invalid relay subject")
+    relay={**a["relay"],"gatewayCA":bound["gatewayCA"],"subject":sub,"workspaceID":""}
+    fresh["enrollment"]={**{k:a[k] for k in ("revision","image","buildNamespace")},"registration":reg,"intent":intent,"approved":bound["approved"],"relay":relay}
+    return fresh
+
+
+def generator_params(workspaces, defaults, read=None):
     """One parameter set per workspace: `name`, and `values`, the saw-users
     chart values for that user alone (JSON, which is YAML)."""
     out = []
     for ws in workspaces:
+        site = {}
         # Freeze legacy VM intent instead of inheriting a new backend default.
         ws = {**ws, "values": {**ws.get("values", {}),
                                "deployment": {"mode": entry_deployment_mode(ws)}}}
@@ -1548,6 +1587,8 @@ def generator_params(workspaces, defaults):
             reg = entry_generation(ws["name"], ws)
             ws = {**ws, "registration": reg, "installationID": installation_id(ws["name"], reg)}
         values = {**defaults, "users": [ws]}
+        if ws.get("registration") and entry_deployment_mode(ws)=="container" and site.get("automaticEnrollment"):
+            values["containerSites"]={ws["name"]:enrolled_site(site,ws,read)}
         out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
     return out
 
@@ -1674,7 +1715,8 @@ def serve():
             if self.headers.get("Authorization", "") != f"Bearer {token}":
                 return self._send(403, {"error": "forbidden"})
             try:
-                params = generator_params(owner_subjects.fill(list_workspaces(kube(), ns)), defaults)
+                params = generator_params(owner_subjects.fill(list_workspaces(kube(), ns)), defaults,
+                                          lambda path:kube().call("GET",path,ok404=True))
             except PortalError as exc:
                 log(f"ERROR: {exc}")
                 return self._send(500, {"error": str(exc)})

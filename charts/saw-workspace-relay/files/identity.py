@@ -121,6 +121,15 @@ def main():
     if (c["sub"] != sub or c["azp"] != cid or c["iss"] != issuer or set(aud) != {os.environ["AUDIENCE"]}
             or set(c.get("realm_access",{}).get("roles",[])) != {"openshell-user"} or c.get("resource_access")):
         raise RuntimeError("unexpected relay token scope")
+    if public_ns := os.environ.get("PUBLIC_SUBJECT_NAMESPACE"):
+        if not __import__("re").fullmatch("saw-ctl-[a-f0-9]{16}",public_ns) or cid != "saw-portal-"+public_ns[8:]:
+            raise RuntimeError("invalid registration identity")
+        path="https://kubernetes.default.svc/api/v1/namespaces/"+public_ns+"/configmaps/saw-portal-relay-subject"
+        opts=dict(token=(sa/"token").read_text(),ca=str(sa/"ca.crt"))
+        cm=api(path,**opts)
+        if cm["metadata"]["labels"].get("saw.redhat.com/runtime-owner")!=os.environ["INSTALLATION"] or cm.get("data",{}).get("subject",sub)!=sub:
+            raise RuntimeError("foreign public subject binding")
+        api(path,method="PATCH",patch=True,body={"metadata":{"resourceVersion":cm["metadata"]["resourceVersion"]},"immutable":True,"data":{"subject":sub}},**opts)
     print(json.dumps({"clientID":cid,"subject":sub,"workspace":os.environ["WORKSPACE"],
                       "audience":aud,"roles":["openshell-user"]}))
 

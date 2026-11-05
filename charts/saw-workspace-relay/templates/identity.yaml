@@ -31,6 +31,19 @@ metadata: {name: {{ $n }}-identity, namespace: {{ $v.keycloakNamespace }}}
 data:
   identity.py: |
 {{ .Files.Get "files/identity.py" | indent 4 }}
+{{- if $v.publishSubject }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: {{ $n }}-public-subject, namespace: {{ $v.trustedNamespace }}}
+rules: [{apiGroups: [""], resources: [configmaps], resourceNames: [saw-portal-relay-subject], verbs: [get, patch]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: {{ $n }}-public-subject, namespace: {{ $v.trustedNamespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $n }}-public-subject}
+subjects: [{kind: ServiceAccount, name: {{ $n }}-identity, namespace: {{ $v.keycloakNamespace }}}]
+{{- end }}
 {{- $actions := list "create" }}
 {{- if $v.cleanupRegistration }}
 {{- if or (not (regexMatch "^[0-9a-f]{16}$" $v.cleanupRegistration)) (ne $v.clientID (printf "saw-portal-%s" $v.cleanupRegistration)) }}{{ fail "cleanup requires a registration-specific client ID" }}{{ end }}
@@ -65,6 +78,9 @@ spec:
         {{- if eq $action "delete" }}
         - {name: DELETE_BOUND_CLIENT, value: "true"}
         - {name: REGISTRATION, value: {{ $v.cleanupRegistration | quote }}}
+        {{- end }}
+        {{- if and $v.publishSubject (eq $action "create") }}
+        - {name: PUBLIC_SUBJECT_NAMESPACE, value: {{ $v.trustedNamespace }}}
         {{- end }}
         - {name: UI_NAMESPACE, value: {{ $ui }}}
         - {name: INSTALLATION, value: {{ $v.installationID | quote }}}
