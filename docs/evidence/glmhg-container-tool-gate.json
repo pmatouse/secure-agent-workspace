@@ -1,0 +1,41 @@
+{
+  "cluster": "glmhg",
+  "date": "2026-11-05",
+  "openshift": "4.22.20",
+  "scope": "isolated stock-image plugin load and exported hook invocation; the qualified chat workspace still has tools denied",
+  "sharedRuntimeSource": "fb158a7a0b4a1c4884bbe08d82dd7379d42f3421",
+  "pluginJob": "saw-runtime-smoke/saw-gate-check-f92b9a5ec696-cb645739",
+  "pluginPodUID": "b337df61-066f-4641-9886-85aaf3f73f05",
+  "scc": "restricted-v2",
+  "stockImage": "ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15",
+  "imagePluginLoaded": true,
+  "policyReadOnly": true,
+  "hookDecisions": ["allow", "deny", "approval_required", "rejected"],
+  "approvalResolution": "timeout",
+  "inPodLog": "scratch emptyDir",
+  "applicationDispatchedToolTested": false,
+  "interactiveApprovalTested": false,
+  "retainedAuditQualification": {
+    "namespace": "saw-runtime-smoke",
+    "claimUID": "030eeecc-63d6-4c61-89bf-17906319b826",
+    "nativeAdmissionPolicyTypeWarnings": [],
+    "podAdmitted": false,
+    "reason": "PodSecurity restricted:latest forbids LINUX_IMMUTABLE",
+    "applicationNamespaceAlsoEnforcesRestricted": true,
+    "sealerRan": false,
+    "persistenceTestRan": false,
+    "grantAndDisposableClaimPruned": true
+  },
+  "candidateImages": {
+    "controller": "sha256:bdf89476240a8740c545706ced0fa5f818b9d5cdcf28928af812bb2dc7f00ec8",
+    "governance": "sha256:a158de5345e442258bfe0027b43b973db17fae89cf018305d8bc8a0c7fbd160f",
+    "governanceBuildRustTestsPassed": 9
+  },
+  "portal": {
+    "generatedComponent": "linked-sawk8sowner-agent-openclaw-ui",
+    "owner": "user:default/sawk8sowner",
+    "mode": "container",
+    "runtimeStatus": "Running",
+    "liveSiteSource": "75f74cfbe6d71bc35c8b8891ad3f65c5376988e8"
+  }
+}
