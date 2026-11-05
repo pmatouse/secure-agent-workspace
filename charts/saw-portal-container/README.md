@@ -8,7 +8,9 @@ Both deployment methods render `charts/saw-bom` and read the same profile docume
 
 The site approves the rendered BOM digest in `automaticEnrollment.approvedProfiles`. RHDH derives one storage binding per enabled sandbox, and a scoped owner relay for each declared UI. An additional profile using these capabilities needs a digest approval and qualification. A new BOM capability belongs in the shared engine when both runtimes need it, with storage, placement and authorization supplied by the adapters.
 
-The glmhg data-science VM BOM enables `default/notebook` (OpenClaw) and `cuda-dev/cuda-sandbox` (NemoClaw running OpenClaw). It uses external OpenAI inference and disables the optional inline harness at this site. The two model selectors are public configuration. API keys stay in the registration's Vault path. The current update path can refresh provider credentials and reconcile the existing topology. Changing the selected model or profile currently requires a fresh registration.
+The glmhg data-science VM BOM enables `default/notebook` (OpenClaw) and `cuda-dev/cuda-sandbox` (NemoClaw running OpenClaw). It uses external OpenAI inference and disables the optional inline harness at this site. NemoClaw uses its original image digest. The AIPCC notebook image sets `/sandbox` to mode 0770 for UID 1000 and group 0. The stock Kubernetes driver uses the OpenShift namespace UID/GID for the workload. The [image build chart](../../image-builder-charts/helm/openshift-home-access) derives the notebook image from the exact VM digest, adds directory traversal with `chmod o+x /sandbox`, and restores the image user. The owner portal passes the resulting digest through the existing `saw-bom.imageOverrides` input. The same BOM sources produce both deployments, with a different reviewed render digest for that image selection. The sandbox keeps the OpenShift-assigned identity.
+
+The two model selectors are public configuration. API keys stay in the registration's Vault path. The current update path can refresh provider credentials and reconcile the existing topology. Changing the selected model or profile currently requires a fresh registration.
 
 
 ```mermaid

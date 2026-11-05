@@ -338,10 +338,17 @@ def container_profiles(site):
     return automatic.get("approvedProfiles", {AUDITED_PROFILE: automatic.get("profileSHA256", "")})
 
 
+def enabled_catalog_sandboxes(profile):
+    for workspace in profile.get("workspaces", []):
+        if workspace.get("enabled"):
+            for sandbox in workspace.get("sandboxes", []):
+                if sandbox.get("enabled"):
+                    yield workspace["name"], sandbox
+
+
 def sandbox_targets(user, registration, profile):
     """Expand the shared BOM catalog into isolated Kubernetes attachments."""
-    enabled = [(w["name"], sb) for w in profile["workspaces"] if w["enabled"]
-               for sb in w["sandboxes"] if sb["enabled"]]
+    enabled = list(enabled_catalog_sandboxes(profile))
     targets = {}
     for workspace, sb in enabled:
         key = workspace + "/" + sb["name"]
@@ -357,8 +364,7 @@ def sandbox_targets(user, registration, profile):
 def public_model_inputs(profile, secrets):
     """Only catalog-declared, noncredential model selectors can enter public intent."""
     values = {}
-    for key in {sb["modelInput"] for w in profile["workspaces"] if w["enabled"]
-                for sb in w["sandboxes"] if sb["enabled"] and sb.get("modelInput")}:
+    for key in {sb["modelInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("modelInput")}:
         secret, field = key.split(".",1)
         allowed = any(f["key"] == field and f["kind"] == "text" for f in profile["secrets"][secret]["fields"])
         value = secrets.get(secret,{}).get(field)
@@ -721,11 +727,10 @@ def ui_links(user, profiles, catalog, domain):
 def sandbox_ui_links(user, profiles, catalog, domain):
     out = []
     for profile in profiles:
-        for w in catalog.get(profile, {}).get("workspaces", []):
-            for sb in w.get("sandboxes", []):
-                if w.get("enabled") and sb.get("enabled") and sb.get("uiRoute"):
-                    out.append((f"{sb['name']} UI ({w['name']})",
-                                f"https://{user}-{w['name']}-{sb['name']}-ui.apps.{domain}"))
+        for workspace, sb in enabled_catalog_sandboxes(catalog.get(profile, {})):
+            if sb.get("uiRoute"):
+                out.append((f"{sb['name']} UI ({workspace})",
+                            f"https://{user}-{workspace}-{sb['name']}-ui.apps.{domain}"))
     return out
 
 
