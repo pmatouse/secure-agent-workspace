@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-05",
+  "cluster": "glmhg",
+  "runtimeSource": "a4162dfe1529541fc23ed33f63a01e186b7793d6",
+  "profile": "custom-inference",
+  "job": "custom-inference-release",
+  "jobUID": "49782bdb-26b2-4813-92c6-3ede4a8b40f2",
+  "start": "2026-11-05T19:48:08Z",
+  "end": "2026-11-05T19:50:12Z",
+  "pod": "custom-inference-release-knfll",
+  "podUID": "4e504a52-0d28-4076-92e6-64cf63cadd43",
+  "scc": "restricted-v2",
+  "compiledPlan": "5d58c2add7a88e0531a1f07c53b299d57e1051f47722f378cdf3ce2703dd45ab",
+  "agent": {
+    "chat": true,
+    "model": "fixture/model",
+    "timeoutSeconds": 300,
+    "unapprovedConnect": 403,
+    "rawKeyMounted": false
+  },
+  "endpoint": {
+    "authorized": true,
+    "model": "fixture/model",
+    "stream": true
+  },
+  "proxy": "2026/11/05 19:49:29 method=POST host=models.fixture.test path=\"/v1/chat/completions\" binding=inference status=200",
+  "images": {
+    "compile": "image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:f57b928684c48597de98a5f374d3464195b04c8c75dd9eaf3f385cea76cd44c2",
+    "prepare": "ghcr.io/validatedpatterns-sandbox/nemoclaw-sandbox@sha256:28457eec59e71eca310cd72fc4b57c71506c3fce4c30f2636a237dca85725dbd",
+    "endpoint": "image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a",
+    "broker": "ghcr.io/validatedpatterns-sandbox/saw-credential-proxy@sha256:73f271de2eb6166315603fbb72c800b939a14770a69c86debaabbd29a46a0f93",
+    "agent": "image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a"
+  },
+  "scope": "Isolated restricted OpenShift Job. Stock OpenClaw ran locally against a deterministic OpenAI-compatible HTTPS responder through the stock credential broker. No external model or production credential was used. The shared gateway returned NOT_FOUND for the optional site profile; a fresh live RHDH/OpenShell provisioning cycle was not run.",
+  "regressions": "658 passed and one skipped in the combined portal, runtime, VM custom endpoint, catalog and chart suites. Additional headless readiness and gateway-host mismatch tests passed."
+}

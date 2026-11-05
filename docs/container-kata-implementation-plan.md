@@ -27,6 +27,13 @@ inference account, Slack channel and Gmail mailbox. Verify the real provider
 proxy path, Google OAuth refresh, owner HTTPS chat and lifecycle in that run.
 [Reproduction instructions](../charts/saw-portal-container/README.md#personal-assistant-and-inline-harnesses)
 
+The container backend also implements the shipped `custom-inference` BOM with
+a site-approved OpenAI-compatible HTTPS endpoint. The controlled OpenShift
+test exercises the actual client, broker credential injection, streaming reply,
+BOM timeout and cross-host denial. A fresh RHDH registration with a configured
+site governance profile and production model server remains a separate test.
+[Configuration and acceptance instructions](custom-inference.md#container-deployment)
+
 ### Live baseline receipt (2026-11-04)
 
 Latest qualification checkpoint (earlier paragraphs below preserve the rollout

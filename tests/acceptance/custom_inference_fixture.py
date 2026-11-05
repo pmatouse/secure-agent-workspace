@@ -31,6 +31,25 @@ def fixture_inputs():
     return yaml.safe_load(rendered)["data"], cfg
 
 
+def rendered_policy(cfg, plan):
+    """Use the broker policy the actual saw-users chart renders for this registration."""
+    username = "sawk8sowner"
+    registration = "0123456789abcdef"
+    site = yaml.safe_load((ROOT/"examples/portal-container/glmhg.yaml").read_text())["portal"]["containerSites"][username]
+    site["providerAllowHosts"] = [governed.custom_host(cfg["customInferenceURL"])]
+    site["automaticEnrollment"]["approvedProfiles"] = {"custom-inference":"a"*64}
+    user = {"name":username, "ownerSubject":site["subject"], "installationID":plan["ownerID"],
+            "registration":registration,"intentGeneration":1,"vaultPrefix":f"secret/data/hub/saw-{username}/{registration}",
+            "profiles":["custom-inference"],"pruneOnRemove":True,"webSearch":{"enabled":False},
+            "values":{"deployment":{"mode":"container"}}}
+    values = {"users":[user],"containerSites":{username:site}}
+    docs = subprocess.check_output(["helm","template","fixture",str(ROOT/"charts/saw-users"),
+                                    "--show-only","templates/applications.yaml","-f","-"],
+                                   input=json.dumps(values),text=True)
+    app, = (d for d in yaml.safe_load_all(docs) if d["spec"]["source"]["path"]=="charts/saw-portal-container")
+    return yaml.safe_load(app["spec"]["source"]["helm"]["values"])["site"]["providerPolicy"]
+
+
 def render(suffix, runtime_image):
     if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", runtime_image):
         raise ValueError("digest-pinned controller image required")
@@ -46,8 +65,7 @@ def render(suffix, runtime_image):
     name="custom-inference-"+suffix
     labels={"saw.redhat.com/fixture":name}
     meta={"name":name,"labels":labels}
-    policy={"markerPrefix":"saw-cred","allowHosts":[host],"profiles":{},
-            "bindings":[{"secret":"inference","key":"api_key","providers":["custom-inference"]}]}
+    policy = rendered_policy(cfg, plan)
     assert governed.check_policy("custom-inference",provider["credentials"],policy,cfg["customInferenceURL"])
     scripts=Path(__file__).parent
     data={"config.json":json.dumps(policy),

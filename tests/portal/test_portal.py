@@ -1720,3 +1720,35 @@ def test_custom_endpoint_is_approved_before_writing_vault(portal, world, monkeyp
     assert entry["customInferenceURL"]==url and entry["modelInputs"]=={"inference.model":"org/model"}
     assert "private-test-key" not in json.dumps(entry)
     assert entry["webSearch"] == {"enabled":False} and not any("web-search" in k for k in fake.vault)
+
+
+def test_headless_container_requires_current_runtime_and_healthy_argo(portal, monkeypatch):
+    import hashlib
+    reg="0123456789abcdef"
+    subject="478fdd1f-8db9-41e8-97ad-b563215c89e9"
+    monkeypatch.setenv("SAW_CONTAINER_SITES",json.dumps({"alice":{"subject":subject}}))
+    entry=portal.registry_entry("alice","custom-inference",reg,"container")
+    entry["intentGeneration"]=1
+    install=portal.installation_id("alice",reg)
+    digest=lambda value: hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    files={"fixture":"profile"}
+    intent={"generation":1,"desiredState":"Running","profileRef":{"name":"saw-bom-profiles","uid":"bom","sha256":digest(files)},
+            "bindings":{"ownerSubject":subject,"namespace":"saw-alice","mode":"container","ownerID":install}}
+    state={"phase":"GenericReady","observedGeneration":1,"inputRevision":digest({"intent":intent,"files":files})}
+    def cm(key,value):
+        return {"metadata":{"labels":{"saw.redhat.com/runtime-owner":install,"saw.redhat.com/managed-by":"kubernetes-runtime-controller"}},
+                "data":{key:json.dumps(value)}}
+    objects={"saw-alice":{"metadata":{"labels":{"openshell.pattern/owner":"alice"}},
+                          "status":{"sync":{"status":"Synced"},"health":{"status":"Healthy"}}},
+             "saw-runtime-intent":cm("intent.json",intent),"saw-runtime-status":cm("status.json",state),
+             "saw-bom-profiles":{"metadata":{"uid":"bom"},"data":files}}
+    class Reader:
+        def call(self,method,path,ok404):
+            return objects[path.rsplit("/",1)[1]]
+    profile=json.loads((ROOT/"charts/saw-users/files/profile-catalog.json").read_text())["profiles"]
+    def status():
+        return portal.container_status(Reader(),"alice",entry,"argo","example.test",
+                                       lambda _: pytest.fail("headless registration has no route"),profile)
+    assert status()["ready"] and not status()["links"]
+    objects["saw-runtime-status"]=cm("status.json",{**state,"observedGeneration":0})
+    assert not status()["ready"]

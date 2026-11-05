@@ -185,3 +185,8 @@ the rewritten bearer credential and the requested model ID. The client verifies
 the challenge response and requires HTTP 403 for a CONNECT to a second hostname.
 The Job checks application and broker behavior. RHDH owner enrollment and a
 production model server are separate qualification steps.
+
+The glmhg run used the packaged controller image
+`image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:f57b928684c48597de98a5f374d3464195b04c8c75dd9eaf3f385cea76cd44c2`.
+The approved streaming POST returned 200; the broker refused the second host
+with 403. [Cluster validation record](../tests/acceptance/custom-inference-container-2026-11-05.json)
