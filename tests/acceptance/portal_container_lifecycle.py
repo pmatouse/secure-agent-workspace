@@ -29,6 +29,8 @@ def main():
     p.add_argument("--openclaw-version",help=argparse.SUPPRESS)  # accepted by older invocations
     p.add_argument("--profile",default="audited-openclaw")
     p.add_argument("--model",action="append",default=[])
+    p.add_argument("--update-model", action="append", default=[], metavar="FIELD=MODEL",
+                   help="Exercise a model change and owner stop/start through Developer Hub")
     p.add_argument("--resume-create",nargs=2,metavar=("TASK_UUID","REGISTRATION"),help="resume observation of this exact owner registration after a client interruption")
     a=p.parse_args()
     if not re.fullmatch(r"[a-z0-9]([-a-z0-9]{0,17}[a-z0-9])?",a.user) or not re.fullmatch(r"[a-z0-9.-]+",a.domain):
@@ -63,8 +65,8 @@ def main():
         if state in ("failed","cancelled"):raise RuntimeError("RHDH task "+task+" "+state)
         return state=="completed"
     def submit(action):
-        fields=[part for model in a.model for part in ("--model",model)]
-        result=rh(action,*(["--profile",a.profile,"--key-file",a.key_file,*fields] if action!="delete" else []))
+        fields=[part for model in (a.update_model if action=="update" and a.update_model else a.model) for part in ("--model",model)]
+        result=rh(action,*(["--profile",a.profile,"--key-file",a.key_file,*fields] if action in ("create", "update") else []))
         print(action,result["task"],flush=True)
         eventually(lambda:done(result["task"]),action+" task",3600)
         return result["task"]
@@ -86,6 +88,22 @@ def main():
     ui_names=reg().get("uiNamespaces",["saw-ui-"+registration])
     slots=json.loads(get("cm","saw-runtime-intent",ns)["data"]["intent.json"])["bindings"]["bindings"]
     pods=json.loads(run("oc","get","pod","-n",ns,"-l","openshell.ai/boundary-role=workload","-o","json"))["items"]
+    def workload_pods():
+        return json.loads(run("oc","-n",ns,"get","pods","-l","openshell.ai/boundary-role=workload","-o","json"))["items"]
+    def identities():
+        command = "import json,pathlib;print(json.dumps([d['objectIDs'] for p in pathlib.Path('/state').rglob('state.json') if 'objectIDs' in (d:=json.loads(p.read_text()))]))"
+        controllers=json.loads(run("oc","-n","saw-ctl-"+registration,"get","deploy","-o","json"))["items"]
+        controller,=[d["metadata"]["name"] for d in controllers if any(
+            v.get("persistentVolumeClaim",{}).get("claimName")=="portal-ledger"
+            for v in d["spec"]["template"]["spec"]["volumes"])]
+        result=json.loads(run("oc","-n","saw-ctl-"+registration,"exec","deploy/"+controller,"--","python3","-c",command))
+        assert len(result)==1 and sum(k.startswith("sandbox/") for k in result[0])==len(slots)
+        return result[0]
+    initial_ids=identities() if a.update_model else {}
+    public_targets = {}
+    if a.update_model:
+        settings = get("cm", "bootstrap-scripts", "saw-ctl-" + registration)["data"]["config.json"]
+        public_targets = json.loads(settings)["targets"]
     def qualify(key,slot):
         workspace_claim=slot["workspace"]["claimName"]
         pod,=[p["metadata"]["name"] for p in pods if any(v.get("persistentVolumeClaim",{}).get("claimName")==workspace_claim for v in p["spec"]["volumes"])]
@@ -135,17 +153,48 @@ process.exit(1);
         source=(HERE/"portal_audit_evidence.cjs").read_text()
         def evidence():return json.loads(run("oc","-n",archive,"exec","-i","deploy/"+base+"-writer","--","node","-",prefix,stdin=source))
         before=evidence()
-        def check_update():
-            assert get("pod",pod,ns)["metadata"]["uid"]==puid and get("pvc",claim,archive)["metadata"]["uid"]==uid
+        def check_update(stage="after-update"):
+            nonlocal pod, puid
+            current,=[p for p in workload_pods() if any(v.get("persistentVolumeClaim",{}).get("claimName")==workspace_claim for v in p["spec"]["volumes"])]
+            current_uid=current["metadata"]["uid"]
+            assert (current_uid!=puid) == bool(a.update_model), "unexpected workload Pod identity"
+            pod, puid=current["metadata"]["name"], current_uid
+            assert get("pvc",claim,archive)["metadata"]["uid"]==uid
+            for binding in (slot["workspace"], slot["toolGate"]["trusted"], slot["toolGate"]["audit"]):
+                assert get("pvc",binding["claimName"],ns)["metadata"]["uid"]==binding["uid"]
             files()
             assert evidence()==before
             nonce=secrets.token_hex(10)
-            print(turn("after-update","Reply with exactly "+nonce,"--contains",nonce))
+            print(turn(stage,"Reply with exactly "+nonce,"--contains",nonce))
+            if a.update_model:
+                selected=json.loads(agent("cat","/sandbox/.saw/trusted/model.json"))
+                assert selected["generation"]==2
+                # Correlate the exact fresh completion with the provider/model recorded by OpenClaw.
+                evidence_script=(HERE/"portal_model_evidence.cjs").read_text()
+                reply=json.loads(agent("node","-e",evidence_script,nonce,prefix+stage))
+                assert reply["provider"]=="openai" and reply["model"]==selected["model"] and reply["providerResponse"]
+                assert reply["responseModel"]==selected["model"] or reply["responseModel"].startswith(selected["model"]+"-")
+                assert selected["model"] == dict(x.split("=",1) for x in a.update_model)[public_targets[key]["modelInput"].replace(".", "__")]
+                print(json.dumps({"slot":key,"stage":stage,"completion":reply,"podUID":puid}),flush=True)
         return check_update, (uid,claim,writer,source,prefix,before)
     qualified={key:qualify(key,slot) for key,slot in slots.items()}
     tasks["update"]=submit("update")
     assert reg()["vaultPrefix"].endswith("/"+registration) and check_generation(2)
     for check,_ in qualified.values():check()
+    if a.update_model:
+        assert identities()==initial_ids
+        status=rh("workspace-status")
+        assert status["registration"]==registration and status["observedGeneration"]==2 and status["ready"]
+        tasks["stop"]=submit("stop")
+        stopped=rh("workspace-status")
+        assert stopped["phase"]=="stopped" and not stopped["ready"] and not stopped["links"]
+        assert stopped["observedGeneration"]==3 and identities()==initial_ids and not workload_pods()
+        runs=json.loads(run("oc","-n","saw-portal","get","pipelineruns","-l","backstage.io/kubernetes-id="+ns,"-o","json"))["items"]
+        latest=max(runs,key=lambda r:r["metadata"]["creationTimestamp"])["metadata"]["name"]
+        assert latest in rh("logs","--run",latest)["text"]
+        tasks["start"]=submit("start")
+        assert check_generation(4) and identities()==initial_ids and rh("workspace-status")["ready"]
+        for check,_ in qualified.values():check("after-start")
     if not reg()["vaultPrefix"].endswith("/"+registration):raise RuntimeError("registration changed before delete")
     tasks["delete"]=submit("delete")
     assert not reg() and all(not get("namespace",n) for n in (ns,"saw-ctl-"+registration,*ui_names))

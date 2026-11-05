@@ -18,7 +18,7 @@ The site approves the rendered BOM digest in `automaticEnrollment.approvedProfil
 
 The glmhg data-science VM BOM enables `default/notebook` (OpenClaw) and `cuda-dev/cuda-sandbox` (NemoClaw running OpenClaw). It uses external OpenAI inference and disables the optional inline harness at this site. NemoClaw uses its original image digest. The AIPCC notebook image sets `/sandbox` to mode 0770 for UID 1000 and group 0. The stock Kubernetes driver uses the OpenShift namespace UID/GID for the workload. The [image build chart](../../image-builder-charts/helm/openshift-home-access) derives the notebook image from the exact VM digest, adds directory traversal with `chmod o+x /sandbox`, and restores the image user. The owner portal passes the resulting digest through the existing `saw-bom.imageOverrides` input. The same BOM sources produce both deployments, with a different reviewed render digest for that image selection. The sandbox keeps the OpenShift-assigned identity.
 
-The two model selectors are public configuration. API keys stay in the registration's Vault path. The current update path can refresh provider credentials and reconcile the existing topology. Changing the selected model or profile currently requires a fresh registration.
+The two model selectors are public configuration. For new registrations at sites with `modelLifecycle: true`, the same owner form can update either selector. Fixed-model sandboxes keep their BOM value. Existing legacy registrations require re-enrollment for model rollover. A profile change requires a fresh registration. Provider API keys stay on the Vault/ESO/proxy path.
 
 
 ```mermaid
@@ -34,6 +34,9 @@ flowchart LR
   F --> E
   E --> P[Immutable public enrollment]
   P --> A
+  A --> J[Per-sandbox model publication Job]
+  J --> M[Gate PVC mounted read-only by agent]
+  M --> S
   A --> C[Workspace reconciler]
   C --> G[Stock OpenShell gateway]
   G --> S[Supervisor + audited OpenClaw]
@@ -53,6 +56,8 @@ flowchart LR
 | Open chat | Keycloak issues a dedicated service-account subject bound to this registration. The membership Job checks the gateway's workspace ID, installation label and owner administrator before granting the relay only the workspace user role. The owner must separately sign in via the registered HTTPS callback. The relay forwards to the sandbox's OpenClaw listener. |
 | Use a tool | OpenClaw uses the shared VM tool gate. A mutating call can require an owner decision. The trusted writer commits the record before signing a receipt. The agent mounts an exchange, never the writer's history PVC or signing key. |
 | Update | The same form retains the registration and claims and increments intent generation. Readiness requires the current generation, profile UID, and intent/BOM digest, plus a healthy Argo application and a working owner login challenge. |
+| Model rollover | Argo publishes the requested model to its bound sandbox's gate PVC before advancing the intent. The controller stops the recorded sandboxes, persists the stop acknowledgement, and starts them using their original OpenShell IDs. Each new process reads its own model. Argo removes superseded Jobs. |
+| Stop/start | The owner form or CLI submits the same signed Tekton request. Stop removes workload Pods and scales down the UI relays. Start revalidates the boundary and restores the chats. The gateway, audit writer and claims remain throughout. |
 | Delete | The shared deletion pipeline fences the registration and waits for foreground GitOps removal before destroying the scoped Vault data and registry entry. The relay client and callback are removed. The separate history namespace/PVC is retained; a subsequent create gets a different one. |
 
 **Site inputs:** [example values](../../examples/portal-container/glmhg.yaml) contain the authorized owner/Keycloak subject, reviewed chart revisions, image digest, storage classes, gateway and proxy networking, governance namespace, approved BOM digest and boundary reference. These values are operator policy, never form input. A change to a pinned policy, shared governance identity, or approved BOM requires review. The owner enters only the profile, backend and inference key. No OpenShell driver or VM image patch is required.
@@ -62,6 +67,8 @@ flowchart LR
 **Audited OpenClaw validation (glmhg, 2026-11-05):** the owner’s create, update and delete tasks all completed in RHDH and succeeded in Tekton. Generation 2 retained the same sandbox and history PVC. Five expected tool-gate records matched byte-for-byte after foreground deletion and an independent read-only remount. The [validation record](../../tests/acceptance/portal-container-validation-2026-11-05.json) includes run IDs, digests and the two issues encountered during qualification.
 
 **Data-science validation (glmhg, 2026-11-05).** RHDH completed create, update and delete. Both owner chats read unique canaries, denied and approved disposable deletions, and answered fresh prompts after update. Each restricted read-only verifier recovered five matching audit records after delete. The update reapplied the selected models. See the [live receipt](../../tests/acceptance/data-science-container-validation-2026-11-05.json) for both archive hashes, pipeline times and the original notebook permission failure.
+
+**Model and power lifecycle on glmhg.** Both data-science chats served their newly selected models after rollover and again after owner stop/start. OpenShell object IDs, PVC UIDs and canary contents survived the new Pods. Each archive retained five matching audit records after workspace deletion. The live test resumed on the same registration after correcting an unavailable provider model. [Validation record](../../tests/acceptance/owner-model-lifecycle-2026-11-05.json)
 
 ### Repeat the owner lifecycle
 
@@ -75,3 +82,20 @@ python3 tests/acceptance/portal_container_lifecycle.py \
 ```
 
 The final JSON contains three Backstage task IDs, the archive PVC UID, decision sequences and a before/after SHA-256. An intermediate task ID or PipelineRun does not indicate completion. On a failed step the harness stops and leaves evidence for inspection. To retry a clean cycle, first inspect the task and remove only the disposable registration using the normal RHDH delete template. The harness reads the public UI build ID from each installed sandbox package for the signed browser handshake.
+
+To exercise model changes and power management, install the owner CLI dependencies
+in the same Python environment as the harness (`python3 -m pip install ./cli`).
+Use two chat models enabled for the test account. For the OpenAI data-science
+profile, append these arguments to the command above:
+
+```sh
+  --model inference__model=gpt-4.1-mini --model inference__cuda_model=gpt-4.1-mini \
+  --update-model inference__model=gpt-4.1 --update-model inference__cuda_model=gpt-4o-mini
+```
+
+The test verifies both changed Pod UIDs, stable OpenShell IDs and PVC UIDs,
+fresh provider completions for the expected model in each sandbox, owner stop
+and start, provisioning logs, file persistence and retained audit records.
+A provider can reject a model even when Kubernetes and the owner route report
+ready. The nonce-matched completion and provider response model are the inference
+checks.
