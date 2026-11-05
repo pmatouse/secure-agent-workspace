@@ -78,7 +78,7 @@ def _storage(binding, workspace):
     volumes, mounts, refs = [volume], [mount], [reference]
     if "toolGate" in binding:
         gate = binding["toolGate"]
-        mapping(gate, {"trusted", "audit", "ownerLogin"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
+        mapping(gate, {"trusted", "audit", "ownerLogin", "receiptKey"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
         name(gate["ownerLogin"], "toolGate ownerLogin", 63)
         for field, volume_name, path, readonly in [
             ("trusted", "saw-gate", "/sandbox/.saw/trusted", True),
@@ -279,8 +279,25 @@ def compile_profile_files(files, config):
                     raise ContractError("browser and tool gate owners must match")
                 identity = shared.tool_gate_identity(login, config["ownerSubject"], ws_name, sandbox.name)
                 assets = Path(shared.__file__).parent
-                _, _, gate_digest, _ = shared.tool_gate_bundle(assets, identity)
+                receipt_key = bindings[key]["toolGate"].get("receiptKey")
+                try:
+                    _, _, gate_digest, _ = shared.tool_gate_bundle(assets, identity, receipt_key)
+                except shared.InstallerError as exc:
+                    raise ContractError(str(exc)) from exc
                 script = Path(__file__).with_name("tool_gate_preflight.js").read_text()
+                if receipt_key:
+                    # Keep the VM-style file preflight for previously published plans.
+                    script = script[:script.index("if (!fs.lstatSync(audit)")] + """
+config.plugins = {allow:['saw-tool-gate'],load:{paths:[root+'/plugin']},
+                  entries:{'saw-tool-gate':{enabled:true}}};
+config.tools = {allow:['read','write','exec']};
+"""
+                    command[2] = command[2].replace("exec openclaw gateway", """openclaw plugins list --json > "$TMPDIR/saw-plugins.json"
+node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1])).plugins.find(x=>x.id==="saw-tool-gate");if(!p?.enabled||p.status!=="loaded"||p.rootDir!=="/sandbox/.saw/trusted/plugin")process.exit(1)' "$TMPDIR/saw-plugins.json"
+exec openclaw gateway""")
+                    if browser:
+                        command[2] = command[2].replace("scopes:['operator.read','operator.write']",
+                            "scopes:['operator.read','operator.write','operator.approvals']")
                 command[2] = command[2].replace("const target = process.env.OPENCLAW_CONFIG_PATH;",
                     script.replace("@SAW_GATE_DIGEST@", gate_digest) + "\nconst target = process.env.OPENCLAW_CONFIG_PATH;")
             if runtime:

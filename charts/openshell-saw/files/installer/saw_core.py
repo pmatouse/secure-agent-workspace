@@ -880,7 +880,7 @@ def tool_gate_identity(owner, subject, workspace, sandbox):
             "sandbox": sandbox, "workspace": workspace}
 
 
-def tool_gate_bundle(here, identity):
+def tool_gate_bundle(here, identity, receipt_key=None):
     """Build the identical policy, identity and OpenClaw extension for both runtimes."""
     names = ("tool-actions.yaml", "tool-gate.mjs", "tool-gate-plugin.mjs")
     missing = [name for name in names if not (here / name).is_file()]
@@ -890,6 +890,10 @@ def tool_gate_bundle(here, identity):
     policy_hash = "sha256:" + hashlib.sha256(policy).hexdigest()
     plugin = (here / "tool-gate-plugin.mjs").read_bytes().replace(
         b"__SAW_POLICY_HASH__", policy_hash.encode())
+    if receipt_key is not None:
+        if not isinstance(receipt_key, str) or not re.fullmatch(r"MCowBQYDK2VwAyEA[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=", receipt_key):
+            raise InstallerError("audit writer requires a canonical Ed25519 public key")
+        plugin = plugin.replace(b"__SAW_AUDIT_KEY__", receipt_key.encode("ascii"))
     tree = {
         "tool-actions.yaml": (policy, False),
         "identity.json": ((json.dumps(identity, sort_keys=True) + "\n").encode(), False),

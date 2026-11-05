@@ -21,9 +21,9 @@ def verify(directory, files):
             raise ValueError("existing gate differs from the requested policy or owner")
 
 
-def publish(root, identity):
+def publish(root, identity, receipt_key=None):
     assets = Path(shared.__file__).parent
-    files, _, digest, _ = shared.tool_gate_bundle(assets, identity)
+    files, _, digest, _ = shared.tool_gate_bundle(assets, identity, receipt_key)
     target = root / "bundle"
     if not target.exists():
         with tempfile.TemporaryDirectory(dir=root) as scratch:
@@ -50,6 +50,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("owner", "subject", "workspace", "sandbox"):
         parser.add_argument("--" + key, required=True)
+    parser.add_argument("--receipt-key")
     args = parser.parse_args()
     os.umask(0o022)
-    print(publish(Path("/volume"), shared.tool_gate_identity(args.owner, args.subject, args.workspace, args.sandbox)))
+    print(publish(Path("/volume"), shared.tool_gate_identity(args.owner, args.subject, args.workspace, args.sandbox), args.receipt_key))
