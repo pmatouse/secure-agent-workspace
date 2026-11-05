@@ -8,6 +8,8 @@ data:
   users: {{ printf "%s\n" $v.ownerLogin | quote }}
   ca.crt: |
 {{ $v.gatewayCA | indent 4 }}
+  browser-config.js: |
+{{ .Files.Get "files/browser-config.js" | indent 4 }}
   token.py: |
 {{ .Files.Get "files/token.py" | indent 4 }}
 ---
@@ -33,7 +35,7 @@ spec:
   template:
     metadata:
       labels: {app: {{ $n }}, role: relay}
-      annotations: {checksum/config: {{ printf "%s%s" ($v | toJson) (.Files.Get "files/token.py") | sha256sum }}}
+      annotations: {checksum/config: {{ printf "%s%s%s" ($v | toJson) (.Files.Get "files/token.py") (.Files.Get "files/browser-config.js") | sha256sum }}}
     spec:
       serviceAccountName: {{ $n }}
       automountServiceAccountToken: false
@@ -58,6 +60,29 @@ spec:
             command: [python3, -c, "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:18789/',timeout=4).status==200"]
           timeoutSeconds: 6
           periodSeconds: 15
+      - name: browser-policy
+        image: {{ $v.cliImage }}
+        command: [/bin/sh, -ec]
+        args:
+        - |
+          script=$(cat /config/browser-config.js)
+          while true; do
+            if openshell sandbox exec -g relay --workspace "$WORKSPACE" --name "$SANDBOX" --no-login-shell --no-tty --timeout 20 -- node -e "$script" "$ORIGIN" "$OWNER" >/dev/null 2>&1; then
+              sleep 90
+            else
+              echo "Waiting for the workspace browser policy" >&2
+              sleep 15
+            fi
+          done
+        env:
+        - {name: XDG_CONFIG_HOME, value: /session}
+        - {name: HOME, value: /session}
+        - {name: WORKSPACE, value: {{ $v.workspace }}}
+        - {name: SANDBOX, value: {{ $v.sandbox }}}
+        - {name: ORIGIN, value: {{ printf "https://%s" $v.host | quote }}}
+        - {name: OWNER, value: {{ $v.ownerLogin }}}
+        securityContext: *restricted
+        volumeMounts: [{name: session, mountPath: /session}, {name: config, mountPath: /config, readOnly: true}]
       - name: forward
         image: {{ $v.cliImage }}
         args: [forward, service, -g, relay, --workspace, {{ $v.workspace }}, {{ $v.sandbox }}, --target-port, '18789', --local, '127.0.0.1:18789']
@@ -110,7 +135,7 @@ kind: Route
 metadata:
   name: {{ $n }}
   labels: {saw.redhat.com/oidc-redirect: "true"}
-  annotations: {argocd.argoproj.io/sync-wave: '4'}
+  annotations: {argocd.argoproj.io/sync-wave: '4', haproxy.router.openshift.io/set-forwarded-headers: replace}
 spec:
   host: {{ required "UI hostname required" $v.host }}
   to: {kind: Service, name: {{ $n }}}
