@@ -15,6 +15,7 @@ import base64
 import hashlib
 import json
 import re
+import shlex
 from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -103,6 +104,11 @@ def profile_credential_env(profile_text):
     (credentials[0].env_vars[0]), or "" when it declares none."""
     envs = profile_credential_envs(profile_text)
     return envs[0] if envs else ""
+
+
+def credential_marker(prefix, secret_name, key):
+    """Opaque value that the trusted proxy replaces for an approved endpoint."""
+    return f"{prefix}.{secret_name}.{key}"
 
 
 def credential_env_name(provider_type, profiles):
@@ -1013,6 +1019,10 @@ def tool_gate_bundle(here, identity, receipt_key=None):
 HARNESS_MOUNT = "/sandbox/harness"
 
 
+# mcp.json env/header value: exactly ${VAR}, or Authorization-style
+# "Bearer ${VAR}". Any other prefix could smuggle a literal secret.
+# A stdio arg naming a credential-ish flag with a literal value, e.g.
+# "--api-key=sk-live-...". The "--flag value" two-token form is not covered.
 MCP_PLACEHOLDER_ONLY = re.compile(
     r"^(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|Bearer \$\{[A-Za-z_][A-Za-z0-9_]*\})$",
     re.IGNORECASE)
@@ -1422,3 +1432,9 @@ def mcp_registration_failures(output, declared):
     missing = sorted(set(declared) - registered)
     return ([f"OpenClaw does not list MCP server(s) {', '.join(missing)} as registered"]
             if missing else [])
+
+
+def enable_harness_plugin(plugin_id, environment=""):
+    """Grant bundle capability consent using the stock CLI, including older versions."""
+    command = (environment + " openclaw plugins enable " + shlex.quote(plugin_id)).lstrip()
+    return f"{command} --accept-capabilities || {command}"

@@ -114,3 +114,24 @@ def test_model_gate_claim_is_shared_only_for_the_publisher_and_agent():
     assert claims["saw-gate-"+U]["accessModes"] == ["ReadWriteMany"]
     assert claims["saw-gate-"+U]["storageClassName"] == audit["exchangeStorageClass"]
     assert claims["workspace-"+U]["accessModes"] == claims[U+"-history"]["accessModes"] == ["ReadWriteOnce"]
+
+
+def test_personal_assistant_uses_the_vm_proxy_policy_and_trusted_secret_projection():
+    owner = {**user(), "profiles":["personal-assistant"]}
+    site = {**SITE, "providerAllowHosts":["integrate.api.nvidia.com","slack.com","gmail.googleapis.com","oauth2.googleapis.com"]}
+    site["automaticEnrollment"]={**SITE["automaticEnrollment"],"approvedProfiles":{"personal-assistant":"a"*64}}
+    parent = render("saw-users","portal-ws-"+U,"saw-portal",{"global":GLOBAL,"users":[owner],"containerSites":{U:site}})
+    app, = [a for a in parent if a.get("spec",{}).get("source",{}).get("path")=="charts/saw-portal-container"]
+    resources=child(app)
+    broker,=[r for r in resources if r["kind"]=="ConfigMap" and r["metadata"]["name"].endswith("-proxy-policy")]
+    policy=json.loads(broker["data"]["config.json"])
+    bindings={b["secret"]:b for b in policy["bindings"]}
+    assert set(bindings)=={"gmail","slack","inference"}
+    assert bindings["gmail"]["refresh"]["tokenURL"]=="https://oauth2.googleapis.com/token"
+    assert bindings["slack"]=={"secret":"slack","key":"bot_token","providers":["slack"]}
+    secrets={r["metadata"]["name"]:r for r in resources if r["kind"]=="ExternalSecret"}
+    for name,keys in {"gmail":{"refresh_token","client_id","client_secret"},"slack":{"bot_token"},"inference":{"api_key"}}.items():
+        assert secrets[name]["metadata"]["namespace"]=="saw-ctl-"+REG
+        assert {e["secretKey"] for e in secrets[name]["spec"]["data"]}==keys
+    proxy,=[r for r in resources if r["kind"]=="Application" and r["spec"]["source"]["path"]=="charts/saw-kubernetes-proxy"]
+    assert proxy["spec"]["source"]["helm"]["valuesObject"]["credentialSecretNames"]==sorted(secrets)

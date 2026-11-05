@@ -225,8 +225,7 @@ def compile_profile_files(files, config):
             name(provider.name, "provider")
             name(provider.type, "provider type")
             # All semantic checks (references, credentialFree, governed names)
-            # live in the common core. This backend has no private provider
-            # materialization or OAuth refresh adapter yet.
+            # live in the common core. The trusted proxy owns private credentials and refresh.
             entry = {"metadata": {"name": provider.name, "labels": {
                 MANAGED: "kubernetes-runtime", OWNER: owner}}, "type": provider.type}
             if not config.get("proxyBindings") and (provider.refresh_strategy or provider.credentials_spec or provider.credential_secret_key != "api_key"):
@@ -245,7 +244,7 @@ def compile_profile_files(files, config):
                 if any([provider.base_url, provider.model, provider.model_secret_key,
                         provider.base_url_secret_key, provider.inference_timeout, provider.nemoclaw_provider]):
                     raise ContractError("proxy provider settings belong in the sandbox inference block")
-                entry["credentials"] = {"OPENAI_API_KEY": f"saw-cred.{secret}.api_key"}
+                entry["credentials"] = {"OPENAI_API_KEY": shared.credential_marker("saw-cred", secret, "api_key")}
             else:
                 raise ContractError("provider requires an unported credential/refresh capability or approval")
             providers.append(entry)

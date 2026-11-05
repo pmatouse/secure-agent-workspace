@@ -99,3 +99,59 @@ and start, provisioning logs, file persistence and retained audit records.
 A provider can reject a model even when Kubernetes and the owner route report
 ready. The nonce-matched completion and provider response model are the inference
 checks.
+
+### Personal assistant and inline harnesses
+
+The VM and Kubernetes backends consume the same rendered `saw-bom-profiles`
+ConfigMap. For `personal-assistant` it contains the sandbox and provider
+declarations, the base64-encoded `daily-briefing` files and Helm's digest index.
+The VM installer and Kubernetes runtime import one implementation of bundle
+parsing, digest checking, provider-governance checks, skill discovery paths and
+OpenClaw MCP configuration. The shared credential-proxy policy template reads
+the existing governance profiles and the selected user's credential bindings.
+`scripts/saw-profile-catalog.py --check` verifies the packaged chart copies.
+
+| Component | What it does on Kubernetes |
+|---|---|
+| Enrollment | Verifies the complete BOM against the administrator-approved digest. Binds the selected inline harness name and digest to the signed-tool-gate slot. An absent required bundle, changed tree or missing provider blocks compilation. |
+| Publication Job | Recomputes the mounted BOM's tree digest, then atomically publishes the verified files under a digest-derived directory on the slot's trusted gate PVC. A replay verifies the existing files. |
+| Stock OpenShell and agent | OpenShell mounts that directory read-only at `/sandbox/harness` and the writable workspace's briefing subtree at `/sandbox/briefing`. The agent verifies the actual mount mode and digest before enabling the bundle. The skill, readers and writer are the VM bundle bytes. |
+| Provider proxy | ESO projects the static Slack bot token and Gmail OAuth refresh material into the registration's trusted namespace. The existing broker handles token refresh. Agent MCP processes use provider markers. Approved destination and method rules come from the stock governance profiles. |
+
+For live enrollment, pin a runtime image with harness support. Add the profile's
+rendered BOM SHA to `automaticEnrollment.approvedProfiles`, pin the assistant
+image under `profileImageOverrides.personal-assistant.assistant`, and supply
+`profileBoundaries.personal-assistant` alongside `automaticEnrollment` in the
+site's owner entry. Its `reference` is the reviewed boundary map for this
+owner/profile and its `allowHosts` for the shipped NVIDIA profile are
+`integrate.api.nvidia.com`, `slack.com`, `gmail.googleapis.com` and
+`oauth2.googleapis.com`. RHDH collects the existing VM profile inputs.
+The host list controls broker egress. The selected provider profiles constrain
+where each credential can be injected. Use the profile-specific reviewed
+reference because the broker's mounts and configuration differ from data science.
+
+**Repeat the credential-free OpenShift test.** Run from the repository root
+with Python, PyYAML, Helm and an operator `oc` context. Use a namespace able to
+pull the pinned runtime image. The Job uses restricted admission, disables the
+service-account token, and runs its fixture services on loopback. Choose a
+unique suffix. Wait for completion before removing the labeled test resources.
+
+```sh
+ns=saw-k8s-build
+id=briefing-$(date +%s)
+python3 tests/acceptance/briefing_fixture.py --runtime-image "$RUNTIME_IMAGE" --suffix "$id" |
+  oc -n "$ns" create -f -
+oc -n "$ns" wait --for=condition=complete "job/briefing-fixture-$id" --timeout=21m
+oc -n "$ns" logs "job/briefing-fixture-$id" -c agent
+oc -n "$ns" delete job,configmap,networkpolicy -l "saw.redhat.com/fixture=briefing-fixture-$id"
+```
+
+The fixture compiles the shipped personal-assistant BOM, publishes the harness,
+and starts the pinned NemoClaw image with the generated startup checks. It runs
+OpenClaw locally in the test Pod, with the SAW audit writer and forwarder,
+synthetic Slack/Gmail endpoints and a deterministic model. The direct reader
+test checks both denials and the saved briefing. The conversation test checks
+the agent's response with both sources available and each source denied in
+turn. Live OAuth exchange, real inference, stock OpenShell provisioning and
+RHDH owner-route qualification for this profile require a separate live run.
+OCI harness-image delivery is outside this inline-bundle test.

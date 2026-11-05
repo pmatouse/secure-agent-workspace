@@ -1,43 +1,17 @@
 """Compile the same Helm-rendered personal-assistant BOM as the VM."""
 import base64
-import json
 from pathlib import Path
-import subprocess
 
 import pytest
-import yaml
 
 from saw_kubernetes import compile_profile_files, ContractError
 from saw_kubernetes.core import shared
 from saw_kubernetes.harness import read_bundles
 from saw_kubernetes.prepare_gate import publish_harness
 
-ROOT = Path(__file__).resolve().parents[2]
-IMAGE = "ghcr.io/validatedpatterns-sandbox/nemoclaw-sandbox@sha256:28457eec59e71eca310cd72fc4b57c71506c3fce4c30f2636a237dca85725dbd"
-
-
-def briefing_inputs():
-    manifests = subprocess.check_output(["helm", "template", "fixture", str(ROOT/"charts/saw-bom"),
-        "--set", "profiles[0]=personal-assistant", "--set", "harnessEnabled=true",
-        "--set-string", "imageOverrides.assistant="+IMAGE], text=True)
-    files = yaml.safe_load(manifests)["data"]
-    docs, raw, index = shared.split_bom_files(files)
-    bundle = read_bundles(raw, index)["daily-briefing"]
-    owner = "fixture"
-    def pvc(name, ro):
-        return {"claimName": name, "uid": "test-"+name, "readOnly": ro}
-    # Public SPKI for a fixture writer. No signing or provider key in the test.
-    key = base64.b64encode(bytes.fromhex("302a300506032b6570032100")+bytes(range(32))).decode()
-    slot = {"workspace": pvc("workspace-fixture",False), "browser":{"origin":"https://fixture.example","ownerLogin":owner},
-            "toolGate":{"receiptKey":key,"ownerLogin":owner,"trusted":pvc("saw-gate-fixture",True),
-                        "audit":pvc("saw-audit-fixture",False),"harness":{"name":bundle.name,"digest":bundle.digest}}}
-    ws, = shared.parse_profiles(docs)[0].workspaces
-    bindings = [{"secret":p.credential_secret,"key":p.credential_secret_key,"type":p.type,
-                 "refresh": bool(p.refresh_strategy)} for p in ws.providers if p.enabled]
-    cfg = dict(ownerID="b032b2e4-2cd5-47a7-8ef8-ac73e15700b1",namespace="saw-fixture",
-               namespaceUID="fixture-ns",ownerSubject="fixture-subject",mode="container",gatewayVersion="0.1.2-rhaiv.6",
-               approvedCredentialFreeProviders=[],proxyBindings=bindings,bindings={"personal-assistant/assistant":slot})
-    return files, cfg
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "acceptance"))
+from briefing_fixture import ROOT, briefing_inputs
 
 
 def test_briefing_plan_and_volume(tmp_path):

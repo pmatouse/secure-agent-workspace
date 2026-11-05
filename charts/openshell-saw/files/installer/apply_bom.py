@@ -688,10 +688,6 @@ HARNESS_CONFIG_KEYS = ("plugins.load.paths", "skills.load.extraDirs")
 OPENCLAW_CHAT_CHANNELS = frozenset({"slack"})
 OPENCLAW_EXEC_ENV = ("OPENCLAW_HOME=/sandbox SQLITE_TMPDIR=/sandbox/.openclaw/state "
                      "TMPDIR=/sandbox/.openclaw/state OPENCLAW_NIX_MODE=0")
-# mcp.json env/header value: exactly ${VAR}, or Authorization-style
-# "Bearer ${VAR}". Any other prefix could smuggle a literal secret.
-# A stdio arg naming a credential-ish flag with a literal value, e.g.
-# "--api-key=sk-live-...". The "--flag value" two-token form is not covered.
 # The podman driver's workload container (its supervisor has the same
 # sandbox labels but not the user's mounts): isolation.rs WORKLOAD_FILTER.
 WORKLOAD_ROLE_LABEL = "openshell.ai/isolation-role=sandbox"
@@ -1166,9 +1162,9 @@ def _resolve_proxy(profiles, secrets_dir, proxy):
                                          "is present on a VM disk; provider keys belong only to "
                                          "the credential proxy")
                 check_binding_provider(p, configured, bindings[p.credential_secret, skey])
-                p.credential_values[cname] = f"{prefix}.{p.credential_secret}.{skey}"
-            creds.setdefault(ws.name, {})[p.name] = (
-                f"{prefix}.{p.credential_secret}.{p.credential_secret_key}")
+                p.credential_values[cname] = _saw_core.credential_marker(prefix, p.credential_secret, skey)
+            creds.setdefault(ws.name, {})[p.name] = _saw_core.credential_marker(
+                prefix, p.credential_secret, p.credential_secret_key)
     return creds
 
 
@@ -3920,8 +3916,7 @@ class ProfileApplier:
         ids = harness_plugin_ids(info) if info is not None else []
         if ids:
             script = "; ".join(
-                f"{oc_env} openclaw plugins enable {shlex.quote(i)} --accept-capabilities "
-                f"|| {oc_env} openclaw plugins enable {shlex.quote(i)}" for i in ids)
+                _saw_core.enable_harness_plugin(i, oc_env) for i in ids)
             self.cli(*exec_cmd, "sh", "-c", script, check=False)
         self.configure_harness_mcp(ws, sb, exec_cmd, oc_env, info)
 

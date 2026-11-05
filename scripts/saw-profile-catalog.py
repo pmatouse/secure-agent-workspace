@@ -545,12 +545,18 @@ def main(argv=None):
               for src in sorted(GOVERNANCE_PROFILES.glob("*.yaml"))}
     extra = [p for p in sorted(INSTALLER_PROFILES.glob("*.yaml")) if p not in mirror]
     lifecycle = TEMPLATE_OUTPUT.with_name("set-workspace-state.yaml")
+    # Independent Helm charts package the same reviewed broker renderer.
+    policy_template = ROOT / "charts/openshell-saw/templates/_governed-proxy-policy.tpl"
+    policy_outputs = [
+        (ROOT / "charts/saw-users/templates/_governed-proxy-policy.tpl", policy_template.read_text()),
+        (ROOT / "charts/saw-users/files/governed-profiles.json", json.dumps(
+            {p.stem: load(p) for p in sorted(GOVERNANCE_PROFILES.glob("*.yaml"))}, sort_keys=True, indent=2) + "\n")]
     if args.list:
         # Every path this script owns: the generated files, each mirror, and
         # the mirror directory itself, so `git add -A -- <list>` (the hook,
         # the workflow) also stages a mirror this run removed.
         for path in (*CATALOG_OUTPUTS, TEMPLATE_OUTPUT, lifecycle, DELETE_TEMPLATE,
-                     ADMIN_TEMPLATE_OUTPUT, ADMIN_DELETE_TEMPLATE, *mirror, INSTALLER_PROFILES):
+                     ADMIN_TEMPLATE_OUTPUT, ADMIN_DELETE_TEMPLATE, *(p for p, _ in policy_outputs), *mirror, INSTALLER_PROFILES):
             print(path.relative_to(ROOT))
         return 0
     try:
@@ -564,6 +570,7 @@ def main(argv=None):
     outputs.append((DELETE_TEMPLATE, render_delete_template()))
     outputs.append((ADMIN_TEMPLATE_OUTPUT, render_template(json.loads(text), for_user=True)))
     outputs.append((ADMIN_DELETE_TEMPLATE, render_delete_template(for_user=True)))
+    outputs += policy_outputs
     outputs += sorted(mirror.items())
     stale = []
     for path in extra:

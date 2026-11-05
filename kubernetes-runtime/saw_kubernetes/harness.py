@@ -2,10 +2,9 @@
 import base64
 import json
 import re
-import shlex
+from pathlib import Path
 
 import yaml
-from pathlib import Path
 
 from .core import shared
 
@@ -59,5 +58,5 @@ def configure(command, driver, bundle, workspace, sandbox, catalog):
     start = start.replace("HARNESS_SPEC", json.dumps(spec, ensure_ascii=True))
     anchor = "const target = process.env.OPENCLAW_CONFIG_PATH;"
     command[2] = command[2].replace(anchor, start + "\n" + anchor)
-    enable = "\n".join("openclaw plugins enable --accept-capabilities " + shlex.quote(name) for name in ids)
+    enable = "\n".join(shared.enable_harness_plugin(name) for name in ids)
     command[2] = command[2].replace("exec openclaw gateway run", enable + "\nexec openclaw gateway run")

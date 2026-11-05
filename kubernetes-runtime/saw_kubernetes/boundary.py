@@ -2,6 +2,10 @@
 import hashlib
 import json
 
+import yaml
+
+from . import provider as governed
+
 
 class BoundaryError(ValueError):
     pass
@@ -85,7 +89,6 @@ def verify(config, plan, get):
                 or fingerprint(obj[field]) != expected["sha256"]):
             raise BoundaryError("ChangedBoundary:" + key)
         observed[key] = obj
-    from . import provider as governed
     for workspace in plan.get("workspaces", []):
         for provider in workspace["providers"]:
             credentials = provider.get("credentials")
@@ -93,12 +96,11 @@ def verify(config, plan, get):
                 policy = json.loads(observed["proxyPolicy"]["data"]["config.json"])
                 kind = provider.get("type", "openai")
                 if kind != "openai":
-                    import yaml
                     live = observed["governanceProfiles"]["data"].get(kind + ".yaml", "")
                     if yaml.safe_load(live) != governed.document(kind):
                         raise BoundaryError("ProviderGovernanceMismatch")
-                if not governed.check_policy(provider.get("type", "openai"), credentials, policy):
-                    raise BoundaryError("OpenAIProxyBindingMismatch" if provider.get("type", "openai") == "openai"
+                if not governed.check_policy(kind, credentials, policy):
+                    raise BoundaryError("OpenAIProxyBindingMismatch" if kind == "openai"
                                         else "ProviderProxyBindingMismatch")
     vap = observed["validation"]
     status = vap.get("status", {})

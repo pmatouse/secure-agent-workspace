@@ -1700,7 +1700,7 @@ def generator_params(workspaces, defaults, read=None, catalog=None):
                       "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
                 boundary = site.get("profileBoundaries", {}).get(selected)
                 if boundary:
-                    site = {**site, "providerPolicy": boundary["providerPolicy"],
+                    site = {**site, "providerAllowHosts": boundary["allowHosts"],
                             "automaticEnrollment": {**site["automaticEnrollment"], "reference": boundary["reference"]}}
                 if managed:
                     site.update(lifecycleVersion=1, modelInputs=ws["initialModelInputs"],
