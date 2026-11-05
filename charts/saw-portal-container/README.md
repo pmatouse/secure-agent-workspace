@@ -40,6 +40,8 @@ flowchart LR
 
 **Acceptance:** [RHDH owner client](../../tests/acceptance/rhdh_workspace.py) submits the actual installed templates. A returned task ID is not a pass: wait for the Backstage task **and** Tekton PipelineRun. [Chat client](../../tests/acceptance/openclaw_audit_chat.py) signs in to the real HTTPS/WSS route, reads an unpredictable canary, and resolves tool approval requests as the owner. Also check the actual disposable files. [Archive verifier](../../tests/acceptance/portal_audit_evidence.cjs) checks the decision sequences and hashes the ordered records for comparison after deletion.
 
+**Live result (glmhg, 2026-11-05):** the owner’s create, update and delete tasks all completed in RHDH and succeeded in Tekton. Generation 2 retained the same sandbox and history PVC. Five expected tool-gate records matched byte-for-byte after foreground deletion and an independent read-only remount. The [validation record](../../tests/acceptance/portal-container-validation-2026-11-05.json) includes run IDs, digests and the two issues encountered during qualification.
+
 ### Repeat the owner lifecycle
 
 Use an enrolled **disposable owner with no current registration or runtime namespace**. Use an operator `oc` context for the same cluster. The harness needs read access to registration/runtime state, workspace exec for test fixtures, and permission to run a restricted read-only verification Job in the resulting audit namespace. These permissions are for the test observer, not the RHDH user.

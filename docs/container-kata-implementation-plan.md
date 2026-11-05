@@ -1,8 +1,10 @@
 # SAW container and Kata backends: implementation and qualification plan
 
-Status: **VM inference/model recovery verified; portal model update verified through the documented restart; portal status/deletion gaps remain; container dependency lifecycle verified; Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
+Status: **VM inference/model recovery verified; portal model update verified through the documented restart; portal status/deletion gaps remain; ordinary container owner create/update/delete and audited OpenClaw verified (2026-11-05); Kata activation blocked by worker firmware. Full container/Kata SAW parity is not yet implemented.**
 Research date: 2026-11-04. Repository: `pmatouse/secure-agent-workspace`.
 Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/container-kata-deployment`.
+
+The original VM baseline and rollout history below are dated. For the implemented RHDH container flow, see [automatic enrollment and owner lifecycle](../charts/saw-portal-container/README.md). The container profile uses the stock OpenShell Kubernetes driver. Kata is a separate qualification.
 
 ### Live baseline receipt (2026-11-04)
 

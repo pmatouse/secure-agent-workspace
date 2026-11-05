@@ -24,6 +24,7 @@ quickstart, and the supported-provider and secrets tables.
 | [Versioned BOM installer](versioned-bom-installer.md) | The in-VM installer: what runs where, namespaces, upgrading, live inputs, signing, pruning |
 | [Provider and driver support matrix](provider-driver-support-matrix.md) | SAW TP validation results for OpenAI, Anthropic, and NVIDIA with Podman and Kubernetes drivers |
 | [Self-service portal (RHDH)](self-service-portal.md) | The Developer Hub portal: components, request flow, RBAC, keys, sandbox web UIs, settings |
+| [Container workspace self-service](../charts/saw-portal-container/README.md) | Owner create/update/delete, automatic enrollment, audited OpenClaw chat, and retained audit verification. |
 
 ## Governance (choose one engine)
 

@@ -1,5 +1,8 @@
 # Container Runtime Support: Docker and Podman
 
+For a workspace running **directly on Kubernetes** with the OpenShell Kubernetes driver, see [RHDH container workspaces](../charts/saw-portal-container/README.md). This page covers the runtime inside a gateway VM.
+
+
 The gateway VM supports two container runtimes, selectable at deploy time via a single Helm value.
 No golden image rebuild is required to switch — both images are pre-built and available.
 
