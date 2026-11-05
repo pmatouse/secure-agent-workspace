@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: saw-audit-gate-prep
+  namespace: saw-k8s-test
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: saw-audit-gate-prep
+  namespace: saw-k8s-build
+rules:
+- apiGroups:
+  - image.openshift.io
+  resources:
+  - imagestreams/layers
+  resourceNames:
+  - saw-runtime-controller
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: saw-audit-gate-prep
+  namespace: saw-k8s-build
+subjects:
+- kind: ServiceAccount
+  name: saw-audit-gate-prep
+  namespace: saw-k8s-test
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: saw-audit-gate-prep
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: saw-audit-gate-prep
+  namespace: saw-k8s-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 240
+  template:
+    spec:
+      serviceAccountName: saw-audit-gate-prep
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: gate
+        persistentVolumeClaim:
+          claimName: saw-gate-saw-audit-demo
+      containers:
+      - name: prep
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:a0d040fa472b484ff6096adbfaff7d751a2bd929889269bb8fdaef87400a8618
+        command:
+        - python3
+        - -m
+        - saw_kubernetes.prepare_gate
+        - --owner
+        - sawk8sowner
+        - --subject
+        - 478fdd1f-8db9-41e8-97ad-b563215c89e9
+        - --workspace
+        - agent
+        - --sandbox
+        - audited
+        - --receipt-key
+        - MCowBQYDK2VwAyEAit6+fp+nzHXM8XimWXbi1w0cVeDli7Duy2D5lOPe7xQ=
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: gate
+          mountPath: /volume

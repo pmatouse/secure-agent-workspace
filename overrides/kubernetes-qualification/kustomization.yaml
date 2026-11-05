@@ -18,3 +18,4 @@ resources:
   - tool-gate-build.yaml
   - audit-qualification.yaml
   - audit-writer.yaml
+  - audit-gate-prep.yaml
