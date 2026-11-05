@@ -1,0 +1,30 @@
+{
+  "binding": "8907af47370ca8debab0687f93fe04645891532122e584f6588691c8b3c0bd44",
+  "deny": "79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27",
+  "gateway": "966364a899282607a0aa6d5e63022857915afdcc1fcafe8e6e31c2b3ac192d60",
+  "gatewayConfig": "80abee459bce882378eda866fb63cb96083acb0512797f30da6759a93c4f28af",
+  "gatewayNetwork": "fc4cc9c4a59132a17aa42a51867c4e88d538a30e4f6ec6dd3769fe54339e2b1b",
+  "gatewayService": "11f2046ef571e1f60921ec0f6a3974b1e7202a85bb6545076373433f6bbaaa69",
+  "governance": {
+    "sha256": "52f0a336af8296bb96e38708c7bc258ef391d9ccbe3af8ca64b892a8bb58a603",
+    "uid": "3c8d1c3f-da8e-4260-9f0f-1d663051d0a3"
+  },
+  "governancePolicy": {
+    "sha256": "9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f",
+    "uid": "f6c6be27-8fd5-4e59-bab9-15c421226067"
+  },
+  "governanceProfiles": {
+    "sha256": "c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534",
+    "uid": "1327ce2b-0a91-4a48-82d9-873cd9056265"
+  },
+  "governanceService": {
+    "sha256": "a0712005d9245812ca7fa86b9d6f5a2e9295b277a9e9ffed7929edb14f8d0fc7",
+    "uid": "b07e7a06-ac7e-4556-99b2-d5d2e8955a14"
+  },
+  "network": "7eaabdfa6aa0e3e387efa2708f9baed3f52ed9f65976144f96495aa98dc62ae4",
+  "proxy": "1059d7c183ffa033c011c6459c93452faf13fd5b2ac30d5bd81b4950bf57de01",
+  "proxyNetwork": "4e0c80d56b38edb56dff4935721b174528d32dcf72b95d84428dc3a27e1851d2",
+  "proxyPolicy": "0584310f1d41afce04eb601143c6c4f48cbc5d47ed2ffaa0e4d809d34f00873a",
+  "publicCA": "equals independent trusted proxy public CA",
+  "validation": "d39420fead08d3208849bc26571d7110d5e3c2db95880db18bdda3ff992aaae5"
+}
