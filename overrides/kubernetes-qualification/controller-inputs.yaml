@@ -63,11 +63,8 @@ data:
   profiles__input__agent__sandbox.yaml: "apiVersion: saw.redhat.com/v1alpha1\nkind:\
     \ Sandboxes\nspec:\n  sandboxes:\n  - name: openclaw-ui\n    type: openclaw\n\
     \    image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15\n\
-    \    providers: &id001\n    - openai\n    inference: &id002\n      providerRef:\
-    \ openai\n      protocol: openai\n      baseUrl: https://api.openai.com/v1\n \
-    \     model: gpt-4.1-mini-2025-04-14\n  - name: audited\n    type: openclaw\n\
-    \    image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15\n\
-    \    providers: *id001\n    inference: *id002\n"
+    \    providers:\n    - openai\n    inference:\n      providerRef: openai\n   \
+    \   protocol: openai\n      baseUrl: https://api.openai.com/v1\n      model: gpt-4.1-mini-2025-04-14\n"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
