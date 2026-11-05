@@ -1,0 +1,388 @@
+apiVersion: v1
+kind: ConfigMap
+immutable: true
+metadata:
+  name: saw-tool-gate-7a118c8b65be8960d76ff92b9a5ec696
+  namespace: saw-runtime-smoke
+  annotations:
+    saw.redhat.com/tool-gate-sha256: sha256:7a118c8b65be8960d76ff92b9a5ec69684b318d6b35bc4ed6c25a9d02f816f4d
+data:
+  identity.json: '{"sandbox": "openclaw-ui", "subject": "478fdd1f-8db9-41e8-97ad-b563215c89e9",
+    "username": "sawk8sowner", "workspace": "agent"}
+
+    '
+  plugin__index.js: "// OpenClaw before_tool_call hook. Consequential tools come from\n\
+    // tool-actions.yaml. This file does not list MCP servers or probe them.\nimport\
+    \ {\n  AUDIT_PATH,\n  IDENTITY_PATH,\n  POLICY_PATH,\n  TASK_PATH,\n  evaluateToolCall,\n\
+    \  readJson,\n  readText,\n} from \"./tool-gate.mjs\";\n\n// Replaced with the\
+    \ SHA-256 of the exact policy bytes when the host fills\n// the read-only gate\
+    \ volume. No writable node_modules link is needed.\nconst EXPECTED_POLICY_HASH\
+    \ = \"sha256:7824530b36b7da8a468d6e963f3389c02d75226d4b526787bd048c6bb328cc84\"\
+    ;\n\nexport function handleBeforeToolCall(event, ctx) {\n  const taskFile = readJson(TASK_PATH);\n\
+    \  const result = evaluateToolCall({\n    policyText: readText(POLICY_PATH),\n\
+    \    expectedPolicyHash: EXPECTED_POLICY_HASH,\n    identity: readJson(IDENTITY_PATH),\n\
+    \    taskTitle: taskFile && typeof taskFile.title === \"string\" ? taskFile.title\
+    \ : \"\",\n    toolName: event && event.toolName,\n    params: event && event.params,\n\
+    \    sessionKey: (ctx && ctx.sessionKey) || (event && event.sessionKey) || \"\"\
+    ,\n    sessionId: (ctx && ctx.sessionId) || (event && event.sessionId) || \"\"\
+    ,\n    auditFile: AUDIT_PATH,\n  });\n  return result.hook;\n}\n\nexport default\
+    \ {\n  id: \"saw-tool-gate\",\n  name: \"SAW tool gate\",\n  description: \"Audit\
+    \ every tool call with the signed-in user and current task, and require approval\
+    \ before consequential tools run.\",\n  register(api) {\n    api.on(\"before_tool_call\"\
+    , (event, ctx) => handleBeforeToolCall(event, ctx));\n  },\n};\n"
+  plugin__openclaw.plugin.json: "{\n  \"id\": \"saw-tool-gate\",\n  \"name\": \"SAW\
+    \ tool gate\",\n  \"description\": \"Audit every tool call with the signed-in\
+    \ user and current task, and require approval before consequential tools run.\"\
+    ,\n  \"activation\": {\"onStartup\": true},\n  \"configSchema\": {\"type\": \"\
+    object\", \"additionalProperties\": false}\n}\n"
+  plugin__package.json: "{\n  \"name\": \"saw-tool-gate\",\n  \"version\": \"0.1.0\"\
+    ,\n  \"private\": true,\n  \"type\": \"module\",\n  \"openclaw\": {\n    \"extensions\"\
+    : [\"./index.js\"],\n    \"runtimeExtensions\": [\"./index.js\"]\n  }\n}\n"
+  plugin__tool-gate.mjs: "// Decision engine for the SAW tool-action gate. The OpenClaw\
+    \ plugin is a\n// thin wrapper around this module so the policy can be tested\
+    \ without\n// OpenClaw. Tool names live in tool-actions.yaml, not in this file.\n\
+    import { createHash } from \"node:crypto\";\nimport fs from \"node:fs\";\nimport\
+    \ path from \"node:path\";\n\nexport const POLICY_PATH = \"/sandbox/.saw/trusted/tool-actions.yaml\"\
+    ;\nexport const IDENTITY_PATH = \"/sandbox/.saw/trusted/identity.json\";\nexport\
+    \ const TASK_PATH = \"/sandbox/.saw/current-task.json\";\nexport const AUDIT_PATH\
+    \ = \"/sandbox/.saw/audit/tool-actions.jsonl\";\n\nconst ACTIONS = new Set([\"\
+    allow\", \"deny\", \"approval\"]);\n\nfunction stripComment(line) {\n  let quote\
+    \ = null;\n  for (let i = 0; i < line.length; i++) {\n    const ch = line[i];\n\
+    \    if (quote) {\n      if (ch === quote) quote = null;\n      continue;\n  \
+    \  }\n    if (ch === '\"' || ch === \"'\") {\n      quote = ch;\n      continue;\n\
+    \    }\n    if (ch === \"#\") return line.slice(0, i);\n  }\n  return line;\n\
+    }\n\nfunction parseScalar(raw) {\n  const text = raw.trim();\n  if (text.length\
+    \ >= 2 && ((text.startsWith('\"') && text.endsWith('\"')) || (text.startsWith(\"\
+    '\") && text.endsWith(\"'\")))) {\n    return text.slice(1, -1);\n  }\n  if (/^-?\\\
+    d+$/.test(text)) return Number(text);\n  return text;\n}\n\nfunction field(body)\
+    \ {\n  const match = body.match(/^([A-Za-z][A-Za-z0-9]*):\\s*(.*)$/);\n  if (!match)\
+    \ throw new Error(`invalid policy line: ${body}`);\n  return [match[1], match[2]];\n\
+    }\n\nexport function parsePolicy(text) {\n  if (typeof text !== \"string\" ||\
+    \ !text.trim()) throw new Error(\"tool-action policy is empty\");\n  let version\
+    \ = null;\n  let defaultAction = null;\n  let sawRules = false;\n  const rules\
+    \ = [];\n  let current = null;\n  for (const raw of text.split(/\\r?\\n/)) {\n\
+    \    const line = stripComment(raw);\n    if (!line.trim()) continue;\n    const\
+    \ indent = line.match(/^ */)[0].length;\n    if (indent !== line.length - line.trimStart().length)\
+    \ throw new Error(\"policy indentation must be spaces\");\n    const body = line.trim();\n\
+    \    if (indent === 0) {\n      current = null;\n      const [key, value] = field(body);\n\
+    \      if (key === \"version\") version = parseScalar(value);\n      else if (key\
+    \ === \"defaultAction\") defaultAction = parseScalar(value);\n      else if (key\
+    \ === \"rules\") {\n        if (value !== \"\") throw new Error(\"rules must be\
+    \ a list\");\n        sawRules = true;\n      } else throw new Error(`unknown\
+    \ policy field ${key}`);\n      continue;\n    }\n    if (!sawRules) throw new\
+    \ Error(\"nested content before rules\");\n    if (indent === 6 && body.startsWith(\"\
+    - \")) {\n      if (!current || !Array.isArray(current.whenCommandMatches)) {\n\
+    \        throw new Error(\"command match outside whenCommandMatches\");\n    \
+    \  }\n      current.whenCommandMatches.push(String(parseScalar(body.slice(2))));\n\
+    \      continue;\n    }\n    if (indent === 2 && body.startsWith(\"- \")) {\n\
+    \      const [key, value] = field(body.slice(2).trim());\n      current = { [key]:\
+    \ parseScalar(value) };\n      rules.push(current);\n      continue;\n    }\n\
+    \    if (indent === 4) {\n      if (!current) throw new Error(\"rule field outside\
+    \ a rule\");\n      const [key, value] = field(body);\n      if (key === \"whenCommandMatches\"\
+    ) {\n        if (value !== \"\") throw new Error(\"whenCommandMatches must be\
+    \ a list\");\n        current.whenCommandMatches = [];\n      } else current[key]\
+    \ = parseScalar(value);\n      continue;\n    }\n    throw new Error(`unsupported\
+    \ indentation ${indent}`);\n  }\n  if (version !== 1) throw new Error(\"tool-action\
+    \ policy version must be 1\");\n  if (!ACTIONS.has(defaultAction)) throw new Error(\"\
+    defaultAction must be allow, deny, or approval\");\n  const ids = new Set();\n\
+    \  for (const rule of rules) {\n    if (typeof rule.id !== \"string\" || !rule.id)\
+    \ throw new Error(\"every rule needs an id\");\n    if (ids.has(rule.id)) throw\
+    \ new Error(`duplicate rule id ${rule.id}`);\n    ids.add(rule.id);\n    if (typeof\
+    \ rule.tool !== \"string\" || !rule.tool) throw new Error(`rule ${rule.id} needs\
+    \ a tool`);\n    if (!ACTIONS.has(rule.action)) throw new Error(`rule ${rule.id}\
+    \ has an unknown action`);\n    if (rule.whenCommandMatches !== undefined) {\n\
+    \      if (!Array.isArray(rule.whenCommandMatches) || rule.whenCommandMatches.length\
+    \ === 0) {\n        throw new Error(`rule ${rule.id} has an empty whenCommandMatches`);\n\
+    \      }\n      if (rule.whenCommandMatches.some((item) => typeof item !== \"\
+    string\" || item === \"\")) {\n        throw new Error(`rule ${rule.id} has an\
+    \ empty command match`);\n      }\n    }\n  }\n  return { version, defaultAction,\
+    \ rules };\n}\n\nfunction redactString(value) {\n  return value\n    .replace(/nvapi-[A-Za-z0-9_-]+/g,\
+    \ \"nvapi-***\")\n    .replace(/\\bsk-[A-Za-z0-9_-]+/g, \"sk-***\")\n    .replace(/(api[_-]?key|token|secret|password|authorization)\\\
+    s*[:=]\\s*\\S+/gi, \"$1=***\");\n}\n\nfunction redact(value) {\n  if (typeof value\
+    \ === \"string\") return redactString(value);\n  if (Array.isArray(value)) return\
+    \ value.map(redact);\n  if (value && typeof value === \"object\") {\n    const\
+    \ out = {};\n    for (const key of Object.keys(value).sort()) out[key] = redact(value[key]);\n\
+    \    return out;\n  }\n  return value;\n}\n\nexport function commandText(params)\
+    \ {\n  if (!params || typeof params !== \"object\") return \"\";\n  const texts\
+    \ = [\"command\", \"cmd\", \"script\", \"args\"].map((key) => {\n    const value\
+    \ = params[key];\n    if (Array.isArray(value)) return value.every((part) => typeof\
+    \ part === \"string\") ? value.join(\" \") : \"\\n\";\n    if (value === undefined\
+    \ || value === null) return \"\";\n    return typeof value === \"string\" ? value\
+    \ : \"\\n\";\n  }).filter((value) => value.trim());\n  // Distinct representations\
+    \ must not let a harmless field conceal a second\n  // command. The newline makes\
+    \ the combined input opaque below.\n  return [...new Set(texts)].join(\"\\n\"\
+    );\n}\n\nfunction normalizedExec(command) {\n  if (!command.trim()) return { error:\
+    \ \"exec-unreadable\" };\n  if (/[;&|`\\n\\r<>]|\\$\\(|\\$\\{/.test(command))\
+    \ return { error: \"exec-opaque\" };\n  const words = command.trim().split(/\\\
+    s+/);\n  const assignments = [];\n  while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=\\\
+    S*$/.test(words[0])) assignments.push(words.shift());\n  if (!words.length) return\
+    \ { error: \"exec-unreadable\" };\n  words[0] = path.posix.basename(words[0]).toLowerCase();\n\
+    \  // These assignments can change the executable or make an inspection call\n\
+    \  // invoke Git helpers. Other inert leading assignments are normalized away.\n\
+    \  if (assignments.some((item) => /^(?:GIT_|LD_|PATH=|NODE_OPTIONS=)/i.test(item)))\
+    \ {\n    return { error: \"exec-opaque\" };\n  }\n  const wrappers = new Set([\"\
+    sh\", \"bash\", \"dash\", \"zsh\", \"ksh\", \"busybox\", \"env\", \"xargs\",\n\
+    \    \"eval\", \"sudo\", \"command\", \"nice\", \"nohup\", \"time\"]);\n  if (wrappers.has(words[0])\
+    \ || ([\"python\", \"python3\", \"perl\", \"ruby\", \"node\"].includes(words[0])\n\
+    \      && words.slice(1).some((part) => part === \"-c\" || part === \"-e\")))\
+    \ {\n    return { error: \"exec-opaque\" };\n  }\n  if (words[0] === \"git\" &&\
+    \ [\"diff\", \"log\", \"show\"].includes(words[1]) &&\n      words.slice(2).some((part)\
+    \ => /^--(?:output|ext-diff|textconv)(?:=|$)/.test(part) || part === \"-o\"))\
+    \ {\n    return { error: \"exec-opaque\" };\n  }\n  return { command: words.join(\"\
+    \ \") };\n}\n\nfunction digest(params) {\n  const encoded = JSON.stringify(redact(params\
+    \ && typeof params === \"object\" ? params : {}));\n  return `sha256:${createHash(\"\
+    sha256\").update(encoded).digest(\"hex\")}`;\n}\n\nfunction summaryOf(tool, params)\
+    \ {\n  const command = redactString(commandText(params)).replace(/\\s+/g, \" \"\
+    ).trim();\n  const text = command ? `${tool} ${command}` : tool || \"\";\n  return\
+    \ text.slice(0, 120);\n}\n\nfunction userOf(identity) {\n  return {\n    subject:\
+    \ identity && typeof identity.subject === \"string\" ? identity.subject : \"\"\
+    ,\n    username: identity && typeof identity.username === \"string\" ? identity.username\
+    \ : \"\",\n  };\n}\n\nfunction baseRecord(input, extras) {\n  const identity =\
+    \ input.identity;\n  return {\n    time: input.now || new Date().toISOString(),\n\
+    \    user: userOf(identity),\n    task: extras.task,\n    sandbox: identity &&\
+    \ typeof identity.sandbox === \"string\" ? identity.sandbox : \"\",\n    workspace:\
+    \ identity && typeof identity.workspace === \"string\" ? identity.workspace :\
+    \ \"\",\n    tool: typeof input.toolName === \"string\" ? input.toolName : \"\"\
+    ,\n    rule: extras.rule,\n    policyHash: extras.policyHash,\n    argsDigest:\
+    \ digest(input.params),\n    summary: summaryOf(typeof input.toolName === \"string\"\
+    \ ? input.toolName : \"\", input.params),\n    decision: extras.decision,\n  };\n\
+    }\n\nfunction effectFor(action, tool, ruleId) {\n  if (action === \"allow\") return\
+    \ { kind: \"allow\" };\n  if (action === \"deny\") {\n    const why = ruleId ===\
+    \ \"default\"\n      ? `Tool ${tool} is denied by the default action`\n      :\
+    \ `Tool ${tool} is denied by rule ${ruleId}`;\n    return { kind: \"deny\", blockReason:\
+    \ why };\n  }\n  return {\n    kind: \"approval\",\n    approval: {\n      title:\
+    \ `Approve ${tool}`,\n      description: `Tool ${tool} matches ${ruleId} and needs\
+    \ approval before it runs.`,\n      severity: \"warning\",\n      timeoutMs: 120000,\n\
+    \      allowedDecisions: [\"allow-once\", \"deny\"],\n    },\n  };\n}\n\nfunction\
+    \ decisionName(action) {\n  if (action === \"approval\") return \"approval_required\"\
+    ;\n  return action;\n}\n\nfunction blocked(input, rule, reason, task = { id: null,\
+    \ title: null }) {\n  return {\n    record: baseRecord(input, {\n      task,\n\
+    \      rule,\n      policyHash: input.policyHash ?? null,\n      decision: \"\
+    deny\",\n    }),\n    effect: { kind: \"deny\", blockReason: reason },\n  };\n\
+    }\n\nfunction ruleMatches(rule, tool, command) {\n  if (rule.tool !== tool) return\
+    \ false;\n  if (!rule.whenCommandMatches) return true;\n  return rule.whenCommandMatches.some((needle)\
+    \ => {\n    const normalized = needle.toLowerCase().replace(/\\s+/g, \" \").trim();\n\
+    \    return command === normalized || command.startsWith(`${normalized} `);\n\
+    \  });\n}\n\nexport function decide(input) {\n  const tool = typeof input.toolName\
+    \ === \"string\" ? input.toolName : \"\";\n  const policyHash = typeof input.policyText\
+    \ === \"string\"\n    ? `sha256:${createHash(\"sha256\").update(input.policyText,\
+    \ \"utf8\").digest(\"hex\")}` : null;\n  input = { ...input, policyHash };\n \
+    \ if (policyHash && input.expectedPolicyHash && policyHash !== input.expectedPolicyHash)\
+    \ {\n    return blocked(input, \"policy-hash\", \"Tool call blocked: tool-action\
+    \ policy hash changed\");\n  }\n  let policy;\n  try {\n    policy = parsePolicy(input.policyText);\n\
+    \  } catch {\n    return blocked(input, \"policy-invalid\", \"Tool call blocked:\
+    \ tool-action policy is missing or invalid\");\n  }\n  if (!input.identity ||\
+    \ typeof input.identity !== \"object\" ||\n      typeof input.identity.username\
+    \ !== \"string\" || !input.identity.username.trim() ||\n      typeof input.identity.subject\
+    \ !== \"string\" || !input.identity.subject.trim()) {\n    return blocked(input,\
+    \ \"identity-missing\", \"Tool call blocked: signed-in user is not recorded\"\
+    );\n  }\n  if (!tool) return blocked(input, \"no-tool\", \"Tool call blocked:\
+    \ the tool name is missing\");\n  const session = (typeof input.sessionKey ===\
+    \ \"string\" && input.sessionKey)\n    || (typeof input.sessionId === \"string\"\
+    \ && input.sessionId)\n    || \"\";\n  if (!session) return blocked(input, \"\
+    no-task\", \"Tool call blocked: no current task\");\n  const title = typeof input.taskTitle\
+    \ === \"string\" && input.taskTitle ? input.taskTitle : session;\n  const task\
+    \ = { id: session, title };\n  const rawCommand = commandText(input.params);\n\
+    \  const exec = tool === \"exec\" ? normalizedExec(rawCommand) : null;\n  if (exec?.error)\
+    \ return blocked(input, exec.error, `Tool call blocked: ${exec.error}`, task);\n\
+    \  const command = exec ? exec.command : rawCommand;\n  const rule = policy.rules.find((item)\
+    \ => ruleMatches(item, tool, command));\n  const action = rule ? rule.action :\
+    \ policy.defaultAction;\n  const ruleId = rule ? rule.id : \"default\";\n  return\
+    \ {\n    record: baseRecord(input, { task, rule: ruleId, policyHash, decision:\
+    \ decisionName(action) }),\n    effect: effectFor(action, tool, ruleId),\n  };\n\
+    }\n\nexport function resolutionDecision(value) {\n  if (value === \"allow-once\"\
+    \ || value === \"allow-always\") return \"approved\";\n  return \"rejected\";\n\
+    }\n\nexport function resolutionRecord(record, resolution, now) {\n  return {\n\
+    \    ...record,\n    time: now || new Date().toISOString(),\n    decision: resolutionDecision(resolution),\n\
+    \    approval: { mode: \"openclaw-requireApproval\", resolution: String(resolution)\
+    \ },\n  };\n}\n\n// undefined lets the tool run. deny blocks it. approval pauses\
+    \ it until the\n// signed-in user answers; timeout and cancel are rejected by\
+    \ resolutionDecision.\nexport function hookResult(decided, onResolution) {\n \
+    \ if (decided.effect.kind === \"allow\") return undefined;\n  if (decided.effect.kind\
+    \ === \"deny\") {\n    return { block: true, blockReason: decided.effect.blockReason\
+    \ };\n  }\n  return {\n    requireApproval: {\n      ...decided.effect.approval,\n\
+    \      pluginId: \"saw-tool-gate\",\n      onResolution,\n    },\n  };\n}\n\n\
+    export function appendAudit(file, record) {\n  const line = `${JSON.stringify(record)}\\\
+    n`;\n  fs.appendFileSync(file, line);\n  process.stderr.write(line);\n}\n\nexport\
+    \ function readJson(file) {\n  try {\n    return JSON.parse(fs.readFileSync(file,\
+    \ \"utf8\"));\n  } catch {\n    return null;\n  }\n}\n\nexport function readText(file)\
+    \ {\n  try {\n    return fs.readFileSync(file, \"utf8\");\n  } catch {\n    return\
+    \ null;\n  }\n}\n\nexport function parseIdentity(text) {\n  if (typeof text !==\
+    \ \"string\" || !text.trim()) return null;\n  try {\n    const value = JSON.parse(text);\n\
+    \    if (!value || typeof value !== \"object\" || Array.isArray(value)) return\
+    \ null;\n    return value;\n  } catch {\n    return null;\n  }\n}\n\n// The before_tool_call\
+    \ hook without the OpenClaw import. A thrown audit write\n// blocks the call.\
+    \ onResolution appends a second line and does not execute.\nexport function evaluateToolCall(input)\
+    \ {\n  const identity = input.identityText !== undefined ? parseIdentity(input.identityText)\
+    \ : input.identity;\n  const decided = decide({\n    policyText: input.policyText,\n\
+    \    expectedPolicyHash: input.expectedPolicyHash,\n    identity,\n    taskTitle:\
+    \ input.taskTitle,\n    toolName: input.toolName,\n    params: input.params,\n\
+    \    sessionKey: input.sessionKey,\n    sessionId: input.sessionId,\n    now:\
+    \ input.now,\n  });\n  if (input.auditFile) {\n    try {\n      appendAudit(input.auditFile,\
+    \ decided.record);\n    } catch {\n      const record = { ...decided.record, rule:\
+    \ \"audit-unwritable\", decision: \"deny\" };\n      process.stderr.write(`${JSON.stringify(record)}\\\
+    n`);\n      return {\n        record,\n        hook: { block: true, blockReason:\
+    \ \"Tool call blocked: the audit trail could not be written\" },\n      };\n \
+    \   }\n  }\n  const hook = hookResult(decided, (resolution) => {\n    if (!input.auditFile)\
+    \ return;\n    try {\n      appendAudit(input.auditFile, resolutionRecord(decided.record,\
+    \ resolution));\n    } catch {\n      const record = { ...resolutionRecord(decided.record,\
+    \ resolution), auditWriteFailed: true };\n      process.stderr.write(`${JSON.stringify(record)}\\\
+    n`);\n    }\n  });\n  return { record: decided.record, hook };\n}\n"
+  tool-actions.yaml: "# Tool actions. Every unlisted tool is denied and every call\
+    \ is audited.\nversion: 1\ndefaultAction: deny\nrules:\n  - id: exec-consequential\n\
+    \    tool: exec\n    action: approval\n    whenCommandMatches:\n      - git push\n\
+    \      - gh pr merge\n      - rm\n      - kubectl delete\n      - oc delete\n\
+    \  - id: exec-git-status\n    tool: exec\n    action: allow\n    whenCommandMatches:\n\
+    \      - git status\n  - id: exec-git-diff\n    tool: exec\n    action: allow\n\
+    \    whenCommandMatches:\n      - git diff\n  - id: exec-git-log\n    tool: exec\n\
+    \    action: allow\n    whenCommandMatches:\n      - git log\n  - id: exec-git-show\n\
+    \    tool: exec\n    action: allow\n    whenCommandMatches:\n      - git show\n\
+    \  - id: exec-briefing-cron-list\n    tool: exec\n    action: allow\n    whenCommandMatches:\n\
+    \      - openclaw cron list\n  - id: exec-briefing-cron-change\n    tool: exec\n\
+    \    action: approval\n    whenCommandMatches:\n      - openclaw cron add\n  \
+    \    - openclaw cron rm\n  # OpenClaw 2026.9.2 runs the hook again for each dispatched\
+    \ target.\n  # These discovery rules never replace the target's own named rule.\n\
+    \  - id: tool-search\n    tool: tool_search\n    action: allow\n  - id: tool-call\n\
+    \    tool: tool_call\n    action: allow\n  - id: slack-new-messages\n    tool:\
+    \ slack-reader__new_messages\n    action: allow\n  - id: slack-channels\n    tool:\
+    \ slack-reader__channels\n    action: allow\n  - id: gmail-new-messages\n    tool:\
+    \ gmail-reader__new_messages\n    action: allow\n  - id: briefing-save\n    tool:\
+    \ briefing-writer__save_briefing\n    action: allow\n  - id: read\n    tool: read\n\
+    \    action: allow\n  - id: memory-search\n    tool: memory_search\n    action:\
+    \ allow\n  - id: memory-get\n    tool: memory_get\n    action: allow\n  - id:\
+    \ session-status\n    tool: session_status\n    action: allow\n  - id: sessions-list\n\
+    \    tool: sessions_list\n    action: allow\n  - id: sessions-history\n    tool:\
+    \ sessions_history\n    action: allow\n  - id: message-send\n    tool: message\n\
+    \    action: approval\n  - id: saw-denied-tool\n    tool: saw-denied-tool\n  \
+    \  action: deny\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: saw-gate-check-f92b9a5ec696-a26bb0e0
+  namespace: saw-runtime-smoke
+immutable: true
+data:
+  check.mjs: "// Run with the stock OpenClaw image and the shared gate projected read-only.\n\
+    import assert from \"node:assert/strict\";\nimport fs from \"node:fs\";\nimport\
+    \ { execFileSync } from \"node:child_process\";\nimport { randomUUID } from \"\
+    node:crypto\";\nimport { handleBeforeToolCall } from \"/sandbox/.saw/trusted/plugin/index.js\"\
+    ;\nimport { AUDIT_PATH, POLICY_PATH, IDENTITY_PATH } from \"/sandbox/.saw/trusted/plugin/tool-gate.mjs\"\
+    ;\n\nconst identity = JSON.parse(fs.readFileSync(IDENTITY_PATH));\nconst config\
+    \ = {plugins: {allow: [\"saw-tool-gate\"], load: {paths: [\"/sandbox/.saw/trusted/plugin\"\
+    ]},\n                          entries: {\"saw-tool-gate\": {enabled: true}}}};\n\
+    fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH, JSON.stringify(config), {mode:\
+    \ 0o600});\nconst listed = JSON.parse(execFileSync(\"openclaw\", [\"plugins\"\
+    , \"list\", \"--json\"], {encoding: \"utf8\"}));\nconst gate = listed.plugins.find(p\
+    \ => p.id === \"saw-tool-gate\");\nassert.equal(gate?.enabled, true);\nassert.equal(gate?.status,\
+    \ \"loaded\");\nassert.equal(gate?.rootDir, \"/sandbox/.saw/trusted/plugin\");\n\
+    assert.throws(() => fs.openSync(POLICY_PATH, \"r+\"), {code: \"EROFS\"});\nconst\
+    \ ctx = {sessionKey: randomUUID()};\nfunction call(toolName, params = {}) {\n\
+    \  return handleBeforeToolCall({toolName, params}, ctx);\n}\nassert.equal(call(\"\
+    read\"), undefined);\nassert.equal(call(\"saw-denied-tool\").block, true);\nconst\
+    \ held = call(\"exec\", {command: \"git push origin main\"});\nassert.equal(held.requireApproval.pluginId,\
+    \ \"saw-tool-gate\");\nheld.requireApproval.onResolution(\"timeout\");\nconst\
+    \ rows = fs.readFileSync(AUDIT_PATH, \"utf8\").trim().split(\"\\n\")\n  .map(line\
+    \ => JSON.parse(line)).filter(row => row.task?.id === ctx.sessionKey);\nassert.deepEqual(rows.map(row\
+    \ => row.decision), [\"allow\", \"deny\", \"approval_required\", \"rejected\"\
+    ]);\nassert(rows.every(row => row.user.subject === identity.subject && row.workspace\
+    \ === identity.workspace\n                         && row.sandbox === identity.sandbox));\n\
+    console.log(JSON.stringify({imagePluginLoaded: true, policyReadOnly: true,\n \
+    \                           decisions: rows.map(row => row.decision)}));\n"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: saw-gate-check-f92b9a5ec696-a26bb0e0
+  namespace: saw-runtime-smoke
+spec:
+  podSelector:
+    matchLabels:
+      saw.redhat.com/tool-gate-check: saw-gate-check-f92b9a5ec696-a26bb0e0
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: saw-gate-check-f92b9a5ec696-a26bb0e0
+  namespace: saw-runtime-smoke
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        saw.redhat.com/tool-gate-check: saw-gate-check-f92b9a5ec696-a26bb0e0
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: gate
+        configMap:
+          name: saw-tool-gate-7a118c8b65be8960d76ff92b9a5ec696
+          defaultMode: 292
+          items:
+          - key: identity.json
+            path: identity.json
+          - key: plugin__index.js
+            path: plugin/index.js
+          - key: plugin__openclaw.plugin.json
+            path: plugin/openclaw.plugin.json
+          - key: plugin__package.json
+            path: plugin/package.json
+          - key: plugin__tool-gate.mjs
+            path: plugin/tool-gate.mjs
+          - key: tool-actions.yaml
+            path: tool-actions.yaml
+      - name: check
+        configMap:
+          name: saw-gate-check-f92b9a5ec696-a26bb0e0
+      - name: audit
+        emptyDir: {}
+      - name: home
+        emptyDir: {}
+      containers:
+      - name: gate
+        image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15
+        command:
+        - node
+        - /check/check.mjs
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: HOME
+          value: /work
+        - name: OPENCLAW_HOME
+          value: /work
+        - name: OPENCLAW_CONFIG_PATH
+          value: /work/openclaw.json
+        - name: TMPDIR
+          value: /tmp
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 2Gi
+            cpu: '2'
+        volumeMounts:
+        - name: gate
+          mountPath: /sandbox/.saw/trusted
+          readOnly: true
+        - name: check
+          mountPath: /check
+          readOnly: true
+        - name: home
+          mountPath: /work
+        - name: audit
+          mountPath: /sandbox/.saw/audit
+
