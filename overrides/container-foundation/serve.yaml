@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: governance-interceptor-extra-profiles
+  namespace: saw-container-policy
+data:
+  custom-inference.yaml: "id: custom-inference\ndisplay_name: Custom inference endpoint\n\
+    description: OpenAI-compatible inference server named by this deployment\ncategory:\
+    \ inference\ninference_capable: true\ncredentials:\n- name: api_key\n  description:\
+    \ API key of the custom inference endpoint\n  env_vars:\n  - CUSTOM_INFERENCE_API_KEY\n\
+    \  required: true\n  auth_style: bearer\n  header_name: authorization\ndiscovery:\n\
+    \  credentials:\n  - api_key\nendpoints:\n- host: api.openai.com\n  port: 443\n\
+    \  protocol: rest\n  enforcement: enforce\n  access: read-write\nbinaries:\n-\
+    \ /usr/bin/curl\n- /usr/local/bin/curl\n- /usr/bin/node\n- /usr/bin/node-*\n-\
+    \ /usr/local/bin/node\n"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-container-governance
+  namespace: vp-gitops
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-container-policy
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  sources:
+  - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    path: charts/governance-policy
+    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    helm:
+      valuesObject: {}
+      releaseName: saw-container-governance
+  - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    path: charts/governance-interceptor
+    targetRevision: 004b2340c08d82f0a6c14c739ddc25b6731b2be1
+    helm:
+      valuesObject:
+        image: image-registry.openshift-image-registry.svc:5000/saw-container-build/governance-interceptor@sha256:296d988152c3fe443393878070b0a118348acb02069d5e2b760d37a2e523ef38
+        gatewayEndpoint: ''
+        sawNamespaceLabel:
+          key: saw.redhat.com/unused-vm-selector
+          value: no-vm-qualification
+      releaseName: saw-container-governance
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pull-container-governance
+  namespace: saw-container-build
+rules:
+- apiGroups:
+  - image.openshift.io
+  resources:
+  - imagestreams/layers
+  resourceNames:
+  - governance-interceptor
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pull-container-governance
+  namespace: saw-container-build
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pull-container-governance
+subjects:
+- kind: ServiceAccount
+  namespace: saw-container-policy
+  name: default
