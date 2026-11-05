@@ -211,6 +211,14 @@ class Reconciler:
             raise ContractError("gateway version or active compute driver differs from approved inputs")
         if desired_state == "Stopped":
             return self._stop_pass(plan, state, generation)
+        retired = plan.get("retiredSandboxes", {})
+        if retired:
+            refs = {"sandbox/" + name for name in retired}
+            if any(state.get("objectIDs", {}).get("sandbox/" + k) != v for k, v in retired.items()):
+                raise ContractError("refusing to stop a sandbox without its recorded identity")
+            pending = self._stop_references(refs, plan, state, generation)
+            if pending:
+                return self._status(plan, generation, "Pending", pending=pending, retry_after_seconds=5)
         for provider_type in sorted({p["type"] for w in plan["workspaces"] for p in w["providers"]}):
             # Resolve platform scope explicitly (workspace_scope omitted). A
             # workspace administrator's same-name custom profile is not enough.
@@ -255,6 +263,14 @@ class Reconciler:
         references = {f"sandbox/{ws['name']}/{sb['name']}"
                       for ws in plan["workspaces"] for sb in ws["sandboxes"]}
         references.update(key for key in ids if key.startswith("sandbox/"))
+        pending = self._stop_references(references, plan, state, generation)
+        state["transientAttempts"] = 0
+        self.store.save(state)
+        return self._status(plan, generation, "Pending" if pending else "Stopped",
+                            pending=pending, retry_after_seconds=5 if pending else 0)
+
+    def _stop_references(self, references, plan, state, generation):
+        ids = state.get("objectIDs", {})
         pending = []
         for ref in sorted(references):
             _, workspace, name = ref.split("/")
@@ -278,10 +294,7 @@ class Reconciler:
                 continue
             self._mutate("StopSandbox", {**scope, "name": name}, plan, generation)
             pending.append(ref)
-        state["transientAttempts"] = 0
-        self.store.save(state)
-        return self._status(plan, generation, "Pending" if pending else "Stopped",
-                            pending=pending, retry_after_seconds=5 if pending else 0)
+        return pending
 
     def _prepare_workspace(self, ws, plan, state, generation, pending):
         scope = {"workspace_scope": {"workspace": ws["name"]}}

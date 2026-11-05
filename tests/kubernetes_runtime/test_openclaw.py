@@ -60,3 +60,14 @@ def test_redacted_provider_refuses_changed_revision(source, tmp_path):
     gateway.providers[(ws["name"], "openai")]["metadata"]["resource_version"] = "2"
     with pytest.raises(ContractError, match="revision"):
         core._apply_provider(ws, provider, plan, state, 1, [])
+
+
+def test_retirement_checks_recorded_id_before_mutations(source, tmp_path):
+    import uuid
+    source[1]["retiredSandboxes"] = {"agent/old": str(uuid.uuid4())}
+    plan = compile_profile(*source)
+    gateway = FakeGateway()
+    core = Reconciler(gateway, tmp_path / "ledger", lambda plan: None)
+    with pytest.raises(ContractError, match="recorded identity"):
+        core.reconcile(plan, generation=1)
+    assert not gateway.sandboxes

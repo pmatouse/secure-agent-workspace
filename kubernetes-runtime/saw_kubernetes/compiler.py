@@ -146,7 +146,7 @@ def compile_profile_files(files, config):
         raise ContractError("profile documents fail shared SAW schema or semantic validation") from None
     mapping(config, {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode",
                      "workloadRuntimeClass", "workloadRuntimeClassUID", "bindings",
-                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret"},
+                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes"},
             {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode", "bindings",
              "approvedCredentialFreeProviders", "gatewayVersion"}, "administrator configuration")
     try:
@@ -240,6 +240,10 @@ def compile_profile_files(files, config):
                 driver["pod"] = {"runtime_class_name": runtime}
             spec = {"template": {"image": sandbox.image, "driver_config": {"kubernetes": driver}},
                     "providers": sorted(references), "command": command, "tty": False}
+            if sandbox.type == "openclaw":
+                # The boundary binary runs before the main command and inherits
+                # image TMPDIR. OpenShift assigns a distinct UID per namespace.
+                spec["template"]["environment"] = {"TMPDIR": "/tmp"}
             sandboxes.append({"name": sandbox.name, "spec": spec, "annotations": {REVISION: digest(spec)},
                               "labels": {MANAGED: "kubernetes-runtime", OWNER: owner}})
         workspaces.append({"name": ws_name, "providers": sorted(providers, key=lambda p: p["metadata"]["name"]),
@@ -258,6 +262,20 @@ def compile_profile_files(files, config):
             "runtimeClass": {"name": runtime, "uid": config.get("workloadRuntimeClassUID", "")},
             "claims": sorted(all_refs, key=lambda r: (r["workspace"], r["name"])),
             "workspaces": sorted(workspaces, key=lambda w: w["name"])}
+    retired = config.get("retiredSandboxes", {})
+    if not isinstance(retired, dict):
+        raise ContractError("retiredSandboxes must map workspace/sandbox names to retained IDs")
+    for target, identifier in retired.items():
+        if (not isinstance(target, str) or target.count("/") != 1 or target in used_bindings
+                or not all(NAME.fullmatch(part) for part in target.split("/"))):
+            raise ContractError("retired sandbox must be a distinct, named former workload")
+        try:
+            if str(uuid.UUID(identifier)) != identifier:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise ContractError("retired sandbox requires its recorded UUID") from None
+    if retired:
+        plan["retiredSandboxes"] = dict(retired)
     return {**plan, "revision": digest(plan)}
 
 
