@@ -14,3 +14,4 @@ resources:
   - toolbox-intent.yaml
   - openclaw-inputs.yaml
   - workspace-relay.yaml
+  - recover-openclaw-stop.yaml

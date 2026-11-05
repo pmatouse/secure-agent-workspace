@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata: {name: saw-openclaw-main-exit-recovery, namespace: saw-ui-agent}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 360
+  template:
+    metadata: {labels: {app: saw-agent-ui, role: relay, saw.redhat.com/recovery: main-exit}}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: saw-agent-ui
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: recover
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:afb8f2397d2787b1726272201c68ac9f6631c8b13274b1c935304146c3176322
+        command: [python3, -c]
+        args:
+        - |
+          import json, os, runpy, sys, time, uuid
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          import grpc
+          from openshell._proto import openshell_pb2 as pb, openshell_pb2_grpc
+          from google.protobuf.json_format import ParseDict, MessageToDict
+          cfg=json.loads(Path("/config/relay.json").read_text())
+          channel=grpc.secure_channel(urlsplit(cfg["gatewayEndpoint"]).netloc,grpc.ssl_channel_credentials(Path("/config/ca.crt").read_bytes()))
+          stub=openshell_pb2_grpc.OpenShellStub(channel)
+          scope={"workspace_scope":{"workspace":"agent"}}
+          sid="3cf09a2e-c2b0-42cd-92a1-0ce309a0b5eb"
+          gettoken=runpy.run_path("/config/token.py")["refresh"]
+          def rpc(method, args):
+              gettoken()
+              token=json.loads(Path("/session/openshell/gateways/relay/oidc_token.json").read_text())["access_token"]
+              request=ParseDict(args,getattr(pb,method+"Request")())
+              try:
+                  res=getattr(stub,method)(request,metadata=(("authorization","Bearer "+token),),timeout=45)
+              except grpc.RpcError as e:
+                  raise RuntimeError(method+" "+e.code().name) from None
+              return MessageToDict(res,preserving_proto_field_name=True)
+          def observe():
+              sb=rpc("GetSandbox",{**scope,"name":"openclaw"})["sandbox"]
+              assert sb["metadata"]["id"]==sid and sb["metadata"]["workspace"]=="agent"
+              return sb["status"]
+          def change(method):
+              rpc(method,{**scope,"name":"openclaw","request_id":str(uuid.uuid5(uuid.UUID(sid),"ui-recovery-1/"+method))})
+          def main():
+              if rpc("GetWorkspace",{"name":"agent"})["workspace"]["metadata"]["id"]!="386f3c54-0d5a-46c9-8935-bf772fc1d957":
+                  raise RuntimeError("workspace changed")
+              status=observe()
+              if status["phase"]=="SANDBOX_PHASE_STOPPED":return
+              if status["phase"]=="SANDBOX_PHASE_ERROR" and any(c.get("reason")=="MainProcessFailed" for c in status.get("conditions",[])):
+                  change("StartSandbox")
+              for _ in range(48):
+                  phase=observe()["phase"]
+                  if phase=="SANDBOX_PHASE_STOPPED":
+                      print("Exact failed sandbox stopped; retained claim preserved")
+                      return
+                  if phase=="SANDBOX_PHASE_READY":change("StopSandbox")
+                  time.sleep(4)
+              raise RuntimeError("stop not observed")
+          main()
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        volumeMounts:
+        - {name: config, mountPath: /config, readOnly: true}
+        - {name: credential, mountPath: /credential, readOnly: true}
+        - {name: session, mountPath: /session}
+      volumes:
+      - {name: config, configMap: {name: saw-agent-ui}}
+      - {name: credential, secret: {secretName: relay-credentials, defaultMode: 0440, items: [{key: client-secret, path: client-secret}]}}
+      - {name: session, emptyDir: {medium: Memory}}
