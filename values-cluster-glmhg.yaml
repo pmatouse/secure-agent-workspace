@@ -1,17 +1,6 @@
 # Nested lab storage makes initial operator image pulls slow. Keep this
 # recovery policy declarative; OLM owns failed unpack Job cleanup/retry.
 portal:
-  linkedWorkspaces:
-  - owner: sawk8sowner
-    routeLabel: sawk8sowner-agent-openclaw-ui
-    title: OpenClaw container workspace
-    runtime:
-      mode: container
-      namespace: saw-k8s-test
-      intent: toolbox-intent
-      status: toolbox-status
-      installationID: d8ac361b-9898-4b16-ac35-2d15f86db76b
-      ownerSubject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
   # Two cold agent images plus nested-CPU guest configuration approach 30m.
   # Keep real readiness checks; this only bounds new portal runs' wait time.
   sandboxReadyTimeoutMinutes: 60
@@ -26,19 +15,7 @@ keycloak:
       memory: 2Gi
 
 clusterGroup:
-  applications:
-    saw-kubernetes-foundation:
-      name: saw-kubernetes-foundation
-      namespace: openshell-agents
-      path: overrides/kubernetes-qualification
-      kustomize: true
   subscriptions:
-    sandboxed-containers:
-      name: sandboxed-containers-operator
-      namespace: openshift-sandboxed-containers-operator
-      channel: stable
-      csv: sandboxed-containers-operator.v1.13.1
-      installPlanApproval: Automatic
     openshift-virtualization:
       # OLM applies resources to every operator container in this bundle.
       # Preserve at least the largest original requests (200m / 450Mi).
@@ -50,10 +27,6 @@ clusterGroup:
             cpu: 250m
             memory: 512Mi
   namespaces:
-    openshift-sandboxed-containers-operator:
-      operatorGroup: true
-      targetNamespaces:
-        - openshift-sandboxed-containers-operator
     external-secrets-operator:
       # clustergroup 0.9.58's map-form namespace helper does not forward
       # OperatorGroup annotations. Render the same object via extraObjects.

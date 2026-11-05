@@ -125,7 +125,6 @@ clusterGroup:
       path: charts/openshell-rhdh
       extraValueFiles:
         - /overrides/saw-users.yaml
-        - /examples/portal-container/glmhg.yaml
     governance-policy:
       name: governance-policy
       namespace: openshell-agents
