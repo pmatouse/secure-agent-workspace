@@ -106,3 +106,26 @@ def test_tool_gate_uses_shared_identity_policy_and_exact_mounts(source):
     binding["toolGate"]["trusted"]["readOnly"] = False
     with pytest.raises(ContractError, match="mount mode"):
         compile_profile(*source)
+
+
+def test_writer_key_binds_the_compiled_extension_and_tool_selection(source):
+    import base64
+    from pathlib import Path
+    from saw_kubernetes.core import shared
+
+    agent(source)
+    binding = source[1]["bindings"]["default/toolbox"]
+    # SubjectPublicKeyInfo prefix for Ed25519 followed by 32 fixture bytes.
+    key = base64.b64encode(bytes.fromhex("302a300506032b6570032100") + bytes(range(32))).decode()
+    binding["toolGate"] = {"ownerLogin":"alice", "receiptKey":key,
+        "trusted":{"claimName":"saw-gate-test","uid":"gate-uid","readOnly":True},
+        "audit":{"claimName":"saw-audit-inbox","uid":"queue-uid","readOnly":False}}
+    plan = compile_profile(*source)
+    spec = plan["workspaces"][0]["sandboxes"][0]["spec"]
+    identity = shared.tool_gate_identity("alice", source[1]["ownerSubject"], "default", "toolbox")
+    tree, _, digest, _ = shared.tool_gate_bundle(Path(shared.__file__).parent, identity, key)
+    assert key.encode() in tree["plugin/index.js"][0]
+    assert digest in spec["command"][2] and "allow:['read','write','exec']" in spec["command"][2]
+    binding["toolGate"]["receiptKey"] = "invalid"
+    with pytest.raises(ContractError, match="Ed25519"):
+        compile_profile(*source)

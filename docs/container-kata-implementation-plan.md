@@ -1664,3 +1664,20 @@ application workspace. The candidate preparation grant was removed. The live
 RHDH catalog generator read the container intent and status and reported
 `Running` for its owner. This verifies the catalog integration independently of
 tool dispatch.
+
+### Restricted audit writer qualification
+
+The container sandbox `agent/audited` uses the shared VM gate with a signed
+receipt from a writer in the trusted namespace. The sandbox mounts the exchange
+and its read-only plugin. The writer alone mounts the retained history PVC.
+No sealer, added Linux capability or Pod Security exception is required.
+See the [writer architecture and acceptance instructions](../charts/saw-audit-writer/README.md).
+
+On OpenShift 4.22.20, an authenticated owner sent real OpenClaw chat messages.
+An ordinary read returned an unpredictable value. The owner rejected one
+consequential exec and allowed another once; the respective test files remained
+and disappeared. A policy-denied write created no file. Stopping and starting
+the isolated sandbox replaced the workload and supervisor Pods. The writer
+also restarted, recovered its key and six committed records, and signed a new
+decision for a fresh chat. Production rollout to other workspace profiles and
+qualification on Kata are separate.
