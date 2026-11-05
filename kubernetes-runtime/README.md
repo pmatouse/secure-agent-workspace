@@ -94,19 +94,20 @@ layout: `workspace.yaml`, `providers.yaml`, `sandbox.yaml`.
   `requestedPlacement` reports desired placement, not independently observed VM
   boundaries. Native admission and live checks must prevent runtime fallback.
 
-The OpenClaw qualification profile supports one governed OpenAI provider and a
-literal model at the official HTTPS endpoint. The controller writes only the
-proxy marker into the gateway provider. The trusted proxy reads the real key
-from its existing Vault/ESO projection. The controller checks the approved proxy
-binding, the platform provider profile, and the retained provider revision.
-The workload runs its local gateway on loopback and stores state on its own PVC.
-Its initial app configuration denies all tools. Production tool approvals,
-independent audit and RHDH browser exposure require separate acceptance.
+The `audited-openclaw` and `data-science` owner profiles have passed live
+container provisioning, governed inference, owner browser chat and independent
+tool audit. The two-sandbox data-science run also verified model updates and
+retained data through stop/start. The headless `custom-inference` profile
+passed owner OpenShell exec and a transcript-verified OpenClaw completion at a
+site-approved HTTPS endpoint. Vault/ESO supply the dedicated credential proxy;
+the workload receives a marker. [Live owner records](../tests/acceptance/)
 
-NemoClaw, arbitrary credentials, arbitrary environment injection, other
-inference protocols and profile-requested harnesses or UI remain unsupported. The stock `data-science`
-profile therefore does not work through this foundation yet; it is not silently
-reduced to a generic sandbox. Disabled optional entries produce no resources.
+The shared inline harness path also runs the personal-assistant briefing with
+controlled providers. Live Slack/Gmail enrollment and OCI harness-image
+delivery are separate qualification and implementation items, respectively.
+Arbitrary environment injection and arbitrary credential binding remain
+restricted. Site profiles explicitly select compatible, digest-pinned images.
+[Portable inputs and recovery](../docs/container-site-replay.md)
 
 Administrator bindings are separate from user profile YAML:
 

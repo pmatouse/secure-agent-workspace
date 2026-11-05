@@ -1,0 +1,85 @@
+{
+  "cluster": "glmhg",
+  "openshift": "4.22.20",
+  "date": "2026-11-05",
+  "startingState": "Existing SAW VM baseline, installed shared container dependencies and an unregistered owner. One fresh custom-inference owner registration.",
+  "siteRevision": "6efec62c9023fe19b214da03042d7f7edb56c9d8",
+  "registration": "cd261895c7e8784b",
+  "rhdh": {
+    "create": "47d52a9e-c693-4be6-b29c-9eafdcb420f7",
+    "createStatus": "completed",
+    "createPipeline": "saw-create-p7nvr",
+    "delete": "55134d6e-82fc-4501-b97d-e88671e6b77e",
+    "deleteStatus": "completed",
+    "deletePipeline": "saw-delete-58czs"
+  },
+  "enrollment": {
+    "job": "enroll-cd261895c7e8784b-dfa7ce1a",
+    "interruptedPodUID": "2be64327-2d16-49a4-8605-2fb18b449d53",
+    "replacementPodUID": "62ed2a54-f7b6-4d2f-82d2-9fef82725699",
+    "failed": 1,
+    "succeeded": 1,
+    "immutableEnrollmentPublished": true
+  },
+  "controller": {
+    "initialFaultPodUID": "45c06d2e-694a-4255-bb4f-502b3ca7f891",
+    "initialProbe": "The replacement kubelet exec endpoint was briefly unavailable. The read-only observer exited; the controller recovered. A second, guarded fault verified the complete before/after assertions.",
+    "verified": {
+      "fault": "controller",
+      "freshReconcile": true,
+      "oldPodUID": "5cfdd39c-2e81-4b87-8042-95a231edf514",
+      "openShellIDs": {
+        "provider/default/custom-inference": "ead35a26-bbf1-442c-a819-fb9c4e18ae0a",
+        "sandbox/default/notebook": "6d8c6559-3f01-49d2-9b0d-c4552fa561ce",
+        "workspace//default": "1fc5254a-6ad0-4031-afd2-78b22259aeaa"
+      },
+      "registration": "cd261895c7e8784b",
+      "replacementPodUID": "cbce0ab1-52a7-4633-bfa2-6c919afe5b7a",
+      "retainedUIDs": {
+        "saw-ctl-cd261895c7e8784b/cm/saw-portal-enrollment": "6a07017a-871f-4fc7-84fd-9b55462ae08f",
+        "saw-ctl-cd261895c7e8784b/pvc/portal-ledger": "25f20857-b82d-4d90-8b3e-640a92c77644",
+        "saw-sawk8sowner/pod/default--notebook": "2461fe4b-8522-45a9-a811-cf346f287f0e",
+        "saw-sawk8sowner/pod/sawk8sowner-gateway-0": "90ceaf2c-6f6a-4a7c-a3d5-8428cbdcf87a",
+        "saw-sawk8sowner/pvc/saw-audit-sawk8sowner": "b432407c-2c3d-4179-ae26-5327fcbbef22",
+        "saw-sawk8sowner/pvc/saw-gate-sawk8sowner": "36efd1b0-3b17-4c10-845b-1a28b7ca0b8e",
+        "saw-sawk8sowner/pvc/sawk8sowner-gateway-data": "34f0a3e9-331a-4535-a57a-88255e306ec3",
+        "saw-sawk8sowner/pvc/workspace-sawk8sowner": "3eb7ea82-0470-484a-9abf-ea0c98cdbd77"
+      }
+    }
+  },
+  "chat": {
+    "ownerGatewayHealth": true,
+    "freshReplyMatched": true,
+    "provider": "custom-inference",
+    "model": "gpt-4.1-mini",
+    "completion": {
+      "provider": "custom-inference",
+      "model": "gpt-4.1-mini",
+      "responseModel": "gpt-4.1-mini-2025-04-14",
+      "providerResponse": true
+    }
+  },
+  "broker": "POST api.openai.com /v1/chat/completions binding=inference status=200",
+  "portableInputs": {
+    "comparedOwnerObjects": 43,
+    "changedOwnerObjects": 0,
+    "matchedBoundaryEntries": 16,
+    "foundationServerDryRunObjects": 7,
+    "comparison": "Compared rendered owner-chart objects using the same live enrollment and registration bindings and newly generated operator site settings.",
+    "newClusterInstallTested": false
+  },
+  "cleanup": {
+    "registrationRemoved": true,
+    "runtimeAndControlNamespacesRemoved": true,
+    "retainedAuditPVC": {
+      "uid": "b380b60a-7454-4a8e-9632-c222cae77270",
+      "status": "Bound"
+    },
+    "baselineVMsRunning": 3,
+    "independentGatewayReady": true
+  },
+  "tests": {
+    "passed": 277,
+    "skipped": "Pinned stock SDK protobuf suite is opt-in."
+  }
+}

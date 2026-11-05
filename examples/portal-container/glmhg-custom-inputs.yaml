@@ -1,0 +1,32 @@
+# Public site inputs for the OpenAI custom-inference replay.
+owner: sawk8sowner
+subject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
+issuer: https://openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io/realms/openshell
+buildNamespace: saw-k8s-build
+governanceNamespace: saw-k8s-build
+networkPriority: 51
+apiAddresses:
+- 172.231.0.1
+- 10.10.10.10
+- 10.10.10.11
+- 10.10.10.12
+apiPorts:
+- 443
+- 6443
+issuerAddresses:
+- 10.10.10.10
+- 10.10.10.11
+- 10.10.10.12
+- 10.10.10.30
+- 10.10.10.31
+- 10.10.10.101
+clusterCIDRs:
+- 10.232.0.0/14
+- 172.231.0.0/16
+gatewayStorage: ocs-external-storagecluster-ceph-rbd
+historyStorage: ocs-external-storagecluster-ceph-rbd-immediate
+exchangeStorage: ocs-external-storagecluster-cephfs
+controllerImage: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:f57b928684c48597de98a5f374d3464195b04c8c75dd9eaf3f385cea76cd44c2
+notebookImage: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a
+keycloakNamespace: saw-keycloak
+keycloakAdminSecret: openshell-keycloak-initial-admin
