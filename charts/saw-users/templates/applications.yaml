@@ -1,5 +1,7 @@
 {{- include "saw-users.validate" . -}}
 {{- range $user := .Values.users | default list }}
+{{- $container := eq (dig "deployment" "mode" "vm" ($user.values | default dict)) "container" }}
+{{- if not $container }}
 ---
 {{ include "saw-users.application" (dict
   "root" $
@@ -10,6 +12,7 @@
   "release" (printf "saw-%s-secrets" $user.name)
   "values" (include "saw-users.vaultPrefix" (dict "root" $ "user" $user))
 ) }}
+{{- end }}
 ---
 {{ include "saw-users.application" (dict
   "root" $
@@ -21,6 +24,10 @@
   "values" (include "saw-users.profiles" (dict "root" $ "user" $user))
 ) }}
 ---
+{{- if $container }}
+{{ $values := dict "owner" $user.name "ownerSubject" $user.ownerSubject "registration" $user.registration "vaultPrefix" $user.vaultPrefix "installationID" $user.installationID "intentGeneration" $user.intentGeneration "site" (index $.Values.containerSites $user.name) "global" $.Values.global }}
+{{ include "saw-users.application" (dict "root" $ "user" $user "appName" (printf "saw-%s" $user.name) "wave" $.Values.syncWave.sandbox "path" "charts/saw-portal-container" "release" $user.name "values" (toYaml $values)) }}
+{{- else }}
 {{ include "saw-users.application" (dict
   "root" $
   "user" $user
@@ -31,4 +38,5 @@
   "ignoreVMDefaults" true
   "values" (include "saw-users.openshellValues" (dict "root" $ "user" $user))
 ) }}
+{{- end }}
 {{- end }}

@@ -34,16 +34,23 @@ spec:
       profile:
         title: Profile
         type: string
-        enum: [ci-nvidia, custom-inference, data-science, personal-assistant]
-        enumNames: ['ci-nvidia: CI workspace with NVIDIA inference', 'custom-inference: Agent workspace
-            backed by a custom OpenAI-compatible endpoint (vLLM, Ollama, ...)', 'data-science: Data science
-            workspace with NVIDIA inference and web search; CUDA development workspace with NVIDIA inference',
-          'personal-assistant: Personal assistant: NemoClaw agent with NVIDIA inference and a daily Slack
-            and Gmail briefing']
+        enum: [audited-openclaw, ci-nvidia, custom-inference, data-science, personal-assistant]
+        enumNames: ['audited-openclaw: OpenClaw chat with native tool approval and retained audit history',
+          'ci-nvidia: CI workspace with NVIDIA inference', 'custom-inference: Agent workspace backed by
+            a custom OpenAI-compatible endpoint (vLLM, Ollama, ...)', 'data-science: Data science workspace
+            with NVIDIA inference and web search; CUDA development workspace with NVIDIA inference', 'personal-assistant:
+            Personal assistant: NemoClaw agent with NVIDIA inference and a daily Slack and Gmail briefing']
         default: data-science
     dependencies:
       profile:
         oneOf:
+        - properties:
+            profile: {const: audited-openclaw}
+            uiRoutes: {title: Sandbox web UIs, type: 'null', description: 'Published on their own route,
+                signed in with Keycloak, for you only: audited (agent)'}
+            inference__api_key: {title: 'inference: API key', type: string, 'ui:field': Secret, description: Stored
+                in Vault for your workspace only (provider openai)}
+          required: [inference__api_key]
         - properties:
             profile: {const: ci-nvidia}
             uiRoutes: {title: Sandbox web UIs, type: 'null', description: 'Published on their own route,

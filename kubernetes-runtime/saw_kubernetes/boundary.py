@@ -49,6 +49,26 @@ def complete_list(get, path):
     return response["items"]
 
 
+def excludes_namespace(policy, namespace):
+    """Prove disjointness only with the Kubernetes-managed, immutable name label.
+
+    Pod labels, ordinary namespace labels, and unsupported selector forms do
+    not establish an isolation boundary. A missing/unknown subject overlaps.
+    """
+    subject = policy.get("spec", {}).get("subject", {})
+    if not isinstance(subject, dict):
+        return False
+    if set(subject) == {"pods"} and isinstance(subject["pods"], dict):
+        selector = subject["pods"].get("namespaceSelector")
+    elif set(subject) == {"namespaces"}:
+        selector = subject["namespaces"]
+    else:
+        return False
+    labels = selector.get("matchLabels") if isinstance(selector, dict) else None
+    name = labels.get("kubernetes.io/metadata.name") if isinstance(labels, dict) else None
+    return isinstance(name, str) and bool(name) and name != namespace
+
+
 def verify(config, plan, get):
     if (config["namespace"], config["namespaceUID"], config["ownerID"], config["mode"]) != (
             plan["namespace"], plan["namespaceUID"], plan["ownerID"], plan["mode"]):
@@ -85,6 +105,7 @@ def verify(config, plan, get):
     priority = network["spec"]["priority"]
     policies = complete_list(get, "/apis/policy.networking.k8s.io/v1alpha1/adminnetworkpolicies")
     if any(p["metadata"]["uid"] != network["metadata"]["uid"] and p["spec"]["priority"] <= priority
+           and not excludes_namespace(p, config["namespace"])
            for p in policies):
         raise BoundaryError("EarlierNetworkPolicy")
     nodes = complete_list(get, "/api/v1/nodes")

@@ -1585,3 +1585,32 @@ def test_linked_runtime_tracks_owner_and_current_generation(portal):
     assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Reconciling"
     intent["bindings"]["ownerSubject"] = "someone-else"
     assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Unknown"
+
+
+def test_container_portal_register_update_delete(portal, world, monkeypatch):
+    fake, signer = world
+    subject = "478fdd1f-8db9-41e8-97ad-b563215c89e9"
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES", json.dumps({"alice":{"subject":subject}}))
+    for i in [1, 2]:
+        fake.request("saw-req-" + str(i), ds_request(signer, deploymentMode="container",
+                    profile="audited-openclaw", **{"inference.api_key":f"test-{i}"}))
+        assert portal.main(["create", "saw-req-" + str(i)]) == 0
+        entry = portal.read_entry(fake.objects[REGISTRY])
+        assert entry["intentGeneration"] == i and portal.entry_generation("alice", entry) == GEN[0]
+        assert fake.vault == {f"{KEYS}/inference":{"api_key":f"test-{i}", "provider":"openai"}}
+        assert portal.generator_params([{**entry,"ownerSubject":"other-subject"}], {}) == []
+        output = portal.generator_params([{**entry,"ownerSubject":subject}], {})[0]
+        user = json.loads(output["values"])["users"][0]
+        assert user["installationID"] == portal.installation_id("alice", GEN[0])
+        assert "test-" not in output["values"]
+    fake.request("saw-req-3", {"token":signer.token(), "action":"delete", "workspace":"component:default/saw-alice"})
+    assert portal.main(["delete","saw-req-3"]) == 0
+    ns = f"/api/v1/namespaces/saw-ctl-{GEN[0]}"
+    fake.objects[ns] = {"metadata":{"name":ns.split("/")[-1]}}
+    gone, detail = portal.removal_status(portal.kube(), "alice", "vp-gitops", entry)
+    assert not gone and ns.split("/")[-1] in detail
+    del fake.objects[ns]
+    assert portal.removal_status(portal.kube(), "alice", "vp-gitops", entry)[0]
+    assert portal.main(["finish-delete","alice"]) == 0
+    assert not fake.vault and REGISTRY not in fake.objects

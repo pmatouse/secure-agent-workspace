@@ -451,6 +451,12 @@ openshellValues. Keep omission as vm without changing existing rendered values. 
 {{- end -}}
 {{- if eq $mode "confidential" -}}
 {{- fail "deployment.mode=confidential is reserved for a later phase and is not implemented; no VM fallback" -}}
+{{- else if and (eq $mode "container") (hasKey (.root.Values.containerSites | default dict) .user.name) -}}
+{{- $u := .user -}}
+{{- $site := index .root.Values.containerSites $u.name -}}
+{{- if or (not $u.ownerSubject) (ne $u.ownerSubject $site.subject) (not (regexMatch "^[0-9a-f]{16}$" (default "" $u.registration))) (ne (toJson $u.profiles) (toJson (list "audited-openclaw"))) (not $u.pruneOnRemove) -}}
+{{- fail "container requires verified owner subject, scoped registration, audited-openclaw profile and foreground cleanup" -}}
+{{- end -}}
 {{- else if ne $mode "vm" -}}
 {{- fail (printf "deployment.mode=%s is not implemented in this revision; no VM fallback (see docs/container-kata-implementation-plan.md)" $mode) -}}
 {{- end -}}

@@ -316,6 +316,101 @@ DEPLOYMENT_MODES = ("vm", "container", "kata")
 PROVISIONABLE_MODES = ("vm",)
 
 
+AUDITED_PROFILE = "audited-openclaw"
+
+
+def container_site(user):
+    """Trusted site inventory, never names/URLs supplied by the request."""
+    sites = json.loads(os.environ.get("SAW_CONTAINER_SITES", "{}"))
+    site = sites.get(user)
+    if not isinstance(site, dict) or not re.fullmatch(
+            r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", str(site.get("subject", ""))):
+        return None
+    return site
+
+
+def container_url(user, domain):
+    return f"https://{user}-agent-audited-ui.apps.{domain}"
+
+
+def registered_links(entry, catalog, domain):
+    if entry_deployment_mode(entry) == "container":
+        return [("Audited OpenClaw", container_url(entry["name"], domain))] if domain else []
+    return ui_links(entry["name"], entry.get("profiles", []), catalog, domain)
+
+
+def container_status(k8s, user, entry, argo_ns, domain, ping):
+    # Reuse the VM pipeline's wire stage IDs so old RHDH tasks can finish.
+    # Only observations and their user-facing names differ.
+    ns = f"saw-{user}"
+    reg = entry_generation(user, entry)
+    rev = entry.get("intentGeneration")
+    gen = isinstance(rev, int) and not isinstance(rev, bool) and rev > 0
+    app = k8s.call("GET", f"/apis/argoproj.io/v1alpha1/namespaces/{argo_ns}/applications/saw-{user}", ok404=True) or {}
+    meta = app.get("metadata", {})
+    app_ok = meta.get("labels", {}).get("openshell.pattern/owner") == user and not meta.get("deletionTimestamp")
+    app_status = app.get("status", {})
+    def read(name, field):
+        cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/{name}", ok404=True) or {}
+        meta = cm.get("metadata", {})
+        labels = meta.get("labels", {})
+        if (meta.get("deletionTimestamp") or not reg
+                or labels.get("saw.redhat.com/runtime-owner") != installation_id(user, reg)
+                or field == "status.json" and labels.get("saw.redhat.com/managed-by") != "kubernetes-runtime-controller"):
+            return {}
+        try:
+            value = json.loads(cm.get("data", {}).get(field, "{}"))
+            return value if isinstance(value, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    intent = read("saw-runtime-intent", "intent.json") if app_ok else {}
+    site = container_site(user)
+    bound = bool(reg and site and gen and intent.get("generation") == rev
+                 and intent.get("bindings", {}).get("ownerSubject") == site["subject"]
+                 and intent.get("bindings", {}).get("namespace") == ns
+                 and intent.get("bindings", {}).get("mode") == "container"
+                 and intent.get("bindings", {}).get("ownerID") == installation_id(user, reg))
+    st = read("saw-runtime-status", "status.json") if bound else {}
+    profile = (k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/saw-bom-profiles", ok404=True) or {}) if bound else {}
+    files = profile.get("data", {})
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    ref = intent.get("profileRef", {})
+    current = (bound and not profile.get("metadata", {}).get("deletionTimestamp")
+               and ref.get("name") == "saw-bom-profiles" and bool(ref.get("uid"))
+               and ref["uid"] == profile.get("metadata", {}).get("uid") and ref.get("sha256") == digest(files)
+               and type(st.get("observedGeneration")) is int and st["observedGeneration"] == rev
+               and st.get("inputRevision") == digest({"intent": intent, "files": files}))
+    running = current and st.get("phase") == "GenericReady" and intent.get("desiredState") == "Running"
+    ready = bool(running and domain and app_status.get("sync", {}).get("status") == "Synced"
+                 and app_status.get("health", {}).get("status") == "Healthy" and ping(container_url(user, domain)))
+    observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
+                    (bound, "Intent for this registration and update"),
+                    (running, "Audited OpenShell sandbox running"), (ready, "Owner chat route available")]
+    phase = "none"
+    steps = []
+    waiting = False
+    for (stage, _), (done, title) in zip(STAGES, observations):
+        state = "waiting" if waiting else "done" if done else "active"
+        if state == "done":
+            phase = stage
+        else:
+            waiting = True
+        steps.append(dict(id=stage, title=title, detail=title, state=state))
+    failed = bool(current and st.get("phase") == "Blocked" or app_ok and app_status.get("operationState", {}).get("phase") in ("Error", "Failed"))
+    message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Audited OpenClaw ready")
+    return dict(user=user, deploymentMode="container", phase="failed" if failed else phase, title=message,
+                message=message, text=message, ready=ready and not failed, failed=failed, steps=steps,
+                links=[dict(title="Audited OpenClaw", url=container_url(user, domain))] if ready and not failed else [])
+
+
+def installation_id(user, registration):
+    import uuid
+    if not GENERATION_RE.fullmatch(registration):
+        raise PortalError("container requires a generation-scoped registration")
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "urn:saw:portal:" + check_user(user) + ":" + registration))
+
+
 def deployment_modes():
     try:
         modes = json.loads(os.environ.get("SAW_DEPLOYMENT_MODES", '["vm"]'))
@@ -521,6 +616,8 @@ def put_configmap(k8s, ns, name, data, labels=None, resource_version=None, deplo
         raise PortalError(f"{name} changed while this request ran (a delete?); request it again")
     if deployment_mode is not None:
         assert_mode_unchanged(read_entry(current), deployment_mode)
+        if deployment_mode == "container":
+            raise PortalError("concurrent container registration; refusing to replace its identity")
     put_configmap(k8s, ns, name, data, labels, current["metadata"]["resourceVersion"], deployment_mode)
 
 
@@ -657,7 +754,7 @@ def entities_yaml(workspaces, catalog, domain, rhdh_url, statuses=None, portal_n
     for ws in workspaces:
         user = ws["name"]
         links = [{"url": url, "title": title, "icon": "dashboard" if i == 0 else "web"}
-                 for i, (title, url) in enumerate(ui_links(user, ws.get("profiles", []), catalog, domain))]
+                 for i, (title, url) in enumerate(registered_links(ws, catalog, domain))]
         if rhdh_url:
             # The delete form, with this workspace already chosen.
             form = urllib.parse.quote(json.dumps({"workspace": f"component:default/saw-{user}"},
@@ -883,6 +980,23 @@ def ping_url(url, timeout=3):
         return False
 
 
+def owner_route_available(url, timeout=3):
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args):
+            return None
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(url, timeout=timeout) as resp:
+            return False  # the anonymous caller must not be served the chat
+    except urllib.error.HTTPError as exc:
+        target = urllib.parse.urlsplit(urllib.parse.urljoin(url, exc.headers.get("Location", "")))
+        return (exc.code in (302, 303, 307) and target.scheme == "https"
+                and (target.netloc == urllib.parse.urlsplit(url).netloc and target.path.startswith("/oauth2/")
+                     or target.path.endswith("/protocol/openid-connect/auth") and
+                     target.netloc == urllib.parse.urlsplit(os.environ.get("KEYCLOAK_URL", "")).netloc))
+    except (OSError, ValueError):
+        return False
+
+
 def app_summary(app):
     st = app.get("status") or {}
     sync = (st.get("sync") or {}).get("status") or "Unknown"
@@ -896,7 +1010,7 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
     `phase` is the last stage reached in order ("none" before the registry
     entry exists, "failed" when a stage failed); `text` is a short report
     for the template's log and output."""
-    ping = ping or ping_url
+    vm_ping = ping or ping_url
     reached, details, failure = {}, {}, ""
     cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/saw-ws-{user}", ok404=True)
     try:
@@ -905,11 +1019,13 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
         entry = {}
     profiles = entry.get("profiles", []) if isinstance(entry, dict) else []
     if cm is not None and (cm["metadata"].get("labels") or {}).get(DELETING_LABEL) == "true":
-        gone, detail = removal_status(k8s, user, argo_ns)
+        gone, detail = removal_status(k8s, user, argo_ns, entry)
         return {"user": user, "phase": "deleting", "title": PHASE_TITLES["deleting"],
                 "message": detail, "ready": False, "failed": False, "steps": [], "links": [],
                 "text": f"Deleting: {detail}"}
     mode = entry_deployment_mode(entry)
+    if mode == "container" and container_site(user):
+        return container_status(k8s, user, entry, argo_ns, domain, ping or owner_route_available)
     if mode not in PROVISIONABLE_MODES:
         message = f"{mode} workspace lifecycle and readiness are not qualified in this release"
         return {"user": user, "deploymentMode": mode, "phase": "runtime-not-qualified",
@@ -952,7 +1068,7 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
         reached["ready"] = False
         details["ready"] = "installing; waiting for workspace routes"
     else:
-        down = [title for title, url in uis if not ping(url)]
+        down = [title for title, url in uis if not vm_ping(url)]
         reached["ready"] = not down
         details["ready"] = ("UIs answer: " + ", ".join(t for t, _ in uis) if not down else
                             "installing; waiting for " + ", ".join(down))
@@ -985,7 +1101,7 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
             "text": "\n".join(lines)}
 
 
-def removal_status(k8s, user, argo_ns):
+def removal_status(k8s, user, argo_ns, entry=None):
     """(gone, what is left) of a workspace being deleted: its Argo CD
     applications and, with pruneOnRemove, namespace saw-<user> (without it
     the namespace and the VM stay on purpose)."""
@@ -996,6 +1112,13 @@ def removal_status(k8s, user, argo_ns):
     ns = k8s.call("GET", f"/api/v1/namespaces/saw-{user}", ok404=True) if prune else None
     if ns is not None:
         left.append(f"namespace saw-{user} ({(ns.get('status') or {}).get('phase', 'Active')})")
+    if entry and entry_deployment_mode(entry) == "container":
+        reg = entry_generation(user, entry)
+        if not reg:
+            raise PortalError("refusing container cleanup without a registration")
+        for scoped in [f"saw-ctl-{reg}", f"saw-ui-{reg}"]:
+            if k8s.call("GET", "/api/v1/namespaces/" + scoped, ok404=True) is not None:
+                left.append("namespace " + scoped)
     return not left, ("removed" if not left else "Argo CD is removing " + ", ".join(left))
 
 
@@ -1199,8 +1322,13 @@ def handle(action, request_name):
             mode = request_deployment_mode(data)
             if cm is not None:
                 assert_mode_unchanged(read_entry(cm), mode)
-            if mode not in PROVISIONABLE_MODES:
+            if mode == "container" and container_site(user):
+                if data.get("profile") != AUDITED_PROFILE or os.environ.get("PRUNE_ON_REMOVE", "true") != "true":
+                    raise PortalError("container requires audited-openclaw and foreground cleanup")
+            elif mode not in PROVISIONABLE_MODES:
                 raise PortalError(f"{mode} workspace provisioning is not available in this release")
+            if mode != "container" and data.get("profile") == AUDITED_PROFILE:
+                raise PortalError("audited-openclaw requires container deployment")
             profile, secrets = parse_request(data, catalog)
             check_namespace_is_ours(k8s, user)
             check_applications_are_ours(k8s, user)
@@ -1213,6 +1341,8 @@ def handle(action, request_name):
                 vault.write(f"{prefix}/{secret}", values)
                 log(f"Vault: {prefix}/{secret} ({', '.join(sorted(values))})")
             entry = registry_entry(user, profile, generation, mode)
+            if mode == "container":
+                entry["intentGeneration"] = read_entry(cm).get("intentGeneration", 0) + 1
             put_configmap(k8s, ns, name, {"user.json": json.dumps(entry, sort_keys=True)},
                           {WORKSPACE_LABEL: "true", "openshell.pattern/owner": user},
                           resource_version=cm["metadata"].get("resourceVersion") if cm else None,
@@ -1326,7 +1456,8 @@ def wait_stage(stage, user, timeout, sleep=time.sleep, clock=time.monotonic, pin
     deadline, last = clock() + timeout, None
     while True:
         if stage == "gone":
-            done, detail = removal_status(k8s, user, argo_ns)
+            marker = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/saw-ws-{user}", ok404=True)
+            done, detail = removal_status(k8s, user, argo_ns, read_entry(marker))
             failed = False
         else:
             st = workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping)
@@ -1377,6 +1508,14 @@ def generator_params(workspaces, defaults):
         # Freeze legacy VM intent instead of inheriting a new backend default.
         ws = {**ws, "values": {**ws.get("values", {}),
                                "deployment": {"mode": entry_deployment_mode(ws)}}}
+        if entry_deployment_mode(ws) == "container" and container_site(ws["name"]):
+            site = container_site(ws["name"])
+            if not ws.get("ownerSubject") or ws["ownerSubject"] != site["subject"]:
+                # Leave this entry pending; a temporarily unresolved subject
+                # must not stall other owners or give a replacement access.
+                continue
+            reg = entry_generation(ws["name"], ws)
+            ws = {**ws, "registration": reg, "installationID": installation_id(ws["name"], reg)}
         values = {**defaults, "users": [ws]}
         out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
     return out

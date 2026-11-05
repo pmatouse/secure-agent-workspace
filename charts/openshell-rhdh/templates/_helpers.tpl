@@ -127,6 +127,7 @@ from the release is enough and keeps renders stable.
 {{- /* The governance engine decides each gateway's bindings (docs/apf.md). */ -}}
 {{- if .Values.global.governance -}}{{- $_ := set $g "governance" (deepCopy .Values.global.governance) -}}{{- end -}}
 {{- $_ := set $v "global" $g -}}
+{{- $_ := set $v "containerSites" (.Values.portal.containerSites | default dict) -}}
 {{- $labels := deepCopy (index $v "namespaceLabels" | default dict) -}}
 {{- $_ := set $labels "saw.redhat.com/portal" "true" -}}
 {{- $_ := set $v "namespaceLabels" $labels -}}
@@ -177,7 +178,18 @@ allowlist into both forms without enabling privileged form parameters. */}}
 {{- $step := last $template.spec.parameters -}}
 {{- $modes := include "openshell-rhdh.deploymentModes" $root | fromJsonArray -}}
 {{- $_ := set $step.properties.deploymentMode "enum" $modes -}}
-{{- $labels := dict "vm" "Virtual machine" "container" "Container (not yet available)" "kata" "Kata (not yet available)" -}}
+{{- /* Hide the pilot profile on VM-only installations. The backend also checks it. */ -}}
+{{- if or (not (has "container" $modes)) (not $root.Values.portal.containerSites) -}}
+{{- $ids := list -}}{{- $names := list -}}
+{{- range $i, $id := $step.properties.profile.enum -}}
+{{- if ne $id "audited-openclaw" -}}{{- $ids = append $ids $id -}}{{- $names = append $names (index $step.properties.profile.enumNames $i) -}}{{- end -}}
+{{- end -}}
+{{- $_ := set $step.properties.profile "enum" $ids -}}{{- $_ := set $step.properties.profile "enumNames" $names -}}
+{{- $cases := list -}}
+{{- range $case := $step.dependencies.profile.oneOf -}}{{- if ne $case.properties.profile.const "audited-openclaw" -}}{{- $cases = append $cases $case -}}{{- end -}}{{- end -}}
+{{- $_ := set $step.dependencies.profile "oneOf" $cases -}}
+{{- end -}}
+{{- $labels := dict "vm" "Virtual machine" "container" "Container (audited OpenClaw)" "kata" "Kata (not yet available)" -}}
 {{- $names := list -}}
 {{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}

@@ -49,3 +49,23 @@ def test_changed_or_unrealized_boundary_blocks(installation, case, reason):
         obj("gateway")["status"]["updatedReplicas"] = 0
     with pytest.raises(BoundaryError, match=reason):
         verify(config, config, resources.__getitem__)
+
+
+@pytest.mark.parametrize("subject,disjoint", [
+    ({"pods": {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "other"}},
+               "podSelector": {}}}, True),
+    ({"namespaces": {"matchLabels": {"kubernetes.io/metadata.name": "other"}}}, True),
+    ({"pods": {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "runtime"}}}}, False),
+    ({"namespaces": {"matchLabels": {"owner": "other"}}}, False),
+    ({"pods": {"podSelector": {"matchLabels": {"kubernetes.io/metadata.name": "other"}}}}, False),
+    ({"namespaces": {}, "pods": {}}, False),
+])
+def test_second_tenant_network_precedence(installation, subject, disjoint):
+    config, resources, _, listing = installation
+    resources[listing]["items"].append({"metadata": {"uid": "first"},
+                                        "spec": {"priority": 10, "subject": subject}})
+    if disjoint:
+        verify(config, config, resources.__getitem__)
+    else:
+        with pytest.raises(BoundaryError, match="EarlierNetworkPolicy"):
+            verify(config, config, resources.__getitem__)

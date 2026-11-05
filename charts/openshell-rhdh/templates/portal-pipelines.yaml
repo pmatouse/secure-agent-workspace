@@ -76,12 +76,16 @@ spec:
           value: $(results.user.path)
         - name: CLUSTER_DOMAIN
           value: {{ .Values.global.clusterDomain | quote }}
+        - name: SAW_CONTAINER_SITES
+          value: {{ .Values.portal.containerSites | default dict | toJson | quote }}
         - name: SAW_DEPLOYMENT_MODES
           value: {{ include "openshell-rhdh.deploymentModes" . | quote }}
         - name: CATALOG_PATH
           value: /opt/saw/profile-catalog.json
         - name: RHDH_INTERNAL_URL
           value: {{ include "openshell-rhdh.internalUrl" . }}
+        - name: KEYCLOAK_URL
+          value: https://{{ include "openshell-rhdh.keycloakHost" . }}
         - name: ARGO_NAMESPACE
           value: {{ include "openshell-rhdh.argoNamespace" . }}
         - name: PORTAL_ADMINS
