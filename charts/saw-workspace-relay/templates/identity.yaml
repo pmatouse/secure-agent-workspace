@@ -31,13 +31,23 @@ metadata: {name: {{ $n }}-identity, namespace: {{ $v.keycloakNamespace }}}
 data:
   identity.py: |
 {{ .Files.Get "files/identity.py" | indent 4 }}
+{{- $actions := list "create" }}
+{{- if $v.cleanupRegistration }}
+{{- if or (not (regexMatch "^[0-9a-f]{16}$" $v.cleanupRegistration)) (ne $v.clientID (printf "saw-portal-%s" $v.cleanupRegistration)) }}{{ fail "cleanup requires a registration-specific client ID" }}{{ end }}
+{{- $actions = append $actions "delete" }}
+{{- end }}
+{{- range $action := $actions }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ $n }}-identity-{{ printf "%s%s%s%s" (.Files.Get "files/identity.py") $v.clientID $v.installationID $v.issuer | sha256sum | trunc 8 }}
+  name: {{ $n }}-{{ $action }}-identity-{{ printf "%s%s%s%s" ($.Files.Get "files/identity.py") $v.clientID $v.installationID $v.issuer | sha256sum | trunc 8 }}
   namespace: {{ $v.keycloakNamespace }}
+  {{- if eq $action "delete" }}
+  annotations: {helm.sh/hook: pre-delete, helm.sh/hook-delete-policy: before-hook-creation, helm.sh/hook-weight: '0'}
+  {{- else }}
   annotations: {argocd.argoproj.io/sync-wave: '1'}
+  {{- end }}
 spec:
   backoffLimit: 2
   activeDeadlineSeconds: 300
@@ -52,6 +62,10 @@ spec:
         command: [python3, /scripts/identity.py]
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
         env:
+        {{- if eq $action "delete" }}
+        - {name: DELETE_BOUND_CLIENT, value: "true"}
+        - {name: REGISTRATION, value: {{ $v.cleanupRegistration | quote }}}
+        {{- end }}
         - {name: UI_NAMESPACE, value: {{ $ui }}}
         - {name: INSTALLATION, value: {{ $v.installationID | quote }}}
         - {name: WORKSPACE, value: {{ $v.workspace | quote }}}
@@ -64,4 +78,5 @@ spec:
       volumes:
       - {name: script, configMap: {name: {{ $n }}-identity}}
       - {name: kc, secret: {secretName: {{ required "Keycloak bootstrap Secret required" $v.keycloakAdminSecret }}, defaultMode: 0440}}
+{{- end }}
 {{- end }}

@@ -56,6 +56,24 @@ def main():
         found = kc("/clients?" + urlencode({"clientId": cid}))
         return next((c for c in found if c["clientId"] == cid), None)
 
+    if os.environ.get("DELETE_BOUND_CLIENT") == "true":
+        expected = "saw-portal-" + os.environ["REGISTRATION"]
+        if cid != expected or not __import__("re").fullmatch(r"saw-portal-[0-9a-f]{16}", cid):
+            raise RuntimeError("refusing non-registration client cleanup")
+        client = lookup()
+        if not client:
+            return
+        # Keycloak deletes by immutable ID, not by the reusable client name.
+        found = kc("/clients/" + client["id"])
+        if (found.get("clientId") != cid or found.get("attributes", {}).get("saw.scope")
+                != os.environ["INSTALLATION"] + "/" + os.environ["WORKSPACE"]):
+            raise RuntimeError("refusing foreign relay client cleanup")
+        kc("/clients/" + client["id"], "DELETE")
+        if lookup():
+            raise RuntimeError("client still exists")
+        print("registration-scoped relay client removed")
+        return
+
     sa = Path("/var/run/secrets/kubernetes.io/serviceaccount")
     address = "https://kubernetes.default.svc/api/v1/namespaces/" + os.environ["UI_NAMESPACE"] + "/secrets/relay-credentials"
     def secret(method="GET", body=None):

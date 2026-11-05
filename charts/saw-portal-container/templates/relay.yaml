@@ -1,0 +1,56 @@
+{{- $site := .Values.site | default dict }}
+{{- $e := $site.enrollment | default dict }}
+{{- if and $e (eq $e.registration .Values.registration) $e.relay }}
+{{- $r := $e.relay }}
+{{- $u := .Values.owner }}
+{{- $reg := .Values.registration }}
+{{- $ctl := printf "saw-ctl-%s" $reg }}
+{{- $ui := printf "saw-ui-%s" $reg }}
+{{- $ns := .Release.Namespace }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-c-{{ $reg }}-relay
+  namespace: {{ .Values.global.vpArgoNamespace }}
+  labels: {openshell.pattern/owner: {{ $u }}, saw.redhat.com/registration: {{ $reg | quote }}}
+  finalizers: [resources-finalizer.argocd.argoproj.io/foreground]
+spec:
+  project: {{ $site.project | default "default" }}
+  destination: {server: 'https://kubernetes.default.svc', namespace: {{ $ui }}}
+  source:
+    repoURL: {{ .Values.global.repoURL | quote }}
+    targetRevision: {{ required "pinned relay revision required" $r.revision | quote }}
+    path: charts/saw-workspace-relay
+    helm:
+      releaseName: {{ printf "ui-%s" $reg }}
+      valuesObject:
+        enabled: true
+        cleanupRegistration: {{ $reg | quote }}
+        clientID: saw-portal-{{ $reg }}
+        keycloakNamespace: {{ $r.keycloakNamespace | quote }}
+        keycloakAdminSecret: {{ $r.keycloakAdminSecret | quote }}
+        subject: {{ default "" $r.subject | quote }}
+        workspaceID: {{ default "" $r.workspaceID | quote }}
+        workspace: agent
+        sandbox: audited
+        trustedNamespace: {{ $ctl }}
+        gatewayNamespace: {{ $ns }}
+        gateway: {{ $u }}
+        gatewayEndpoint: https://{{ $u }}-gateway.{{ $ns }}.svc:17670
+        gatewayAdminSecret: {{ $u }}-admin
+        gatewayCA: {{ $r.gatewayCA | quote }}
+        issuer: {{ $r.issuer | quote }}
+        ownerLogin: {{ $u }}
+        ownerSubject: {{ .Values.ownerSubject }}
+        installationID: {{ .Values.installationID }}
+        host: {{ $u }}-agent-audited-ui.apps.{{ .Values.global.clusterDomain }}
+        sdkImage: {{ $e.image }}
+        imageBuildNamespace: {{ $e.buildNamespace }}
+        egress: {{ $r.egress | toJson }}
+  ignoreDifferences:
+    - {group: "", kind: Secret, name: relay-credentials, namespace: {{ $ui }}, jsonPointers: [/data]}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    retry: {limit: 6}
+    syncOptions: [RespectIgnoreDifferences=true]
+{{- end }}
