@@ -1,0 +1,94 @@
+{{- if and .Values.enabled .Values.subject }}
+{{- $v := .Values }}{{- $n := .Release.Name }}{{- $ui := .Release.Namespace }}
+{{- if or (eq $v.subject $v.ownerSubject) (not $v.workspaceID) (not $v.ownerSubject) (not $v.gatewayNamespace) }}{{ fail "distinct relay subject, owner and explicit gateway/workspace identities required" }}{{ end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: {{ $n }}, namespace: {{ $v.trustedNamespace }}}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: {{ $n }}}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: {{ $n }}-pull, namespace: {{ $v.imageBuildNamespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: system:image-puller}
+subjects:
+- {kind: ServiceAccount, name: {{ $n }}, namespace: {{ $ui }}}
+- {kind: ServiceAccount, name: {{ $n }}, namespace: {{ $v.trustedNamespace }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ $n }}-ingress, namespace: {{ $v.gatewayNamespace }}}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/instance: {{ $v.gateway }}, openshell.pattern/role: gateway}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $ui }}}}
+      podSelector: {matchLabels: {app: {{ $n }}, role: relay}}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $v.trustedNamespace }}}}
+      podSelector: {matchLabels: {app: {{ $n }}, role: bind}}
+    ports: [{protocol: TCP, port: 17670}]
+{{- range $ns := list $ui $v.trustedNamespace }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ $n }}-egress, namespace: {{ $ns }}}
+spec:
+  podSelector: {matchLabels: {app: {{ $n }}, role: {{ ternary "relay" "bind" (eq $ns $ui) }} }}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $v.gatewayNamespace }}}}
+      podSelector: {matchLabels: {app.kubernetes.io/instance: {{ $v.gateway }}, openshell.pattern/role: gateway}}
+    ports: [{protocol: TCP, port: 17670}]
+{{- if eq $ns $ui }}
+{{ toYaml (required "issuer and DNS egress required" $v.egress) | indent 2 }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: {{ $n }}-bind, namespace: {{ $v.trustedNamespace }}}
+data:
+  bind.py: |
+{{ .Files.Get "files/bind.py" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $n }}-bind-{{ printf "%s%s%s" $v.workspaceID $v.subject (.Files.Get "files/bind.py") | sha256sum | trunc 8 }}
+  namespace: {{ $v.trustedNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: '2'}
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 240
+  template:
+    metadata: {labels: {app: {{ $n }}, role: bind}}
+    spec:
+      serviceAccountName: {{ $n }}
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: bind
+        image: {{ $v.sdkImage }}
+        command: [python3, /scripts/bind.py]
+        env:
+        - {name: WORKSPACE, value: {{ $v.workspace }}}
+        - {name: WORKSPACE_ID, value: {{ $v.workspaceID }}}
+        - {name: OWNER, value: {{ $v.ownerSubject }}}
+        - {name: SUBJECT, value: {{ $v.subject }}}
+        - {name: INSTALLATION, value: {{ $v.installationID }}}
+        - {name: ENDPOINT, value: {{ $v.gatewayEndpoint }}}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        volumeMounts:
+        - {name: script, mountPath: /scripts, readOnly: true}
+        - {name: identity, mountPath: /identity, readOnly: true}
+      volumes:
+      - {name: script, configMap: {name: {{ $n }}-bind}}
+      - {name: identity, secret: {secretName: {{ $v.gatewayAdminSecret }}, defaultMode: 0440}}
+{{- end }}
