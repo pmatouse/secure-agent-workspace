@@ -8,6 +8,14 @@ Both deployment methods render `charts/saw-bom` and read the same profile docume
 
 The site approves the rendered BOM digest in `automaticEnrollment.approvedProfiles`. RHDH derives one storage binding per enabled sandbox, and a scoped owner relay for each declared UI. An additional profile using these capabilities needs a digest approval and qualification. A new BOM capability belongs in the shared engine when both runtimes need it, with storage, placement and authorization supplied by the adapters.
 
+| Input or behavior | Owner |
+|---|---|
+| Enabled workspaces and sandboxes, provider references, agent type, model inputs, image and requested UI routes | The existing SAW BOM and its generated profile catalog |
+| Parsing, semantic validation, model defaults and provider attachment ordering | The shared Python engine used by both adapters |
+| PVC names and attachment checks, registration-scoped identities, supervisor and workload resources, browser relay forwarding | The Kubernetes adapter and its charts |
+| Approved rendered digest, provider endpoint policy and necessary image compatibility override | Operator site values |
+| Create/update/delete request, Vault credential handling and catalog links | The shared RHDH/Tekton/ApplicationSet flow |
+
 The glmhg data-science VM BOM enables `default/notebook` (OpenClaw) and `cuda-dev/cuda-sandbox` (NemoClaw running OpenClaw). It uses external OpenAI inference and disables the optional inline harness at this site. NemoClaw uses its original image digest. The AIPCC notebook image sets `/sandbox` to mode 0770 for UID 1000 and group 0. The stock Kubernetes driver uses the OpenShift namespace UID/GID for the workload. The [image build chart](../../image-builder-charts/helm/openshift-home-access) derives the notebook image from the exact VM digest, adds directory traversal with `chmod o+x /sandbox`, and restores the image user. The owner portal passes the resulting digest through the existing `saw-bom.imageOverrides` input. The same BOM sources produce both deployments, with a different reviewed render digest for that image selection. The sandbox keeps the OpenShift-assigned identity.
 
 The two model selectors are public configuration. API keys stay in the registration's Vault path. The current update path can refresh provider credentials and reconcile the existing topology. Changing the selected model or profile currently requires a fresh registration.
@@ -52,6 +60,8 @@ flowchart LR
 **Acceptance:** [RHDH owner client](../../tests/acceptance/rhdh_workspace.py) submits the actual installed templates. A returned task ID is not a pass: wait for the Backstage task **and** Tekton PipelineRun. [Chat client](../../tests/acceptance/openclaw_audit_chat.py) signs in to the real HTTPS/WSS route, reads an unpredictable canary, and resolves tool approval requests as the owner. Also check the actual disposable files. [Archive verifier](../../tests/acceptance/portal_audit_evidence.cjs) checks the decision sequences and hashes the ordered records for comparison after deletion.
 
 **Audited OpenClaw validation (glmhg, 2026-11-05):** the owner’s create, update and delete tasks all completed in RHDH and succeeded in Tekton. Generation 2 retained the same sandbox and history PVC. Five expected tool-gate records matched byte-for-byte after foreground deletion and an independent read-only remount. The [validation record](../../tests/acceptance/portal-container-validation-2026-11-05.json) includes run IDs, digests and the two issues encountered during qualification.
+
+**Data-science validation (glmhg, 2026-11-05).** RHDH completed create, update and delete. Both owner chats read unique canaries, denied and approved disposable deletions, and answered fresh prompts after update. Each restricted read-only verifier recovered five matching audit records after delete. The update reapplied the selected models. See the [live receipt](../../tests/acceptance/data-science-container-validation-2026-11-05.json) for both archive hashes, pipeline times and the original notebook permission failure.
 
 ### Repeat the owner lifecycle
 

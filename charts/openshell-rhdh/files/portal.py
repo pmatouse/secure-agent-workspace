@@ -437,7 +437,7 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
                  and app_status.get("health", {}).get("status") == "Healthy" and all(ping(url) for _,url in links))
     observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
                     (bound, "Intent for this registration and update"),
-                    (running, "Audited OpenShell sandbox running"), (ready, "Owner chat route available")]
+                    (running, "Profile sandboxes running"), (ready, "Owner chat routes available")]
     phase = "none"
     steps = []
     waiting = False
@@ -449,7 +449,7 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
             waiting = True
         steps.append(dict(id=stage, title=title, detail=title, state=state))
     failed = bool(current and st.get("phase") == "Blocked" or app_ok and app_status.get("operationState", {}).get("phase") in ("Error", "Failed"))
-    message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Audited OpenClaw ready")
+    message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Workspace ready")
     return dict(user=user, deploymentMode="container", phase="failed" if failed else phase, title=message,
                 message=message, text=message, ready=ready and not failed, failed=failed, steps=steps,
                 links=[dict(title=title,url=url) for title,url in links] if ready and not failed else [])

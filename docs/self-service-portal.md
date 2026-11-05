@@ -6,7 +6,7 @@ get namespace `saw-<user>` with the workspace runtime, the profile's OpenShell s
 routes to the sandbox web UIs. Nothing goes into Git: the keys go to Vault,
 and the workspace is an entry in an in-cluster registry that Argo CD builds.
 
-VM is the default. Sites can also enroll owners for **Container → Audited OpenClaw** using the same create/update/delete templates, Vault paths and ApplicationSet. See the [container lifecycle and trust boundaries](../charts/saw-portal-container/README.md) for enrollment, tool approvals and audit retention.
+VM is the default. Sites can also enroll owners for **Container** with an approved profile such as `data-science` or `audited-openclaw` using the same create/update/delete templates, Vault paths and ApplicationSet. See the [container lifecycle and trust boundaries](../charts/saw-portal-container/README.md) for enrollment, tool approvals and audit retention.
 
 The VM walkthrough and manual test is in [rhdh-user-guide.md](rhdh-user-guide.md).
 

@@ -1,7 +1,6 @@
 # Self-service workspaces: user guide and manual test
 
-For an enrolled container workspace, select **Container** and **Audited OpenClaw** in the create/update form. Open the **Audited OpenClaw** catalog link when ready. The same delete template removes the workload and its credentials; audit history stays with the operator. See the [container walkthrough](../charts/saw-portal-container/README.md).
-
+For an enrolled owner, open **Create or update my agent workspace**, choose **Container** under **Deployment**, then select the **Profile**. On glmhg the `data-science` profile provides two catalog links, **notebook UI (default)** and **cuda-sandbox UI (cuda-dev)**. The `audited-openclaw` profile provides one. The existing delete template removes the workload and credentials. Each sandbox's audit archive stays with the operator. [Container walkthrough](../charts/saw-portal-container/README.md)
 
 Step by step: get the portal ready, open Red Hat Developer Hub (RHDH),
 request a workspace, open its sandbox, and check each step on the way. How
