@@ -49,6 +49,9 @@ subjects: [{kind: ServiceAccount, name: saw-gate-preparation, namespace: {{ $ns 
 {{- if or (ne $slot.workspace.claimName (printf "workspace-%s" $target.base)) (ne $gate.trusted.claimName (printf "saw-gate-%s" $target.base)) (ne $gate.audit.claimName (printf "saw-audit-%s" $target.base)) (ne $gate.ownerLogin $u) (not $gate.receiptKey) }}{{ fail "invalid storage binding" }}{{- end }}
 {{- if and $target.ui (or (ne $slot.browser.ownerLogin $u) (ne $slot.browser.origin (printf "https://%s-%s-%s-ui.apps.%s" $u $target.workspace $target.sandbox $.Values.global.clusterDomain))) }}{{ fail "invalid owner UI binding" }}{{- end }}
 {{- $job := ternary "saw-gate-preparation" (printf "gate-%s" $target.relayID) (eq (len $targets) 1) }}
+{{- if $gate.harness }}
+{{- $job = printf "%s-h%s" $job (trimPrefix "sha256:" $gate.harness.digest | trunc 12) }}
+{{- end }}
 {{- $model := "" }}
 {{- $publication := max 1 ($site.restartGeneration | default 0) }}
 {{- if $gate.modelSelector }}
@@ -71,10 +74,10 @@ spec:
       containers:
       - name: prep
         image: {{ $e.image | quote }}
-        command: [python3, -m, saw_kubernetes.prepare_gate, --owner, {{ $u | quote }}, --subject, {{ $b.ownerSubject | quote }}, --workspace, {{ $target.workspace }}, --sandbox, {{ $target.sandbox }}, --receipt-key, {{ $gate.receiptKey | quote }}{{ if $model }}, --model, {{ $model | quote }}, --model-generation, {{ $publication | quote }}{{ end }}]
+        command: [python3, -m, saw_kubernetes.prepare_gate, --owner, {{ $u | quote }}, --subject, {{ $b.ownerSubject | quote }}, --workspace, {{ $target.workspace }}, --sandbox, {{ $target.sandbox }}, --receipt-key, {{ $gate.receiptKey | quote }}{{ if $gate.harness }}, --harness, {{ $gate.harness.name | quote }}, {{ $gate.harness.digest | quote }}{{ end }}{{ if $model }}, --model, {{ $model | quote }}, --model-generation, {{ $publication | quote }}{{ end }}]
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
-        volumeMounts: [{name: gate, mountPath: /volume}]
-      volumes: [{name: gate, persistentVolumeClaim: {claimName: {{ $gate.trusted.claimName }}}}]
+        volumeMounts: [{name: gate, mountPath: /volume}{{ if $gate.harness }}, {name: bom, mountPath: /bom, readOnly: true}{{ end }}]
+      volumes: [{name: gate, persistentVolumeClaim: {claimName: {{ $gate.trusted.claimName }}}}{{ if $gate.harness }}, {name: bom, configMap: {name: saw-bom-profiles}}{{ end }}]
 {{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1

@@ -29,19 +29,47 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: default-deny, namespace: {{ $runtime }}, annotations: {argocd.argoproj.io/sync-wave: "-1"}}
 spec: {podSelector: {}, policyTypes: [Ingress, Egress], ingress: [], egress: []}
+{{- $customSecret := "" }}
+{{- $sources := dict "inference" (list "api_key") }}
+{{- with (.Values.site | default dict).providerPolicy }}
+{{- $sources = dict }}
+{{- range .bindings }}
+{{- $fields := get $sources .secret | default list }}
+{{- if .refresh }}
+{{- range .refresh.material }}{{- $fields = append $fields . }}{{- end }}
+{{- else }}{{- $fields = append $fields .key }}{{- end }}
+{{- if has "custom-inference" .providers }}{{- $customSecret = .secret }}{{- end }}
+{{- $_ := set $sources .secret ($fields | uniq | sortAlpha) }}
+{{- end }}
+{{- end }}
+{{- range $secret, $fields := $sources }}
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: inference
+  name: {{ $secret }}
   namespace: {{ $trusted }}
 spec:
   refreshInterval: 1m
-  secretStoreRef: {kind: ClusterSecretStore, name: {{ .Values.secretStore | quote }}}
-  target: {name: inference, creationPolicy: Owner}
+  secretStoreRef: {kind: ClusterSecretStore, name: {{ $.Values.secretStore | quote }}}
+  {{- if eq $customSecret $secret }}
+  target:
+    name: {{ $secret }}
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      mergePolicy: Merge
+      data:
+        url: {{ required "custom inference requires the enrolled site URL" $.Values.site.customInferenceURL | quote }}
+  {{- else }}
+  target: {name: {{ $secret }}, creationPolicy: Owner}
+  {{- end }}
   data:
-    - secretKey: api_key
-      remoteRef: {key: {{ printf "%s/inference" $prefix | quote }}, property: api_key}
+    {{- range $fields }}
+    - secretKey: {{ . }}
+      remoteRef: {key: {{ printf "%s/%s" $prefix $secret | quote }}, property: {{ . }}}
+    {{- end }}
+{{- end }}
 
 {{- $pull := (.Values.site | default dict).imagePull | default dict }}
 {{- if $pull }}

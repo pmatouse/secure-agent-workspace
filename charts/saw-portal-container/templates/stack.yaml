@@ -66,7 +66,11 @@ kind: ConfigMap
 metadata: {name: {{ $u }}-proxy-policy, namespace: {{ $trusted }}}
 data:
   config.json: |
+    {{- if $site.providerPolicy }}
+    {{ $site.providerPolicy | toJson }}
+    {{- else }}
     {"allowHosts":["api.openai.com"],"bindings":[{"key":"api_key","providers":["openai"],"secret":"inference"}],"markerPrefix":"saw-cred","profiles":{"openai":["api.openai.com"]}}
+    {{- end }}
 {{- $charts := dict "identity" (list "saw-kubernetes-identity" $trusted) "policy" (list "saw-runtime-policies" $runtime) "proxy" (list "saw-kubernetes-proxy" $trusted) "gateway" (list "openshell-saw-kubernetes" $runtime) }}
 {{- range $slot := $targets }}{{- $key := ternary "audit" (printf "audit-%s" $slot.relayID) (eq (len $targets) 1) }}{{- $_ := set $charts $key (list "saw-audit-writer" $archive $slot) }}{{- end }}
 {{- range $key, $c := $charts }}
@@ -75,6 +79,14 @@ data:
 {{- $values := $item.values | toJson }}
 {{- range $k, $v := $map }}
 {{- $values = replace (printf "@%s@" $k) $v $values }}
+{{- end }}
+{{- if and (eq $key "proxy") $site.providerPolicy }}
+{{- $proxy := fromJson $values }}
+{{- $secrets := list }}
+{{- range $site.providerPolicy.bindings }}{{- $secrets = append $secrets .secret }}{{- end }}
+{{- $_ := set $proxy "credentialSecretNames" ($secrets | uniq | sortAlpha) }}
+{{- $_ := set $proxy "policyDigest" ($site.providerPolicy | toJson | sha256sum) }}
+{{- $values = toJson $proxy }}
 {{- end }}
 {{- $release := $u }}
 {{- if eq (len $c) 3 }}

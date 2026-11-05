@@ -287,8 +287,8 @@ portal:
               workspace: agent
               sandbox: audited
       automaticEnrollment:
-        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:966c76c969f074ea088e1499d40fd8d993ecb4df527239736df554d9d726c6d0
-        revision: 661194fd49c75b4e7dd202d4d2ad5fa7b04934e3
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:f57b928684c48597de98a5f374d3464195b04c8c75dd9eaf3f385cea76cd44c2
+        revision: a4162dfe1529541fc23ed33f63a01e186b7793d6
         buildNamespace: saw-k8s-build
         profileSHA256: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
         resources:
@@ -364,10 +364,43 @@ portal:
         approvedProfiles:
           audited-openclaw: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
           data-science: edee1411fdcae06c8081fe93460f239195de1489fe6169a870f9e16e6f89ae99
+          custom-inference: 42a0f00d3ea99f9259194763583b7ce63fb1a1d26984362c0df021897138f261
       profileImageOverrides:
         data-science:
+          notebook: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a
+        custom-inference:
           notebook: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a
       imagePull:
         namespace: saw-k8s-build
         streams:
         - saw-openclaw-home
+      profileBoundaries:
+        custom-inference:
+          allowHosts:
+          - api.openai.com
+          inferenceBaseURL: https://api.openai.com/v1
+          reference:
+            validation: d39420fead08d3208849bc26571d7110d5e3c2db95880db18bdda3ff992aaae5
+            binding: 8907af47370ca8debab0687f93fe04645891532122e584f6588691c8b3c0bd44
+            network: 7eaabdfa6aa0e3e387efa2708f9baed3f52ed9f65976144f96495aa98dc62ae4
+            deny: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+            gatewayNetwork: ce9b1141ff118beba824906c48e23f8604a4ab111fcfcf2508707e449979b80a
+            gateway: 966364a899282607a0aa6d5e63022857915afdcc1fcafe8e6e31c2b3ac192d60
+            gatewayService: 11f2046ef571e1f60921ec0f6a3974b1e7202a85bb6545076373433f6bbaaa69
+            gatewayConfig: 239f2029b1c6eb64c538b0645305aaf2d28bb0eff3cb223b47a5a991d30f082c
+            governance:
+              uid: e72b776d-501b-4712-9cfd-6fa417152669
+              sha256: 73497be5126e5de86a248a8417db321e5a4fdec24036875354d6ae412cf81464
+            governanceService:
+              uid: 57b1b15f-faea-40b5-baba-7a1febc31c57
+              sha256: ea86f6d4b7cf245aea3737a2da867e3b2903548e720704decfe5e822ec021d03
+            governancePolicy:
+              uid: 9ed4c1c3-c8a0-4b16-8799-4b958c6a5c83
+              sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+            governanceProfiles:
+              uid: 1b213f52-e115-434e-916b-cfa888b8aacd
+              sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+            proxy: 1059d7c183ffa033c011c6459c93452faf13fd5b2ac30d5bd81b4950bf57de01
+            proxyNetwork: 4e0c80d56b38edb56dff4935721b174528d32dcf72b95d84428dc3a27e1851d2
+            proxyPolicy: 0584310f1d41afce04eb601143c6c4f48cbc5d47ed2ffaa0e4d809d34f00873a
+            publicCA: equals independent trusted proxy public CA

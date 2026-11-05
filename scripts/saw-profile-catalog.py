@@ -186,6 +186,9 @@ def catalog():
                                   "uiRoute": bool(ui.get("route", False)),
                                   "harnessRequired": bool(sb.get("harnessRef") and sb.get("harnessRequired"))})
                 model_ref = secret_ref((sb.get("inference") or {}).get("model"))
+                endpoint_ref = secret_ref((sb.get("inference") or {}).get("baseUrl"))
+                if endpoint_ref and sb["inference"].get("providerRef") == "custom-inference":
+                    sandboxes[-1]["endpointInput"] = ".".join(endpoint_ref)
                 if model_ref:
                     sandboxes[-1]["modelInput"] = ".".join(model_ref)
             workspaces.append({"name": name, "description": description, "enabled": enabled,
@@ -381,7 +384,17 @@ def render_template(cat, for_user=False):
                 props[name] = prop
                 if field.get("required"):
                     required.append(name)
-        one_of.append({"properties": props, "required": required})
+        case = {"properties": props, "required": required}
+        if any(sb.get("endpointInput") for ws in prof["workspaces"] for sb in ws["sandboxes"]):
+            # The keyed custom-endpoint container has one credential destination.
+            # Keep web-search fields on the existing VM form only.
+            search = {form_name("web-search", f["key"]) for f in prof["secrets"].get("web-search", {}).get("fields", [])}
+            if search:
+                vm_fields = {k: props.pop(k) for k in sorted(search)}
+                case["required"] = [k for k in required if k not in search]
+                case["allOf"] = [{"if": {"properties":{"deploymentMode":{"const":"vm"}}},
+                                  "then": {"properties":vm_fields, "required":[k for k in required if k in search]}}]
+        one_of.append(case)
     names = sorted(profiles)
     template = {
         "apiVersion": "scaffolder.backstage.io/v1beta3",
@@ -545,12 +558,18 @@ def main(argv=None):
               for src in sorted(GOVERNANCE_PROFILES.glob("*.yaml"))}
     extra = [p for p in sorted(INSTALLER_PROFILES.glob("*.yaml")) if p not in mirror]
     lifecycle = TEMPLATE_OUTPUT.with_name("set-workspace-state.yaml")
+    # Independent Helm charts package the same reviewed broker renderer.
+    policy_template = ROOT / "charts/openshell-saw/templates/_governed-proxy-policy.tpl"
+    policy_outputs = [
+        (ROOT / "charts/saw-users/templates/_governed-proxy-policy.tpl", policy_template.read_text()),
+        (ROOT / "charts/saw-users/files/governed-profiles.json", json.dumps(
+            {p.stem: load(p) for p in sorted(GOVERNANCE_PROFILES.glob("*.yaml"))}, sort_keys=True, indent=2) + "\n")]
     if args.list:
         # Every path this script owns: the generated files, each mirror, and
         # the mirror directory itself, so `git add -A -- <list>` (the hook,
         # the workflow) also stages a mirror this run removed.
         for path in (*CATALOG_OUTPUTS, TEMPLATE_OUTPUT, lifecycle, DELETE_TEMPLATE,
-                     ADMIN_TEMPLATE_OUTPUT, ADMIN_DELETE_TEMPLATE, *mirror, INSTALLER_PROFILES):
+                     ADMIN_TEMPLATE_OUTPUT, ADMIN_DELETE_TEMPLATE, *(p for p, _ in policy_outputs), *mirror, INSTALLER_PROFILES):
             print(path.relative_to(ROOT))
         return 0
     try:
@@ -564,6 +583,7 @@ def main(argv=None):
     outputs.append((DELETE_TEMPLATE, render_delete_template()))
     outputs.append((ADMIN_TEMPLATE_OUTPUT, render_template(json.loads(text), for_user=True)))
     outputs.append((ADMIN_DELETE_TEMPLATE, render_delete_template(for_user=True)))
+    outputs += policy_outputs
     outputs += sorted(mirror.items())
     stale = []
     for path in extra:

@@ -369,15 +369,37 @@ def public_model_inputs(profile, secrets):
     confidential = {secrets.get(name, {}).get(field["key"])
                     for name, entry in profile.get("secrets", {}).items()
                     for field in entry["fields"] if field["kind"] == "secret"}
+    custom_models = {sb.get("modelInput") for _, sb in enabled_catalog_sandboxes(profile) if sb.get("endpointInput")}
     for key in {sb["modelInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("modelInput")}:
         secret, field = key.split(".",1)
         allowed = any(f["key"] == field and f["kind"] == "text" for f in profile["secrets"][secret]["fields"])
         value = secrets.get(secret,{}).get(field)
-        if not allowed or value and (value in confidential or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value)):
+        spelling = r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}" if key in custom_models else r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}"
+        if not allowed or value and (value in confidential or not re.fullmatch(spelling, value)):
             raise PortalError("invalid public model selector")
         if value:
             values[key]=value
     return values
+
+
+def approved_endpoint(profile, secrets, boundary):
+    refs = {sb["endpointInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("endpointInput")}
+    if not refs:
+        return None
+    endpoint = boundary.get("inferenceBaseURL", "")
+    if not isinstance(endpoint, str) or not re.fullmatch(
+            r"https://[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::443)?(?:/[A-Za-z0-9_-]+)*/v1", endpoint):
+        raise PortalError("site has no approved custom inference endpoint")
+    if boundary.get("allowHosts") != [urllib.parse.urlsplit(endpoint).hostname]:
+        raise PortalError("custom inference requires a dedicated broker host")
+    for ref in refs:
+        secret, key = ref.split(".", 1)
+        fields = profile["secrets"][secret]["fields"]
+        if not any(f["key"] == key and f["kind"] == "url" for f in fields):
+            raise PortalError("endpoint input must be public URL metadata")
+        if secrets.get(secret, {}).get(key, "").rstrip("/") != endpoint:
+            raise PortalError("endpoint differs from the site-approved custom inference URL")
+    return endpoint
 
 
 def registered_links(entry, catalog, domain):
@@ -439,11 +461,15 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
                and st.get("inputRevision") == digest({"intent": intent, "files": files}))
     running = current and st.get("phase") == "GenericReady" and intent.get("desiredState") == "Running"
     links = registered_links(entry,catalog,domain) if catalog else [("Audited OpenClaw",container_url(user,domain))]
-    ready = bool(running and links and domain and app_status.get("sync", {}).get("status") == "Synced"
+    profiles = entry.get("profiles", [])
+    declared = [sb for p in profiles for _, sb in enabled_catalog_sandboxes(catalog[p])] if (
+        catalog and all(p in catalog for p in profiles)) else []
+    headless = bool(declared) and all(sb.get("uiRoute") is False for sb in declared)
+    ready = bool(running and (headless or (links and domain)) and app_status.get("sync", {}).get("status") == "Synced"
                  and app_status.get("health", {}).get("status") == "Healthy" and all(ping(url) for _,url in links))
     observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
                     (bound, "Intent for this registration and update"),
-                    (running, "Profile sandboxes running"), (ready, "Owner chat routes available")]
+                    (running, "Profile sandboxes running"), (ready, "Workspace ready" if headless else "Owner chat routes available")]
     stopped = bool(current and desired == "Stopped" and st.get("phase") == "Stopped")
     if desired == "Stopped":
         observations[-2:] = [(stopped, "OpenShell sandboxes stopped"), (stopped, "Storage retained")]
@@ -529,7 +555,11 @@ def parse_request(data, catalog):
     if profile not in catalog:
         raise PortalError(f"unknown profile {profile!r}; available: {', '.join(sorted(catalog))}")
     secrets, missing = {}, []
+    dedicated_endpoint = (request_deployment_mode(data) == "container" and
+                          any(sb.get("endpointInput") for _, sb in enabled_catalog_sandboxes(catalog[profile])))
     for name, spec in sorted(catalog[profile].get("secrets", {}).items()):
+        if dedicated_endpoint and name == "web-search":
+            continue
         values = {}
         for field in spec.get("fields", []):
             value = (data.get(f"{name}.{field['key']}") or "").strip()
@@ -1441,6 +1471,10 @@ def handle(action, request_name):
             if mode == "container":
                 if cm and read_entry(cm)["profiles"] != [profile]:
                     raise PortalError("changing the profile requires a new container registration")
+                endpoint = approved_endpoint(catalog[profile], secrets,
+                                             container_site(user).get("profileBoundaries", {}).get(profile, {}))
+                if cm and endpoint != read_entry(cm).get("customInferenceURL"):
+                    raise PortalError("changing the endpoint requires a new registration")
                 models = public_model_inputs(catalog[profile], secrets)
                 previous = read_entry(cm) if cm else {}
                 lifecycle = previous.get("lifecycleVersion") == 1 if cm else container_site(user).get("modelLifecycle") is True
@@ -1465,6 +1499,9 @@ def handle(action, request_name):
                     changed = bool(cm and previous.get("modelInputs", {}) != models)
                     entry["restartGeneration"] = (previous["intentGeneration"] + 1 if changed
                                                   else previous.get("restartGeneration", 0))
+                if endpoint:
+                    entry["customInferenceURL"] = endpoint
+                    entry["webSearch"] = {"enabled": False}
                 if models:
                     entry["modelInputs"] = models
                 if "approvedProfiles" in container_site(user).get("automaticEnrollment",{}):
@@ -1661,7 +1698,7 @@ def enrolled_site(site, ws, read):
     subjects = {target["subjectMap"]:publication(target["subjectMap"]).get("subject", "")
                 for target in site.get("targets",{}).values() if target["ui"]}
     fresh["subjects"] = subjects
-    sub=subjects.get("saw-portal-relay-subject","") if subjects else publication("saw-portal-relay-subject").get("subject","")
+    sub=subjects.get("saw-portal-relay-subject","") if site.get("targets") else publication("saw-portal-relay-subject").get("subject","")
     if sub and (not re.fullmatch(r"[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}",sub) or sub==ws["ownerSubject"]):
         raise PortalError("invalid relay subject")
     relay={**a["relay"],"gatewayCA":bound["gatewayCA"],"subject":sub,"workspaceID":""}
@@ -1698,6 +1735,15 @@ def generator_params(workspaces, defaults, read=None, catalog=None):
                 managed = ws.get("lifecycleVersion") == 1
                 site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected], model_lifecycle=managed),
                       "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
+                boundary = site.get("profileBoundaries", {}).get(selected)
+                if boundary:
+                    site = {**site, "providerAllowHosts": boundary["allowHosts"],
+                            "automaticEnrollment": {**site["automaticEnrollment"], "reference": boundary["reference"]}}
+                if ws.get("customInferenceURL"):
+                    if not boundary or boundary.get("inferenceBaseURL") != ws["customInferenceURL"]:
+                        # Keep a site change for one owner from interrupting other registrations.
+                        continue
+                    site["customInferenceURL"] = ws["customInferenceURL"]
                 if managed:
                     site.update(lifecycleVersion=1, modelInputs=ws["initialModelInputs"],
                                 requestedModels=ws.get("modelInputs", {}), desiredState=ws["desiredState"],
