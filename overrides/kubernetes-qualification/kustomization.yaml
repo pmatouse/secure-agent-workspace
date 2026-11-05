@@ -6,6 +6,7 @@ resources:
   - runtime-policies.yaml
   - dependency-smoke.yaml
   - governance.yaml
+  - custom-inference-profile.yaml
   - proxy.yaml
   - gateway.yaml
   - gateway-network-check.yaml
