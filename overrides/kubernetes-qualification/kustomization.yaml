@@ -13,3 +13,4 @@ resources:
   - controller.yaml
   - toolbox-intent.yaml
   - openclaw-inputs.yaml
+  - openclaw-image-check.yaml

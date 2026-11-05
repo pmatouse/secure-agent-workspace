@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata: {name: openclaw-image-check, namespace: saw-k8s-test}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: inspect
+        image: quay.io/aipcc/base-images/agentic/openclaw@sha256:896d1526ee29b53167034ba65d1c758c8da777f441ed094e19f3bcf6d7445c61
+        workingDir: /tmp
+        command: [/bin/sh, -ec]
+        args:
+        - |
+          id
+          for path in /sandbox /sandbox/.openclaw /sandbox/.openclaw/state /opt/openclaw /bin/sh /usr/bin/node /usr/local/bin/openclaw; do
+            stat -Lc '%a %u:%g %n' "$path" || true
+          done
+          for cmd in sh node openclaw; do command -v "$cmd" || true; done
+          (cd /sandbox && echo image-workdir-accessible) || true
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
