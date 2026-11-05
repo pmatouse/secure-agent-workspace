@@ -23,4 +23,5 @@ resources:
   - profile-controller-build.yaml
   - model-controller-build.yaml
   - briefing-controller-build.yaml
+  - custom-inference-controller-build.yaml
   - ds-nonroot-image.yaml
