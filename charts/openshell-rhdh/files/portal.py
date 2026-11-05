@@ -1644,6 +1644,11 @@ def generator_params(workspaces, defaults, read=None, catalog=None):
         if ws.get("registration") and entry_deployment_mode(ws)=="container" and site.get("automaticEnrollment"):
             if catalog and "approvedProfiles" in site["automaticEnrollment"]:
                 selected,=ws["profiles"]
+                image_overrides=site.get("profileImageOverrides",{}).get(selected,{})
+                if image_overrides:
+                    # Use the existing saw-bom imageOverrides API. The owner
+                    # never supplies an image or its pull authorization.
+                    ws["imageOverrides"]=image_overrides
                 site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected]),
                       "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
             values["containerSites"]={ws["name"]:enrolled_site(site,ws,read)}

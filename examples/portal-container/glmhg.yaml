@@ -362,4 +362,11 @@ portal:
           revision: 887bd2619a2915c51c0e11fc9d3cc1e21d6cf3ac
         approvedProfiles:
           audited-openclaw: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
-          data-science: 8a99985f86f9da4e8501fffb54437aa8eb91089d44ccea9988e7bd5fc66d8c2c
+          data-science: edee1411fdcae06c8081fe93460f239195de1489fe6169a870f9e16e6f89ae99
+      profileImageOverrides:
+        data-science:
+          notebook: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a
+      imagePull:
+        namespace: saw-k8s-build
+        streams:
+        - saw-openclaw-home
