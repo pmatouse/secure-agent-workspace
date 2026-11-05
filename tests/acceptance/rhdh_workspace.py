@@ -83,9 +83,11 @@ def main():
         data["values"]["workspace"]="component:default/saw-"+a.user
     else:
         props = entity["spec"]["parameters"][-1]["properties"]
-        if "container" not in props["deploymentMode"]["enum"] or "audited-openclaw" not in props["profile"]["enum"]:
+        if "container" not in props.get("deploymentMode", {}).get("enum", []) or "audited-openclaw" not in props["profile"]["enum"]:
             raise RuntimeError("installed owner template does not offer the requested container profile")
-        data["values"].update(profile="audited-openclaw",deploymentMode="container")
+        # The browser places a redacted value in form data to satisfy JSON
+        # Schema. Only the separate secrets map carries the credential.
+        data["values"].update(profile="audited-openclaw",deploymentMode="container",inference__api_key="********")
         if not a.key_file:
             raise ValueError("private --key-file required")
         data["secrets"]["inference__api_key"] = a.key_file.read_text().strip()

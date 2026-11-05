@@ -351,7 +351,12 @@ def container_status(k8s, user, entry, argo_ns, domain, ping):
     app_ok = meta.get("labels", {}).get("openshell.pattern/owner") == user and not meta.get("deletionTimestamp")
     app_status = app.get("status", {})
     def read(name, field):
-        cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/{name}", ok404=True) or {}
+        try:
+            cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/{name}", ok404=True) or {}
+        except HttpError as exc:
+            if exc.code == 403:  # Argo has not yet installed the named observer Role.
+                return {}
+            raise
         meta = cm.get("metadata", {})
         labels = meta.get("labels", {})
         if (meta.get("deletionTimestamp") or not reg
