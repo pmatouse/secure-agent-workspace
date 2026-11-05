@@ -71,3 +71,17 @@ def test_retirement_checks_recorded_id_before_mutations(source, tmp_path):
     with pytest.raises(ContractError, match="recorded identity"):
         core.reconcile(plan, generation=1)
     assert not gateway.sandboxes
+
+
+def test_browser_policy_is_bound_to_one_owner_and_exact_https_origin(source):
+    agent(source)
+    binding = next(iter(source[1]["bindings"].values()))
+    binding["browser"] = {"origin":"https://agent.apps.example.com","ownerLogin":"alice"}
+    ws = compile_profile(*source)["workspaces"][0]
+    command = ws["sandboxes"][0]["spec"]["command"][2]
+    assert 'allowUsers:["alice"]' in command
+    assert 'allowedOrigins:["https://agent.apps.example.com"]' in command
+    assert command.index("config.gateway.trustedProxies") < command.index("fs.writeFileSync")
+    binding["browser"]["origin"] = "https://*.example.com"
+    with pytest.raises(ContractError):
+        compile_profile(*source)

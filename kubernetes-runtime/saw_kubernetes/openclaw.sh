@@ -20,6 +20,7 @@ const config = {
     workspace: '/sandbox/workspace/project'}},
   tools: {deny: ['*']}
 };
+@SAW_BROWSER_CONFIG@
 const target = process.env.OPENCLAW_CONFIG_PATH;
 const tmp = target + '.' + crypto.randomUUID();
 fs.writeFileSync(tmp, JSON.stringify(config), {flag: 'wx', mode: 0o600});

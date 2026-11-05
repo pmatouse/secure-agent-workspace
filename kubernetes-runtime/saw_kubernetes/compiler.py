@@ -69,7 +69,7 @@ def _claim(binding, workspace, mount_path, volume_name):
 
 
 def _storage(binding, workspace):
-    mapping(binding, {"workspace", "mounts", "resources"}, {"workspace"}, "sandbox binding")
+    mapping(binding, {"workspace", "mounts", "resources", "browser"}, {"workspace"}, "sandbox binding")
     volume, mount, reference = _claim(binding["workspace"], workspace, "/sandbox/workspace", "saw-workspace")
     if binding["workspace"]["readOnly"]:
         raise ContractError("/sandbox/workspace must be writable")
@@ -222,6 +222,20 @@ def compile_profile_files(files, config):
                         or not any(p["type"] == "openai" and p.get("credentials") for p in providers)):
                     raise ContractError("openclaw requires a bound OpenAI provider and literal approved inference settings")
                 script = Path(__file__).with_name("openclaw.sh").read_text()
+                browser = bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")
+                extra = ""
+                if browser is not None:
+                    mapping(browser, {"origin", "ownerLogin"}, {"origin", "ownerLogin"}, "browser")
+                    origin, login = browser["origin"], browser["ownerLogin"]
+                    if (not isinstance(origin, str) or not re.fullmatch(r"https://[a-z0-9.-]+", origin)
+                            or not isinstance(login, str) or not NAME.fullmatch(login)):
+                        raise ContractError("browser requires an explicit HTTPS origin and owner login")
+                    extra = ("config.gateway.trustedProxies = ['127.0.0.1/32','::1/128'];\n"
+                             "config.gateway.controlUi = {allowedOrigins:[" + json.dumps(origin) + "]};\n"
+                             "config.gateway.auth = {mode:'trusted-proxy',password:config.gateway.auth.token,"
+                             "trustedProxy:{userHeader:'x-forwarded-email',allowUsers:[" + json.dumps(login) + "],"
+                             "allowLoopback:true,deviceAutoApprove:{enabled:true,scopes:['operator.read','operator.write']}}};\n")
+                script = script.replace("@SAW_BROWSER_CONFIG@\n", extra)
                 command = ["sh", "-ec", script, "saw-openclaw", info["model"]]
             elif sandbox.type != "generic" or sandbox.inference:
                 raise ContractError("agent or inference capability is not yet ported to Kubernetes")
@@ -234,6 +248,8 @@ def compile_profile_files(files, config):
             if key not in bindings:
                 raise ContractError(f"{key} requires an administrator-approved retained workspace PVC")
             used_bindings.add(key)
+            if sandbox.type != "openclaw" and "browser" in bindings[key]:
+                raise ContractError("browser settings require an OpenClaw sandbox")
             driver, refs = _storage(bindings[key], ws_name)
             all_refs.extend(refs)
             if runtime:
