@@ -20,3 +20,4 @@ resources:
   - audit-writer.yaml
   - audit-gate-prep.yaml
   - portal-controller-build.yaml
+- profile-controller-build.yaml

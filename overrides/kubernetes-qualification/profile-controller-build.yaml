@@ -1,0 +1,21 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: saw-runtime-controller-37dd2e5
+  namespace: saw-k8s-build
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/pmatouse/secure-agent-workspace.git
+      ref: 37dd2e55cf2fd177faedd6db1bf1c71fc18b9a00
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: kubernetes-runtime/Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: saw-runtime-controller:37dd2e55cf2f
+  triggers:
+  - type: ConfigChange
