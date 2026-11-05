@@ -19,3 +19,4 @@ resources:
   - audit-qualification.yaml
   - audit-writer.yaml
   - audit-gate-prep.yaml
+  - portal-controller-build.yaml
