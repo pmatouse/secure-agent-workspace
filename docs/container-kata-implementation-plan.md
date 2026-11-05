@@ -22,6 +22,7 @@ history, including failed attempts):
 | Stock Kubernetes gateway | 1/1 Ready under `restricted-v2`, driver connected, eight governance bindings initialized; ordinary owner passed stock CLI `workspace list` through verified TLS/OIDC. In-cluster issuer uses the internal ingress VIP; generic lifecycle passed; OpenClaw agent qualification remains open |
 | Generic container lifecycle | Git generations 7/8/9 reached GenericReady, Stopped and GenericReady. Both restricted-v2 Pods were replaced. The ordinary owner verified a fresh nonce on the same PVC; direct API egress and cross-owner access were denied. [Receipt](https://github.com/pmatouse/secure-agent-workspace/blob/23b8a94/docs/evidence/glmhg-stock-container-lifecycle.json) |
 | OpenClaw container | Stock OpenClaw 2026.9.6, private provider proxy, exact owner chat reply and model verified, owner CLI forward served the UI, nonmember denied. Stock gateway token rejected an unauthorized request and the agent refused exec under the deny-all tool policy. [Live receipt](https://github.com/pmatouse/secure-agent-workspace/blob/3d6023d/docs/evidence/glmhg-container-openclaw.json) |
+| Container UI relay | Dedicated Keycloak service account lists only agent. Owner catalog and UI login passed, nonmember denied. Signed browser-protocol WebSocket and ordinary CLI returned fresh chat replies. [Receipt](https://github.com/pmatouse/secure-agent-workspace/blob/a20e0dc46aafa78992c565c09da28e0341dbc4c2/docs/evidence/glmhg-keycloak-relay.json) |
 | Kata prerequisite | Both worker nodes have KVM/CPU virtualization, but boot in BIOS. OSC 1.13 documents UEFI. Stock operator installation is separate; no KataConfig, forced eligibility or reboot requested |
 
 The trusted credential proxy is now wired and transport-tested. The stock gateway now passes
@@ -32,8 +33,8 @@ Sandbox creation additionally needs matching compiler, governance and stock
 driver mount contracts. The pinned driver reserves both the volume name
 `workspace` and the mount root `/sandbox`. The external PVC uses
 `saw-workspace` at `/sandbox/workspace`. The generic lifecycle and direct API denial passed on the live cluster. Container
-OpenClaw inference passed. Browser SSO, SAW tool approvals, persistent tool audit
-and RHDH lifecycle parity remain open. The qualification governance endpoint uses network-
+OpenClaw inference passed. Owner browser SSO and the RHDH catalog link passed. SAW tool approvals, persistent
+tool audit and RHDH provisioning lifecycle parity remain open. The qualification governance endpoint uses network-
 isolated HTTP, so transport-level caller authentication is still a production gap. The dependency probe bypasses
 OpenShell intentionally to test Agent Sandbox alone; it must never be reported
 as a working SAW container workspace. The documented Kata path needs a
