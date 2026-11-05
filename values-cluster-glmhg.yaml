@@ -5,6 +5,13 @@ portal:
   - owner: sawk8sowner
     routeLabel: sawk8sowner-agent-openclaw-ui
     title: OpenClaw container workspace
+    runtime:
+      mode: container
+      namespace: saw-k8s-test
+      intent: toolbox-intent
+      status: toolbox-status
+      installationID: d8ac361b-9898-4b16-ac35-2d15f86db76b
+      ownerSubject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
   # Two cold agent images plus nested-CPU guest configuration approach 30m.
   # Keep real readiness checks; this only bounds new portal runs' wait time.
   sandboxReadyTimeoutMinutes: 60

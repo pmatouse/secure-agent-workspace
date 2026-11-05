@@ -553,7 +553,41 @@ def audience_groups(owners, users):
     return docs
 
 
-def entities_yaml(workspaces, catalog, domain, rhdh_url, statuses=None, portal_ns="saw-portal", users=None):
+def linked_runtime_phase(k8s, link):
+    """Read only the installation's two named objects; a stale generation cannot be Ready."""
+    ref = link["runtime"]
+    ns = ref["namespace"]
+    if not all(re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", ref[key])
+               for key in ("namespace", "intent", "status")):
+        raise PortalError("invalid runtime status reference")
+    def read(name, key):
+        cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/{name}", ok404=True)
+        if not cm or cm.get("metadata", {}).get("deletionTimestamp"):
+            return {}, {}
+        return json.loads(cm.get("data", {}).get(key, "{}")), cm["metadata"].get("labels", {})
+    try:
+        intent, il = read(ref["intent"], "intent.json")
+        status, sl = read(ref["status"], "status.json")
+        owner_label = "saw.redhat.com/runtime-owner"
+        binding = intent.get("bindings", {})
+        if (il.get(owner_label) != ref["installationID"] or sl.get(owner_label) != ref["installationID"]
+                or sl.get("saw.redhat.com/managed-by") != "kubernetes-runtime-controller"
+                or binding.get("ownerID") != ref["installationID"] or binding.get("ownerSubject") != ref["ownerSubject"]
+                or binding.get("namespace") != ns or binding.get("mode") != ref["mode"]):
+            return "Unknown"
+        if type(intent.get("generation")) is not int or status.get("observedGeneration") != intent["generation"]:
+            return "Reconciling"
+        phase = status.get("phase")
+        if phase == "GenericReady" and intent.get("desiredState") == "Running":
+            return "Running"
+        if phase == "Stopped" and intent.get("desiredState") == "Stopped":
+            return "Stopped"
+        return "Blocked" if phase == "Blocked" else "Reconciling"
+    except (PortalError, ValueError, TypeError, AttributeError):
+        return "Unknown"
+
+
+def entities_yaml(workspaces, catalog, domain, rhdh_url, statuses=None, portal_ns="saw-portal", users=None, runtime_reader=None):
     """RHDH catalog entities: one Component per workspace (the kind RHDH's
     catalog lists first, and the one its CI tab is made for), owned by its user,
     linking the OpenShell web UI and each sandbox UI route, with the
@@ -596,8 +630,14 @@ def entities_yaml(workspaces, catalog, domain, rhdh_url, statuses=None, portal_n
         check_user(owner)
         if not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", slug) or not domain:
             raise PortalError("linked workspace requires an ingress DNS label and cluster domain")
+        runtime_metadata = {}
+        if "runtime" in linked:
+            mode = linked["runtime"]["mode"]
+            phase = linked_runtime_phase(runtime_reader, linked) if runtime_reader else "Unknown"
+            runtime_metadata = {"annotations": {"openshell.pattern/deployment-mode": mode, "openshell.pattern/status": phase},
+                                "description": f"OpenShell {mode} workspace. Runtime status: {phase}."}
         docs.append({"apiVersion": "backstage.io/v1alpha1", "kind": "Component",
-                     "metadata": {"name": f"linked-{slug}", "title": linked["title"],
+                     "metadata": {"name": f"linked-{slug}", "title": linked["title"], **runtime_metadata,
                                   "links": [{"url": f"https://{slug}.apps.{domain}",
                                              "title": "OpenClaw UI", "icon": "web"}]},
                      "spec": {"type": "agent-workspace", "owner": f"user:default/{owner}",
@@ -1317,7 +1357,7 @@ def serve():
                     except PortalError as exc:
                         log(f"WARN: status of saw-{ws['name']}: {exc}")
                 text = entities_yaml(workspaces, catalog, domain,
-                                     os.environ.get("RHDH_BASE_URL", ""), statuses, ns, realm_users())
+                                     os.environ.get("RHDH_BASE_URL", ""), statuses, ns, realm_users(), runtime_reader=k8s)
             except PortalError as exc:
                 log(f"ERROR: {exc}")
                 return self._send(500, {"error": str(exc)})
