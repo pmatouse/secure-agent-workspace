@@ -286,13 +286,13 @@ def log_step(step_id, name, source):
 CREATE_TASKS = [
     ("register", "Verify the request, store the keys, register the workspace", 5),
     ("argo-cd-apps", "Argo CD creates the workspace's applications", 12),
-    ("vm", "Argo CD creates the VM", 12),
-    ("vm-running", "Start the VM", 17),
-    ("sandboxes", "Install OpenShell and the sandboxes (about 10 minutes)", 32),
+    ("vm", "Provision the workspace runtime", 12),
+    ("vm-running", "Start the workspace runtime", 17),
+    ("sandboxes", "Wait for OpenShell sandboxes and workspace access", 32),
 ]
 DELETE_TASKS = [
     ("unregister", "Verify the request, delete the Argo CD application", 5),
-    ("argo-cd-removes", "Argo CD removes the namespace and the VM", 22),
+    ("argo-cd-removes", "Wait for Argo CD to remove the workspace runtime", 22),
     ("finish", "Remove the registry entry and the keys", 5),
 ]
 
@@ -457,11 +457,11 @@ def render_delete_template(for_user=False):
         "metadata": {
             "name": "delete-saw-workspace-for-user" if for_user else "delete-saw-workspace",
             "title": "Delete a user's agent workspace" if for_user else "Delete my agent workspace",
-            "description": ("Administrators: removes a user's Secure Agent Workspace, its VM, its sandboxes "
-                            "and everything in them, and the user's keys in Vault. This cannot be undone."
+            "description": ("Administrators: removes a user's Secure Agent Workspace, its runtime, its sandboxes "
+                            "and the user's keys in Vault. Retained audit history is separate. This cannot be undone."
                             if for_user else
-                            "Removes your Secure Agent Workspace: its VM, its sandboxes and everything in "
-                            "them, and your keys in Vault. This cannot be undone."),
+                            "Removes your Secure Agent Workspace: its runtime, its sandboxes and the data in "
+                            "them, and your keys in Vault. Retained audit history is separate. This cannot be undone."),
             "tags": ["openshell", "secure-agent-workspace"] + (["admin"] if for_user else []),
             # Administrators only; the user's: users with a workspace.
             "labels": {"saw.redhat.com/admin" if for_user else "saw.redhat.com/owners": "true"},
@@ -484,7 +484,7 @@ def render_delete_template(for_user=False):
                                                                    "spec.type": "agent-workspace"},
                                                  "defaultKind": "Component",
                                                  "allowArbitraryValues": False}},
-                    "confirm": {"title": "I understand that this workspace, its VM and its data are deleted",
+                    "confirm": {"title": "I understand that the workspace runtime, sandbox data and workspace keys will be deleted",
                                 "type": "boolean", "const": True}},
             }],
             "steps": [

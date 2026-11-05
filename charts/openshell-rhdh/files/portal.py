@@ -986,20 +986,39 @@ def ping_url(url, timeout=3):
 
 
 def owner_route_available(url, timeout=3):
+    """Require an anonymous challenge AND a registered callback at the trusted issuer."""
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *args):
             return None
-    try:
-        with urllib.request.build_opener(NoRedirect()).open(url, timeout=timeout) as resp:
-            return False  # the anonymous caller must not be served the chat
-    except urllib.error.HTTPError as exc:
-        target = urllib.parse.urlsplit(urllib.parse.urljoin(url, exc.headers.get("Location", "")))
-        return (exc.code in (302, 303, 307) and target.scheme == "https"
-                and (target.netloc == urllib.parse.urlsplit(url).netloc and target.path.startswith("/oauth2/")
-                     or target.path.endswith("/protocol/openid-connect/auth") and
-                     target.netloc == urllib.parse.urlsplit(os.environ.get("KEYCLOAK_URL", "")).netloc))
-    except (OSError, ValueError):
+    client = urllib.request.build_opener(NoRedirect())
+    origin = url.rstrip("/")
+    issuer = os.environ.get("KEYCLOAK_URL", "").rstrip("/")
+    auth = issuer + "/realms/" + os.environ.get("KEYCLOAK_REALM", "openshell") + "/protocol/openid-connect/auth"
+    if not issuer.startswith("https://") or not origin.startswith("https://"):
         return False
+    location = origin
+    for hop in range(3):
+        try:
+            with client.open(location, timeout=timeout) as res:
+                return (location.split("?")[0] == auth and res.status == 200
+                        and b'id="kc-form-login"' in res.read(256 * 1024))
+        except urllib.error.HTTPError as exc:
+            with exc:
+                target = urllib.parse.urljoin(location, exc.headers.get("Location", ""))
+                if exc.code not in (302, 303, 307):
+                    return False
+            parts = urllib.parse.urlsplit(target)
+            if hop == 0 and target.split("?")[0] == origin + "/oauth2/start":
+                location = target
+                continue
+            params = urllib.parse.parse_qs(parts.query)
+            if (target.split("?")[0] != auth or params.get("client_id") != ["openshell-dashboard"]
+                    or params.get("redirect_uri") != [origin + "/oauth2/callback"]):
+                return False
+            location = target
+        except (OSError, ValueError):
+            return False
+    return False
 
 
 def app_summary(app):
@@ -1024,7 +1043,14 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
         entry = {}
     profiles = entry.get("profiles", []) if isinstance(entry, dict) else []
     if cm is not None and (cm["metadata"].get("labels") or {}).get(DELETING_LABEL) == "true":
-        gone, detail = removal_status(k8s, user, argo_ns, entry)
+        try:
+            _, detail = removal_status(k8s, user, argo_ns, entry)
+        except HttpError as exc:
+            if exc.code != 403:
+                raise
+            # The read-only catalog has no cluster namespace inventory. Only
+            # wait-gone, running as the provisioner, can attest full removal.
+            detail = "The deletion pipeline is verifying workspace removal"
         return {"user": user, "phase": "deleting", "title": PHASE_TITLES["deleting"],
                 "message": detail, "ready": False, "failed": False, "steps": [], "links": [],
                 "text": f"Deleting: {detail}"}
