@@ -23,3 +23,95 @@ spec:
           for cmd in sh node openclaw; do command -v "$cmd" || true; done
           (cd /sandbox && echo image-workdir-accessible) || true
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openclaw-image-aipcc-strict
+  namespace: saw-k8s-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsGroup: 1001010000
+        fsGroup: 1001010000
+        supplementalGroupsPolicy: Strict
+      containers:
+      - name: inspect
+        image: quay.io/aipcc/base-images/agentic/openclaw@sha256:896d1526ee29b53167034ba65d1c758c8da777f441ed094e19f3bcf6d7445c61
+        workingDir: /tmp
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - id; stat -Lc '%a %u:%g %n' /sandbox /sandbox/workspace /bin/sh || true;
+          for cmd in sh node openclaw; do command -v $cmd; done; cd /sandbox; test
+          -w /sandbox/workspace; /bin/sh -ec 'echo STRICT_WORKSPACE_OK'
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: ws
+          mountPath: /sandbox/workspace
+        env:
+        - name: TMPDIR
+          value: /tmp
+      volumes:
+      - name: ws
+        emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openclaw-image-upstream-strict
+  namespace: saw-k8s-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsGroup: 1001010000
+        fsGroup: 1001010000
+        supplementalGroupsPolicy: Strict
+      containers:
+      - name: inspect
+        image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15
+        workingDir: /tmp
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - id; stat -Lc '%a %u:%g %n' /sandbox /sandbox/workspace /bin/sh || true;
+          for cmd in sh node openclaw; do command -v $cmd; done; cd /sandbox; test
+          -w /sandbox/workspace; /bin/sh -ec 'echo STRICT_WORKSPACE_OK'
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: ws
+          mountPath: /sandbox/workspace
+        env:
+        - name: TMPDIR
+          value: /tmp
+      volumes:
+      - name: ws
+        emptyDir: {}
