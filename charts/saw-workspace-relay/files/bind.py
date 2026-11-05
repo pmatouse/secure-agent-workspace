@@ -8,7 +8,8 @@ from saw_kubernetes.adapters import GrpcGateway
 def main():
     ws, wid = os.environ["WORKSPACE"], os.environ["WORKSPACE_ID"]
     relay, owner = os.environ["SUBJECT"], os.environ["OWNER"]
-    if uuid.UUID(relay).int == 0 or relay == owner or ws == "default":
+    if (any(uuid.UUID(v).int == 0 for v in (wid, relay, owner, os.environ["INSTALLATION"]))
+            or relay == owner or ws == "default"):
         raise ValueError("invalid relay scope")
     g = GrpcGateway(os.environ["ENDPOINT"], "/identity/ca.crt", "/identity/tls.crt", "/identity/tls.key")
     try:

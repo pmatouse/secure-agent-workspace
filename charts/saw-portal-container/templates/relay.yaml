@@ -54,3 +54,19 @@ spec:
     retry: {limit: 6}
     syncOptions: [RespectIgnoreDifferences=true]
 {{- end }}
+{{- $site := .Values.site | default dict }}
+{{- $e := $site.enrollment | default dict }}
+{{- if and $e (eq $e.registration .Values.registration) $e.relay }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: relay-bind-dns, namespace: saw-ctl-{{ $e.registration }}}
+spec:
+  podSelector: {matchLabels: {app: ui-{{ $e.registration }}, role: bind}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+      - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: openshift-dns}}
+        podSelector: {matchLabels: {dns.operator.openshift.io/daemonset-dns: default}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}, {protocol: UDP, port: 5353}, {protocol: TCP, port: 5353}]
+{{- end }}
