@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/pmatouse/secure-agent-workspace.git
-    targetRevision: 9d4dd2c2aa6ff89bb96764236a63c7fa726fe8aa
+    targetRevision: 263e00fc640c4f5acbe0dc61413090e38eeb0874
     path: charts/saw-audit-writer
     helm:
       releaseName: saw-audit-demo
