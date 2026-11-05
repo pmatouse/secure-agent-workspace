@@ -1,0 +1,109 @@
+{
+  "cluster": "glmhg",
+  "date": "2026-11-05",
+  "openshift": "4.22.20",
+  "sandbox": "agent/audited",
+  "sandboxID": "169c5d45-7fa6-4445-b53b-2df161f82ce3",
+  "owner": "sawk8sowner",
+  "inference": "openai/gpt-4.1-mini-2025-04-14",
+  "testEntry": "Fresh owner OIDC session through the HTTPS UI route, signed WebSocket device, chat.send, plugin.approval.resolve. No graphical click automation.",
+  "scopes": [
+    "operator.read",
+    "operator.write",
+    "operator.approvals"
+  ],
+  "implementation": "05efa95282cf7eb2440734a75ca02144e67c2581",
+  "writerAfterRestart": "263e00fc640c4f5acbe0dc61413090e38eeb0874",
+  "activationSiteCommit": "ddce490",
+  "storage": {
+    "readOnlyGate": "saw-gate-saw-audit-demo",
+    "mailbox": "saw-audit-saw-audit-demo",
+    "history": "saw-k8s-trusted/saw-audit-demo-history",
+    "historyPVCUID": "b04cd4e3-c9da-4249-8360-a4cf96606ab4",
+    "writerSCC": "restricted-v2",
+    "userWorkloadMountsHistory": false
+  },
+  "results": {
+    "unknownReadCanaryMatched": true,
+    "deniedExecCanaryRemained": true,
+    "allowOnceExecCanaryRemoved": true,
+    "defaultDeniedWriteFileAbsent": true,
+    "freshPostRestartChatMatched": true
+  },
+  "rows": [
+    {
+      "seq": 1,
+      "id": "8b908760-0f8e-40c6-a260-ffc967ab5632",
+      "session": "agent:main:saw-mw3eusey-read",
+      "tool": "read",
+      "rule": "read",
+      "decision": "allow"
+    },
+    {
+      "seq": 2,
+      "id": "7e780d65-e7cb-467d-9f50-662b510ab42d",
+      "session": "agent:main:saw-mw3eusey-reject2",
+      "tool": "exec",
+      "rule": "exec-consequential",
+      "decision": "approval_required"
+    },
+    {
+      "seq": 3,
+      "id": "52bc161b-8eaf-459c-8534-f0c844d69d21",
+      "session": "agent:main:saw-mw3eusey-reject2",
+      "tool": "exec",
+      "rule": "exec-consequential",
+      "decision": "rejected",
+      "resolution": "deny"
+    },
+    {
+      "seq": 4,
+      "id": "9e512230-7859-4587-b77e-b30e88e5e58a",
+      "session": "agent:main:saw-mw3eusey-approve",
+      "tool": "exec",
+      "rule": "exec-consequential",
+      "decision": "approval_required"
+    },
+    {
+      "seq": 5,
+      "id": "53222fd7-5ca6-4388-bda0-b2cae3bb9d91",
+      "session": "agent:main:saw-mw3eusey-approve",
+      "tool": "exec",
+      "rule": "exec-consequential",
+      "decision": "approved",
+      "resolution": "allow-once"
+    },
+    {
+      "seq": 6,
+      "id": "5575d453-5830-4dd7-9c31-c5468891eddc",
+      "session": "agent:main:saw-mw3eusey-policydeny",
+      "tool": "write",
+      "rule": "default",
+      "decision": "deny"
+    },
+    {
+      "seq": 7,
+      "id": "fdc3b2da-9776-4df5-be41-e7392abe4136",
+      "session": "agent:main:saw-mw3eusey-afterrestart",
+      "tool": "read",
+      "rule": "read",
+      "decision": "allow"
+    }
+  ],
+  "restart": {
+    "stoppedGeneration": 17,
+    "startedGeneration": 18,
+    "workloadAndSupervisorAbsentBetweenGenerations": true,
+    "workloadPodUIDBefore": "d9689628-d0a2-4474-82f0-f594edcd7e70",
+    "workloadPodUIDAfter": "888d14c4-1437-4f76-aff9-7bf5cdf79513",
+    "writerPodUIDBefore": "640b3c60-657e-4c33-a407-edd8bdb498c6",
+    "writerPodUIDAfter": "4942fccc-6df4-4912-ad30-35c4aa60d2f2",
+    "receiptKeyPreserved": true,
+    "orderedFirstSixRowsHashBeforeAndAfter": "2d0d1651b43c3e91e9d2f4857bf6407ec5a9956dafdea762719c6c3d2456dc00",
+    "hashInput": "UTF-8 JSON.stringify(rows) for SELECT seq,id,body,received FROM records WHERE seq<=6 ORDER BY seq"
+  },
+  "limits": [
+    "The stock resolution notification cannot veto a resolved approval if recording that later notification fails.",
+    "Container mode tested; Kata requires separate qualification."
+  ]
+}
