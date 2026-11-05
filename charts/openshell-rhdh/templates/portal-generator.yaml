@@ -51,6 +51,10 @@ spec:
               value: {{ $ns }}
             - name: PORT
               value: {{ $port | quote }}
+            {{- with .Values.portal.linkedWorkspaces }}
+            - name: SAW_LINKED_WORKSPACES
+              value: {{ . | toJson | quote }}
+            {{- end }}
             - name: CATALOG_PATH
               value: /opt/saw/profile-catalog.json
             - name: GENERATOR_TOKEN_FILE

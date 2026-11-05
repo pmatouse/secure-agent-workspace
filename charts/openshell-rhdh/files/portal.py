@@ -589,6 +589,19 @@ def entities_yaml(workspaces, catalog, domain, rhdh_url, statuses=None, portal_n
                                   "links": links},
                      "spec": {"type": "agent-workspace", "owner": f"user:default/{user}",
                               "lifecycle": "production"}})
+    # Operator-linked workspaces have their own lifecycle outside the portal registry.
+    # Publish only a catalog link. Existing create/delete templates still own VM entries.
+    for linked in json.loads(os.environ.get("SAW_LINKED_WORKSPACES", "[]")):
+        owner, slug = linked["owner"], linked["routeLabel"]
+        check_user(owner)
+        if not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", slug) or not domain:
+            raise PortalError("linked workspace requires an ingress DNS label and cluster domain")
+        docs.append({"apiVersion": "backstage.io/v1alpha1", "kind": "Component",
+                     "metadata": {"name": f"linked-{slug}", "title": linked["title"],
+                                  "links": [{"url": f"https://{slug}.apps.{domain}",
+                                             "title": "OpenClaw UI", "icon": "web"}]},
+                     "spec": {"type": "agent-workspace", "owner": f"user:default/{owner}",
+                              "lifecycle": "experimental"}})
     docs += audience_groups([ws["name"] for ws in workspaces], users)
     docs.append(get_started(rhdh_url))
     return "\n---\n".join(json.dumps(d, indent=2, sort_keys=True) for d in docs) + "\n"

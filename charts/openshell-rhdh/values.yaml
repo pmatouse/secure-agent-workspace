@@ -96,6 +96,8 @@ rhdh:
 # The portal namespace: request Secrets, the Tekton pipelines, the workspace
 # registry (ConfigMaps saw-ws-<user>) and the ApplicationSet plugin generator.
 portal:
+  # Owner-visible catalog links for independently GitOps-managed workspaces.
+  linkedWorkspaces: []
   namespace: saw-portal
   provisionerServiceAccount: saw-portal-provisioner
   # Python 3 with the standard library is all portal.py needs.

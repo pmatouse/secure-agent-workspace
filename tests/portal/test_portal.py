@@ -1455,3 +1455,11 @@ def test_the_ca_bundle_holds_every_source_found(tmp_path, monkeypatch):
     text = out.read_text()
     assert text.index("SYSTEM") < text.index("TRUSTED") < text.index("EXTRA")
     assert text.count("BEGIN CERTIFICATE") == 3
+
+
+def test_linked_container_catalog_entry_is_owned_and_links_only_to_the_site(portal, catalog, monkeypatch):
+    monkeypatch.setenv("SAW_LINKED_WORKSPACES", json.dumps([{"owner":"alice","routeLabel":"alice-agent-ui","title":"OpenClaw"}]))
+    docs = entity_docs(portal.entities_yaml([], catalog, "example.com", ""))
+    entry = next(d for d in docs if d["metadata"]["name"] == "linked-alice-agent-ui")
+    assert entry["spec"]["owner"] == "user:default/alice"
+    assert entry["metadata"]["links"] == [{"title":"OpenClaw UI","icon":"web","url":"https://alice-agent-ui.apps.example.com"}]
