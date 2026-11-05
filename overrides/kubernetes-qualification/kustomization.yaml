@@ -15,3 +15,4 @@ resources:
   - openclaw-inputs.yaml
   - workspace-relay.yaml
   - tool-gate-check.yaml
+  - tool-gate-build.yaml
