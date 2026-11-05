@@ -22,8 +22,8 @@ metadata:
     saw.redhat.com/runtime-owner: {{ $.Values.ownerID }}
   {{- end }}
 spec:
-  storageClassName: {{ if eq $name "exchange" }}{{ required "exchangeStorageClass required" $.Values.exchangeStorageClass }}{{ else }}{{ required "storageClass required" $.Values.storageClass }}{{ end }}
-  accessModes: [{{ if eq $name "exchange" }}ReadWriteMany{{ else }}ReadWriteOnce{{ end }}]
+  storageClassName: {{ if or (eq $name "exchange") (and (eq $name "gate") $.Values.shareGateForModelSelection) }}{{ required "exchangeStorageClass required" $.Values.exchangeStorageClass }}{{ else }}{{ required "storageClass required" $.Values.storageClass }}{{ end }}
+  accessModes: [{{ if or (eq $name "exchange") (and (eq $name "gate") $.Values.shareGateForModelSelection) }}ReadWriteMany{{ else }}ReadWriteOnce{{ end }}]
   resources: {requests: {storage: 1Gi}}
 {{- end }}
 ---

@@ -28,7 +28,7 @@ metadata:
   name: {{ $n }}
   annotations: {argocd.argoproj.io/sync-wave: '3'}
 spec:
-  replicas: 1
+  replicas: {{ ternary 0 1 (.Values.paused | default false) }}
   selector: {matchLabels: {app: {{ $n }}, role: relay}}
   template:
     metadata:

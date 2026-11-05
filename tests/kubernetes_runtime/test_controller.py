@@ -420,3 +420,27 @@ def test_plan_pin_fences_old_compiler_before_mutation(setup):
     assert not calls and not verified
     c.compile_files = lambda files, bindings: {"revision": "a"*64}
     assert c.reconcile_once()["phase"] == "GenericReady"
+
+
+def test_model_update_waits_for_confirmed_stop_and_recovers_after_restart(setup):
+    controller, api, _, _, _, _ = setup
+    calls = []
+    phases = iter(["GenericReady", "Pending", "Stopped", "GenericReady", "GenericReady"])
+
+    def core(plan, *, generation, desired_state):
+        calls.append((generation, desired_state))
+        return {"phase": next(phases)}
+
+    controller.core_pass = core
+    update_intent(setup, lambda i: i.update(restartGeneration=0))
+    assert controller.reconcile_once()["phase"] == "GenericReady"
+    update_intent(setup, lambda i: i.update(generation=2, restartGeneration=2))
+    assert controller.reconcile_once()["phase"] == "Pending"
+    assert not controller.store.load().get("restartGeneration")
+    assert controller.reconcile_once()["phase"] == "Pending"
+    resumed = Controller(api, controller.scope, controller.store.directory.parent,
+                         controller.compile_files, core, controller.verify_boundary)
+    assert resumed.reconcile_once()["phase"] == "GenericReady"
+    update_intent(setup, lambda i: i.update(generation=3))
+    assert resumed.reconcile_once()["phase"] == "GenericReady"
+    assert calls == [(2, "Running"), (3, "Stopped"), (3, "Stopped"), (4, "Running"), (6, "Running")]
