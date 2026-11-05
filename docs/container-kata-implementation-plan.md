@@ -6,6 +6,22 @@ Planning branch: `plan/container-kata-deployment`. Implementation branch: `dev/c
 
 The original VM baseline and rollout history below are dated. For the implemented RHDH container flow, see [automatic enrollment and owner lifecycle](../charts/saw-portal-container/README.md). The container profile uses the stock OpenShell Kubernetes driver. Kata is a separate qualification.
 
+### Current delivery scope: VM feature parity for container workspaces
+
+Use the shipped VM profiles and their observable behavior as the reference.
+Implement missing capabilities on the container path, share BOM interpretation
+and validation wherever possible, and use VM regression tests when shared code
+changes. New VM operations are outside this milestone.
+
+The next feature is container support for the BOM's `harnessRef` and
+`harnessRequired`. The existing `personal-assistant` profile selects the
+`daily-briefing` bundle. The Kubernetes compiler currently rejects harness
+references. Start with the same bundle on a container: verify it using the
+VM trust rules, mount it read-only at `/sandbox/harness`, and show that
+OpenClaw discovers the skill and its MCP tools. Test that a missing or
+untrusted required bundle prevents startup. Qualify Slack and Gmail through
+their governed providers separately before claiming full profile parity.
+
 ### Live baseline receipt (2026-11-04)
 
 Latest qualification checkpoint (earlier paragraphs below preserve the rollout
@@ -1374,16 +1390,16 @@ subdiagnostics. Catalog, Tekton graphs/logs, timestamps and failure reasons must
 remain available. Never mark a workspace Ready merely because an Application is
 Synced or a gateway Pod is Running.
 
-CLI status/log/restart/stop commands dispatch through the backend adapter. VM SSH
-remains clearly VM-specific operator diagnostics; user agent terminal/file access
-continues through OpenShell. No new tenant `pods/exec` permission is needed just
-to emulate gateway terminal functionality.
+Use the existing VM owner workflows as acceptance fixtures for container and
+later Kata. Preserve the existing VM CLI and SSH diagnostics. The additional
+owner stop/start commands already delivered for containers have their own
+regression coverage.
 
-**Gate D1:** create/update/stop/start/delete, owner checks, UI links, logs and error
-reporting work for VM/container/Kata through RHDH and CLI. Malicious mode, owner,
-PVC, RuntimeClass and credential-reference inputs are refused.
+**Gate D1:** exercise the existing VM owner workflows against each new backend,
+including owner checks, UI links, logs and error reporting. Reject unauthorized
+mode, owner, PVC, RuntimeClass and credential-reference inputs.
 
-On glmhg, the ordinary-container data-science path passed owner create, per-sandbox model update, stop, start and delete. Both chats produced provider-identified completions after restart. The extended power test used the two-slot data-science profile. VM owner-CLI power parity, Kata qualification and the Git-backed registry remain open. [Live evidence](../tests/acceptance/owner-model-lifecycle-2026-11-05.json)
+On glmhg, the ordinary-container data-science path passed owner create, per-sandbox model update, stop, start and delete. Both chats produced provider-identified completions after restart. The extended power test used the two-slot data-science profile. Kata qualification and the Git-backed registry are separate follow-on milestones. [Live evidence](../tests/acceptance/owner-model-lifecycle-2026-11-05.json)
 
 ### D2. Full Git-backed workspace intent
 
