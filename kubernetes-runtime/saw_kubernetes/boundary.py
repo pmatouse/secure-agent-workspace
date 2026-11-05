@@ -65,6 +65,17 @@ def verify(config, plan, get):
                 or fingerprint(obj[field]) != expected["sha256"]):
             raise BoundaryError("ChangedBoundary:" + key)
         observed[key] = obj
+    markers = {p["credentials"]["OPENAI_API_KEY"] for w in plan.get("workspaces", [])
+               for p in w["providers"] if p.get("credentials")}
+    if markers:
+        policy = json.loads(observed["proxyPolicy"]["data"]["config.json"])
+        if (policy["markerPrefix"] != "saw-cred" or policy["profiles"].get("openai") != ["api.openai.com"]
+                or "api.openai.com" not in policy["allowHosts"]):
+            raise BoundaryError("OpenAIProxyPolicyMismatch")
+        approved_markers = {f"saw-cred.{b['secret']}.api_key" for b in policy["bindings"]
+                            if b.get("key") == "api_key" and b.get("providers") == ["openai"]}
+        if not markers <= approved_markers:
+            raise BoundaryError("OpenAIProxyBindingMismatch")
     vap = observed["validation"]
     status = vap.get("status", {})
     if (status.get("observedGeneration") != vap["metadata"]["generation"]

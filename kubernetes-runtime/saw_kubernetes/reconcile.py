@@ -122,7 +122,7 @@ class Reconciler:
         body["request_id"] = request_id(plan["ownerID"], method,
                                         {"request": request, "generation": generation})
         try:
-            self.rpc.call(method, body)
+            return self.rpc.call(method, body)
         except RpcError as exc:
             if exc.code != "ALREADY_EXISTS":
                 raise
@@ -215,6 +215,18 @@ class Reconciler:
             # Resolve platform scope explicitly (workspace_scope omitted). A
             # workspace administrator's same-name custom profile is not enough.
             profile = self.rpc.call("GetProviderProfile", {"id": provider_type}).get("profile", {})
+            marker_provider = any(p.get("credentials") for w in plan["workspaces"] for p in w["providers"]
+                                  if p["type"] == provider_type)
+            if marker_provider:
+                slots = profile.get("credentials", [])
+                endpoints = profile.get("endpoints", [])
+                if (provider_type != "openai" or profile.get("id") != "openai"
+                        or profile.get("source") != "interceptor/governance" or len(slots) != 1
+                        or slots[0].get("env_vars") != ["OPENAI_API_KEY"] or slots[0].get("name") != "api_key"
+                        or len(endpoints) != 1 or endpoints[0].get("host") != "api.openai.com"
+                        or endpoints[0].get("port") != 443 or endpoints[0].get("enforcement") != "NETWORK_ENFORCEMENT_MODE_ENFORCE"):
+                    raise ContractError("OpenAI profile differs from the approved inference boundary")
+                continue
             if (profile.get("id") != provider_type or profile.get("credentials")
                     or not profile.get("source", "").startswith("interceptor/")):
                 raise ContractError("provider profile is not a governed credential-free platform profile")
@@ -310,11 +322,28 @@ class Reconciler:
         pname = provider["metadata"]["name"]
         existing = self._get("GetProvider", {**scope, "name": pname}, "provider")
         if existing is None:
-            self._mutate("CreateProvider", {**scope, "provider": provider}, plan, generation)
+            reply = self._mutate("CreateProvider", {**scope, "provider": provider}, plan, generation)
+            if provider.get("credentials") and reply:
+                created = reply.get("provider", {})
+                self._identity("provider", ws["name"], pname, created, plan, state)
+                meta = created["metadata"]
+                version = meta.get("resource_version")
+                if not version:
+                    raise ContractError("missing provider revision")
+                state.setdefault("proxyProviderRevisions", {})[f"{ws['name']}/{pname}"] = {
+                    "version": version, "request": digest(provider)}
+                self.store.save(state)
             pending.append(f"provider/{ws['name']}/{pname}")
             return False
         self._identity("provider", ws["name"], pname, existing, plan, state)
-        if existing.get("type") != provider["type"] or existing.get("config") or existing.get("credentials") or existing.get("credential_handles"):
+        expected_credentials = {}
+        if provider.get("credentials"):
+            recorded = state.get("proxyProviderRevisions", {}).get(f"{ws['name']}/{pname}")
+            if recorded != {"version": existing["metadata"].get("resource_version"), "request": digest(provider)}:
+                raise ContractError("proxy provider ownership or credential revision requires explicit recovery")
+            expected_credentials = {"OPENAI_API_KEY": "REDACTED"}
+        if (existing.get("type") != provider["type"] or existing.get("config") or existing.get("profile_workspace")
+                or existing.get("credentials", {}) != expected_credentials or existing.get("credential_handles")):
             raise ContractError("provider drift or unexpected credential state requires explicit recovery")
         return True
 

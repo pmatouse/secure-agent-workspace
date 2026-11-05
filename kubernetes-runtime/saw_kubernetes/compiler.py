@@ -146,7 +146,7 @@ def compile_profile_files(files, config):
         raise ContractError("profile documents fail shared SAW schema or semantic validation") from None
     mapping(config, {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode",
                      "workloadRuntimeClass", "workloadRuntimeClassUID", "bindings",
-                     "approvedCredentialFreeProviders", "gatewayVersion"},
+                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret"},
             {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode", "bindings",
              "approvedCredentialFreeProviders", "gatewayVersion"}, "administrator configuration")
     try:
@@ -187,22 +187,44 @@ def compile_profile_files(files, config):
             # All semantic checks (references, credentialFree, governed names)
             # live in the common core. This backend has no private provider
             # materialization or OAuth refresh adapter yet.
-            if (not provider.credential_free or provider.type not in approved
-                    or provider.refresh_strategy or provider.credentials_spec
-                    or provider.credential_secret_key != "api_key"):
+            entry = {"metadata": {"name": provider.name, "labels": {
+                MANAGED: "kubernetes-runtime", OWNER: owner}}, "type": provider.type}
+            if provider.refresh_strategy or provider.credentials_spec or provider.credential_secret_key != "api_key":
                 raise ContractError("provider requires an unported credential/refresh capability or approval")
-            providers.append({"metadata": {"name": provider.name, "labels": {
-                MANAGED: "kubernetes-runtime", OWNER: owner}}, "type": provider.type})
+            if provider.credential_free:
+                if provider.type not in approved:
+                    raise ContractError("credential-free provider requires administrator approval")
+            elif (provider.type == provider.name == "openai" and config.get("openAIProxySecret")
+                  and provider.credential_secret == config["openAIProxySecret"]):
+                secret = name(provider.credential_secret, "approved OpenAI proxy binding", 63)
+                if any([provider.base_url, provider.model, provider.model_secret_key,
+                        provider.base_url_secret_key, provider.inference_timeout, provider.nemoclaw_provider]):
+                    raise ContractError("proxy provider settings belong in the sandbox inference block")
+                entry["credentials"] = {"OPENAI_API_KEY": f"saw-cred.{secret}.api_key"}
+            else:
+                raise ContractError("provider requires an unported credential/refresh capability or approval")
+            providers.append(entry)
         sandboxes = []
         for sandbox in workspace.sandboxes:
             if not sandbox.enabled:
                 continue
             name(sandbox.name, "sandbox")
-            if sandbox.type != "generic":
-                raise ContractError("agent profiles (including openclaw/nemoclaw) are not yet ported to Kubernetes")
-            if (sandbox.harness_ref or sandbox.env or sandbox.inference or sandbox.model
-                    or sandbox.agent != "openclaw"):
+            command = ["sh", "-c", "sleep infinity"]
+            if sandbox.harness_ref or sandbox.env or sandbox.model or sandbox.agent != "openclaw":
                 raise ContractError("harness/UI/inference/env capability is not yet ported to Kubernetes")
+            if sandbox.type == "openclaw":
+                info = sandbox.inference
+                if (set(info) != {"providerRef", "protocol", "baseUrl", "model"}
+                        or sandbox.providers != ["openai"] or info["providerRef"] != "openai"
+                        or info["protocol"] != "openai" or info["baseUrl"] != "https://api.openai.com/v1"
+                        or not isinstance(info["model"], str)
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", info["model"])
+                        or not any(p["type"] == "openai" and p.get("credentials") for p in providers)):
+                    raise ContractError("openclaw requires a bound OpenAI provider and literal approved inference settings")
+                script = Path(__file__).with_name("openclaw.sh").read_text()
+                command = ["sh", "-ec", script, "saw-openclaw", info["model"]]
+            elif sandbox.type != "generic" or sandbox.inference:
+                raise ContractError("agent or inference capability is not yet ported to Kubernetes")
             if not IMAGE.fullmatch(sandbox.image):
                 raise ContractError("sandbox image must be pinned by sha256 digest")
             references = sandbox.providers
@@ -217,7 +239,7 @@ def compile_profile_files(files, config):
             if runtime:
                 driver["pod"] = {"runtime_class_name": runtime}
             spec = {"template": {"image": sandbox.image, "driver_config": {"kubernetes": driver}},
-                    "providers": sorted(references), "command": ["sh", "-c", "sleep infinity"], "tty": False}
+                    "providers": sorted(references), "command": command, "tty": False}
             sandboxes.append({"name": sandbox.name, "spec": spec, "annotations": {REVISION: digest(spec)},
                               "labels": {MANAGED: "kubernetes-runtime", OWNER: owner}})
         workspaces.append({"name": ws_name, "providers": sorted(providers, key=lambda p: p["metadata"]["name"]),
