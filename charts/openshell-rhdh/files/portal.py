@@ -1043,7 +1043,14 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
         entry = {}
     profiles = entry.get("profiles", []) if isinstance(entry, dict) else []
     if cm is not None and (cm["metadata"].get("labels") or {}).get(DELETING_LABEL) == "true":
-        gone, detail = removal_status(k8s, user, argo_ns, entry)
+        try:
+            _, detail = removal_status(k8s, user, argo_ns, entry)
+        except HttpError as exc:
+            if exc.code != 403:
+                raise
+            # The read-only catalog has no cluster namespace inventory. Only
+            # wait-gone, running as the provisioner, can attest full removal.
+            detail = "The deletion pipeline is verifying workspace removal"
         return {"user": user, "phase": "deleting", "title": PHASE_TITLES["deleting"],
                 "message": detail, "ready": False, "failed": False, "steps": [], "links": [],
                 "text": f"Deleting: {detail}"}
