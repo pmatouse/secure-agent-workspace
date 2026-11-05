@@ -4,6 +4,7 @@ import argparse
 import json
 import secrets
 import subprocess
+import time
 
 
 def main():
@@ -19,17 +20,21 @@ def main():
              "OPENCLAW_CONFIG_PATH=/sandbox/workspace/.openclaw/openclaw.json",
              "TMPDIR=/sandbox/workspace/.openclaw/state", "SQLITE_TMPDIR=/sandbox/workspace/.openclaw/state"]
     nonce = "SAW_" + secrets.token_hex(8)
-    def run(command):
+    def run(command, *, check=True):
         result = subprocess.run(scope + command, capture_output=True, text=True, timeout=160)
-        if result.returncode:
+        if result.returncode and check:
             raise SystemExit("OpenClaw owner command failed (exit %d)" % result.returncode)
-        return result.stdout
+        return result
     # gateway call uses the running gateway; 'agent --local' could mask an
     # unreachable service by starting a second agent in the CLI process.
-    run(["openclaw", "gateway", "call", "health", "--json"])
+    deadline = time.monotonic() + 120
+    while run(["openclaw", "gateway", "call", "health", "--timeout", "8000", "--json"], check=False).returncode:
+        if time.monotonic() >= deadline:
+            raise SystemExit("OpenClaw gateway did not become healthy")
+        time.sleep(3)
     out = run(["openclaw", "gateway", "call", "agent", "--expect-final", "--timeout", "100000",
                "--json", "--params", json.dumps({"agentId":"main", "sessionKey":"agent:main:saw-" + nonce,
-               "message": "Reply with exactly " + nonce + ". Do not use tools.", "idempotencyKey":nonce})])
+               "message": "Reply with exactly " + nonce + ". Do not use tools.", "idempotencyKey":nonce})]).stdout
     data = json.loads(out[out.index("{"):])
     result = data.get("result", data)
     if not any(p.get("text", "").strip() == nonce for p in result.get("payloads", [])):

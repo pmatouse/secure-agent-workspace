@@ -81,7 +81,7 @@ credentials are not compiled into the plan.
 The profile directory uses the existing `charts/saw-bom/profiles/<profile>/<workspace>/`
 layout: `workspace.yaml`, `providers.yaml`, `sandbox.yaml`.
 
-- Enabled **generic** sandboxes only, with an immutable image digest and the same
+- **Generic** sandboxes, with an immutable image digest and the same
   idle command used by the existing generic installer: `sh -c 'sleep infinity'`.
 - Optional **credential-free**, administrator-approved provider types. At apply,
   each must resolve to a credential-free platform profile from the governance
@@ -94,9 +94,17 @@ layout: `workspace.yaml`, `providers.yaml`, `sandbox.yaml`.
   `requestedPlacement` reports desired placement, not independently observed VM
   boundaries. Native admission and live checks must prevent runtime fallback.
 
-Enabled OpenClaw/NemoClaw, harnesses, UI exposure, inference/model settings,
-credential-bearing providers, environment injection, arbitrary driver configuration
-and unsupported profile fields **fail compilation**. The stock `data-science`
+The OpenClaw qualification profile supports one governed OpenAI provider and a
+literal model at the official HTTPS endpoint. The controller writes only the
+proxy marker into the gateway provider. The trusted proxy reads the real key
+from its existing Vault/ESO projection. The controller checks the approved proxy
+binding, the platform provider profile, and the retained provider revision.
+The workload runs its local gateway on loopback and stores state on its own PVC.
+Its initial app configuration denies all tools. Production tool approvals,
+independent audit and RHDH browser exposure require separate acceptance.
+
+NemoClaw, arbitrary credentials, arbitrary environment injection, other
+inference protocols and profile-requested harnesses or UI remain unsupported. The stock `data-science`
 profile therefore does not work through this foundation yet; it is not silently
 reduced to a generic sandbox. Disabled optional entries produce no resources.
 
@@ -285,8 +293,8 @@ prune protection does not survive namespace deletion or an administrator deletin
 the PVC: the caller must preserve the namespace and provide a separate explicit
 purge workflow.
 
-Remaining before full B5/B6/D1 delivery: credential-proxy marker adapter and
-rotation, all agent launch/harness/tool/audit adapters, provider-update readiness,
+Remaining before full B5/B6/D1 delivery: credential rotation acceptance,
+additional agent adapters, harness/tool/audit integration, provider-update readiness,
 profile migrations, retained-volume initialization, UI/relay integration, portal lifecycle
 status wiring, and end-to-end acceptance of each supported agent.
 The [controller chart](../charts/saw-kubernetes-controller) runs one controller in
