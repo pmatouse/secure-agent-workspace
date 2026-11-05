@@ -1,0 +1,112 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: saw-runtime-controller
+  namespace: saw-container-build
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: saw-runtime-controller-a4162df
+  namespace: saw-container-build
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/pmatouse/secure-agent-workspace.git
+      ref: a4162dfe1529541fc23ed33f63a01e186b7793d6
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: kubernetes-runtime/Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: saw-runtime-controller:a4162dfe1529
+  triggers:
+  - type: ConfigChange
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-container-policy-build
+  namespace: vp-gitops
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-container-build
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    path: image-builder-charts/helm/governance-interceptor-image
+    targetRevision: fb158a7a0b4a1c4884bbe08d82dd7379d42f3421
+    helm:
+      valuesObject:
+        source:
+          git:
+            uri: https://github.com/NVIDIA/OpenShell.git
+            ref: 6648bd0c290efbc41ba131ee9831ee45cd431f94
+        build:
+          name: governance-interceptor-fb158a7
+          configChangeTrigger: true
+          builderImage: docker.io/library/rust@sha256:4ec71e955e6c08aeb238885083222ddff79d82eb87654a96c76e38e94da1a53b
+          runtimeImage: registry.access.redhat.com/ubi9-micro@sha256:7325ffb45d8401b227033dc26c567e138c919731ed2f8119e921ddba71835f87
+        output:
+          imageStreamTag: governance-interceptor:kubernetes-fb158a7
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-container-notebook-build
+  namespace: vp-gitops
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-container-build
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    path: image-builder-charts/helm/openshift-home-access
+    targetRevision: 0e6912d55ac16ea1788b26b8d6c2fde8df47d0b0
+    helm:
+      valuesObject:
+        images:
+        - name: saw-openclaw-home
+          from: quay.io/aipcc/base-images/agentic/openclaw@sha256:896d1526ee29b53167034ba65d1c758c8da777f441ed094e19f3bcf6d7445c61
+          imageUser: sandbox:sandbox
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-agent-sandbox
+  namespace: vp-gitops
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-sandbox-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    path: charts/agent-sandbox
+    targetRevision: e16968b8e37f1b4cb96597149bb3218792b34e06
+    helm:
+      valuesObject:
+        enabled: true

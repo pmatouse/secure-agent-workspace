@@ -15,6 +15,12 @@ keycloak:
       memory: 2Gi
 
 clusterGroup:
+  applications:
+    saw-container-foundation:
+      name: saw-container-foundation
+      namespace: saw-container-build
+      path: overrides/container-foundation
+      kustomize: true
   subscriptions:
     openshift-virtualization:
       # OLM applies resources to every operator container in this bundle.
@@ -27,6 +33,8 @@ clusterGroup:
             cpu: 250m
             memory: 512Mi
   namespaces:
+    saw-container-build:
+    saw-container-policy:
     external-secrets-operator:
       # clustergroup 0.9.58's map-form namespace helper does not forward
       # OperatorGroup annotations. Render the same object via extraObjects.
