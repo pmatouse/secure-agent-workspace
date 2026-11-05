@@ -384,3 +384,64 @@ portal:
           schemaVersion: 1
         registration: c8428d7ea7b13a9e
         revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
+        relay:
+          keycloakNamespace: saw-keycloak
+          keycloakAdminSecret: openshell-keycloak-initial-admin
+          issuer: https://openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io/realms/openshell
+          egress:
+          - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: openshift-dns
+              podSelector:
+                matchLabels:
+                  dns.operator.openshift.io/daemonset-dns: default
+            ports:
+            - protocol: UDP
+              port: 53
+            - protocol: UDP
+              port: 5353
+            - protocol: TCP
+              port: 53
+            - protocol: TCP
+              port: 5353
+          - to:
+            - ipBlock:
+                cidr: 10.10.10.10/32
+            - ipBlock:
+                cidr: 10.10.10.11/32
+            - ipBlock:
+                cidr: 10.10.10.12/32
+            - ipBlock:
+                cidr: 10.10.10.30/32
+            - ipBlock:
+                cidr: 10.10.10.31/32
+            - ipBlock:
+                cidr: 10.10.10.101/32
+            ports:
+            - protocol: TCP
+              port: 443
+          revision: dd01e14aa6773307878a8207ebd72909fa3a5802
+          gatewayCA: '-----BEGIN CERTIFICATE-----
+
+            MIIBnDCCAUOgAwIBAgIUDTuIXD45Wak3Uij13zl81G+OlFYwCgYIKoZIzj0EAwIw
+
+            KzEVMBMGA1UEAwwMb3BlbnNoZWxsLWNhMRIwEAYDVQQKDAlvcGVuc2hlbGwwIBcN
+
+            NzUwMTAxMDAwMDAwWhgPNDA5NjAxMDEwMDAwMDBaMCsxFTATBgNVBAMMDG9wZW5z
+
+            aGVsbC1jYTESMBAGA1UECgwJb3BlbnNoZWxsMFkwEwYHKoZIzj0CAQYIKoZIzj0D
+
+            AQcDQgAENNoub7dOKkXV1XMGf2RGuEmhEfBpJHuz0nBvLSR8+pk9R72TZxt55Oj2
+
+            x2pKB7bor1nPOtsmqG8GuAsoJktiyqNDMEEwDwYDVR0PAQH/BAUDAwcGADAdBgNV
+
+            HQ4EFgQUFl08rkjbWodiJLPKnzAxHvwEJa8wDwYDVR0TAQH/BAUwAwEB/zAKBggq
+
+            hkjOPQQDAgNHADBEAiAewLIz8qzefCeLQQukN20dQkpHiXELZtAfXlzwPTeawgIg
+
+            XoEu+Vj8BmFw9FcHW/c2/SmDI5xkfuoLVbU/KKBZoUM=
+
+            -----END CERTIFICATE-----
+
+            '
