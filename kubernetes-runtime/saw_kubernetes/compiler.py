@@ -69,11 +69,28 @@ def _claim(binding, workspace, mount_path, volume_name):
 
 
 def _storage(binding, workspace):
-    mapping(binding, {"workspace", "mounts", "resources", "browser"}, {"workspace"}, "sandbox binding")
+    mapping(binding, {"workspace", "mounts", "resources", "browser", "toolGate"}, {"workspace"}, "sandbox binding")
     volume, mount, reference = _claim(binding["workspace"], workspace, "/sandbox/workspace", "saw-workspace")
+    if reference["name"].startswith(("saw-gate-", "saw-audit-")):
+        raise ContractError("reserved tool PVC cannot be used as a workspace")
     if binding["workspace"]["readOnly"]:
         raise ContractError("/sandbox/workspace must be writable")
     volumes, mounts, refs = [volume], [mount], [reference]
+    if "toolGate" in binding:
+        gate = binding["toolGate"]
+        mapping(gate, {"trusted", "audit", "ownerLogin"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
+        name(gate["ownerLogin"], "toolGate ownerLogin", 63)
+        for field, volume_name, path, readonly in [
+            ("trusted", "saw-gate", "/sandbox/.saw/trusted", True),
+            ("audit", "saw-audit", "/sandbox/.saw/audit", False),
+        ]:
+            volume, mount, reference = _claim(gate[field], workspace, path, volume_name)
+            if not reference["name"].startswith(volume_name + "-") or mount["read_only"] != readonly:
+                raise ContractError(f"{field} requires the reserved claim prefix and mount mode")
+            mount["sub_path"] = "bundle" if readonly else "log"
+            volumes.append(volume)
+            mounts.append(mount)
+            refs.append(reference)
     extra = binding.get("mounts", [])
     if not isinstance(extra, list) or len(extra) > 16:
         raise ContractError("mounts must be a list of at most 16 additional PVCs")
@@ -93,6 +110,8 @@ def _storage(binding, workspace):
                 raise ContractError("overlapping mounts are not supported")
         claim = {k: v for k, v in item.items() if k != "mountPath"}
         volume, mount, reference = _claim(claim, workspace, path, f"data-{i}")
+        if reference["name"].startswith(("saw-gate-", "saw-audit-")):
+            raise ContractError("reserved tool PVC cannot be used as a data mount")
         if any(r["name"] == reference["name"] for r in refs):
             raise ContractError("one PVC cannot be attached through multiple bindings")
         volumes.append(volume); mounts.append(mount); refs.append(reference)
@@ -252,6 +271,18 @@ def compile_profile_files(files, config):
                 raise ContractError("browser settings require an OpenClaw sandbox")
             driver, refs = _storage(bindings[key], ws_name)
             all_refs.extend(refs)
+            if "toolGate" in bindings[key]:
+                if sandbox.type != "openclaw":
+                    raise ContractError("toolGate requires an OpenClaw sandbox")
+                login = bindings[key]["toolGate"]["ownerLogin"]
+                if browser and login != browser["ownerLogin"]:
+                    raise ContractError("browser and tool gate owners must match")
+                identity = shared.tool_gate_identity(login, config["ownerSubject"], ws_name, sandbox.name)
+                assets = Path(shared.__file__).parent
+                _, _, gate_digest, _ = shared.tool_gate_bundle(assets, identity)
+                script = Path(__file__).with_name("tool_gate_preflight.js").read_text()
+                command[2] = command[2].replace("const target = process.env.OPENCLAW_CONFIG_PATH;",
+                    script.replace("@SAW_GATE_DIGEST@", gate_digest) + "\nconst target = process.env.OPENCLAW_CONFIG_PATH;")
             if runtime:
                 driver["pod"] = {"runtime_class_name": runtime}
             spec = {"template": {"image": sandbox.image, "driver_config": {"kubernetes": driver}},

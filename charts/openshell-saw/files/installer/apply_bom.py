@@ -613,16 +613,7 @@ TRUSTED_PROXY_SCOPES = ["operator.read", "operator.write", "operator.approvals",
 # ---------------------------------------------------------------------------
 
 
-def tree_digest(files):
-    """Shared contract: sha256 over sorted "<relpath>\\0<sha256_hex>\\n" lines.
-
-    `files` maps a POSIX relative path to file bytes. Helm computes the same
-    value at render time; templates/configmap-bom.yaml must agree.
-    """
-    digest = hashlib.sha256()
-    for rel in sorted(files):
-        digest.update(f"{rel}\x00{hashlib.sha256(files[rel]).hexdigest()}\n".encode())
-    return "sha256:" + digest.hexdigest()
+tree_digest = _saw_core.tree_digest
 
 
 # -- Harness bundles ---------------------------------------------------------
@@ -2647,29 +2638,6 @@ def ws_args(name):
     return [] if name == "default" else ["--workspace", name]
 
 
-_TOOL_GATE_PACKAGE = """\
-{
-  "name": "saw-tool-gate",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "openclaw": {
-    "extensions": ["./index.js"],
-    "runtimeExtensions": ["./index.js"]
-  }
-}
-"""
-
-_TOOL_GATE_MANIFEST = """\
-{
-  "id": "saw-tool-gate",
-  "name": "SAW tool gate",
-  "description": "Audit every tool call with the signed-in user and current task, and require approval before consequential tools run.",
-  "activation": {"onStartup": true},
-  "configSchema": {"type": "object", "additionalProperties": false}
-}
-"""
-
 # CJS so `node -e` can update OpenClaw's writable configuration. All trusted
 # code, policy and identity are already on the read-only volume.
 _TOOL_GATE_CONFIG = """\
@@ -3576,37 +3544,10 @@ class ProfileApplier:
     def tool_gate_identity(self, ws, sb):
         dashboard = self.cfg.get("dashboard") or {}
         owner = dashboard.get("owner") if isinstance(dashboard, dict) else ""
-        subject = self.cfg.get("ownerSubject") or ""
-        if not isinstance(owner, str) or not owner.strip():
-            raise InstallerError(f"sandbox '{sb.name}': dashboard.owner is required for the tool gate")
-        if not isinstance(subject, str) or not subject.strip():
-            raise InstallerError(f"sandbox '{sb.name}': ownerSubject is required for the tool gate")
-        return {"username": owner, "subject": subject,
-                "sandbox": sb.name, "workspace": ws.name}
+        return _saw_core.tool_gate_identity(owner, self.cfg.get("ownerSubject"), ws.name, sb.name)
 
     def tool_gate_bundle(self, ws, sb):
-        """Derive the trusted tree and expected digest without mutating a volume."""
-        identity = self.tool_gate_identity(ws, sb)
-        here = Path(__file__).resolve().parent
-        names = ("tool-actions.yaml", "tool-gate.mjs", "tool-gate-plugin.mjs")
-        missing = [name for name in names if not (here / name).is_file()]
-        if missing:
-            raise InstallerError("tool gate files missing from the installer disk: " + ", ".join(missing))
-        policy = (here / "tool-actions.yaml").read_bytes()
-        policy_hash = "sha256:" + hashlib.sha256(policy).hexdigest()
-        plugin = (here / "tool-gate-plugin.mjs").read_bytes().replace(
-            b"__SAW_POLICY_HASH__", policy_hash.encode())
-        tree = {
-            "tool-actions.yaml": (policy, False),
-            "identity.json": ((json.dumps(identity, sort_keys=True) + "\n").encode(), False),
-            "plugin/package.json": (_TOOL_GATE_PACKAGE.encode(), False),
-            "plugin/openclaw.plugin.json": (_TOOL_GATE_MANIFEST.encode(), False),
-            "plugin/index.js": (plugin, False),
-            "plugin/tool-gate.mjs": ((here / "tool-gate.mjs").read_bytes(), False),
-        }
-        digest = harness_tree_digest(tree)
-        source = f"gate:{digest}"
-        return tree, source, digest, policy_hash
+        return _saw_core.tool_gate_bundle(Path(__file__).resolve().parent, self.tool_gate_identity(ws, sb))
 
     def prepare_tool_gate(self, ws, sb):
         """Fill trusted plugin, policy and identity from the host, before create."""

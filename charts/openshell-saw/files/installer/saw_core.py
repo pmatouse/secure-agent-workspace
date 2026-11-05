@@ -12,6 +12,8 @@ Do not maintain a second copy or import this module from untrusted input paths.
 """
 
 import base64
+import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -831,3 +833,71 @@ __all__ = (
     'inference_protocol', 'sandbox_inference_problems', 'harness_from_plan', 'profiles_from_plan',
     'validate_profile_document', 'apply_workspace_sequence',
 )
+
+
+def tree_digest(files):
+    """Shared contract: sha256 over sorted "<relpath>\\0<sha256_hex>\\n" lines.
+
+    `files` maps a POSIX relative path to file bytes. Helm computes the same
+    value at render time; templates/configmap-bom.yaml must agree.
+    """
+    digest = hashlib.sha256()
+    for rel in sorted(files):
+        digest.update(f"{rel}\x00{hashlib.sha256(files[rel]).hexdigest()}\n".encode())
+    return "sha256:" + digest.hexdigest()
+
+
+_TOOL_GATE_PACKAGE = """\
+{
+  "name": "saw-tool-gate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.js"],
+    "runtimeExtensions": ["./index.js"]
+  }
+}
+"""
+
+_TOOL_GATE_MANIFEST = """\
+{
+  "id": "saw-tool-gate",
+  "name": "SAW tool gate",
+  "description": "Audit every tool call with the signed-in user and current task, and require approval before consequential tools run.",
+  "activation": {"onStartup": true},
+  "configSchema": {"type": "object", "additionalProperties": false}
+}
+"""
+
+
+def tool_gate_identity(owner, subject, workspace, sandbox):
+    if not isinstance(owner, str) or not owner.strip():
+        raise InstallerError(f"sandbox '{sandbox}': dashboard.owner is required for the tool gate")
+    if not isinstance(subject, str) or not subject.strip():
+        raise InstallerError(f"sandbox '{sandbox}': ownerSubject is required for the tool gate")
+    return {"username": owner, "subject": subject,
+            "sandbox": sandbox, "workspace": workspace}
+
+
+def tool_gate_bundle(here, identity):
+    """Build the identical policy, identity and OpenClaw extension for both runtimes."""
+    names = ("tool-actions.yaml", "tool-gate.mjs", "tool-gate-plugin.mjs")
+    missing = [name for name in names if not (here / name).is_file()]
+    if missing:
+        raise InstallerError("tool gate files missing from the installer disk: " + ", ".join(missing))
+    policy = (here / "tool-actions.yaml").read_bytes()
+    policy_hash = "sha256:" + hashlib.sha256(policy).hexdigest()
+    plugin = (here / "tool-gate-plugin.mjs").read_bytes().replace(
+        b"__SAW_POLICY_HASH__", policy_hash.encode())
+    tree = {
+        "tool-actions.yaml": (policy, False),
+        "identity.json": ((json.dumps(identity, sort_keys=True) + "\n").encode(), False),
+        "plugin/package.json": (_TOOL_GATE_PACKAGE.encode(), False),
+        "plugin/openclaw.plugin.json": (_TOOL_GATE_MANIFEST.encode(), False),
+        "plugin/index.js": (plugin, False),
+        "plugin/tool-gate.mjs": ((here / "tool-gate.mjs").read_bytes(), False),
+    }
+    digest = tree_digest({key: data for key, (data, _) in tree.items()})
+    source = f"gate:{digest}"
+    return tree, source, digest, policy_hash

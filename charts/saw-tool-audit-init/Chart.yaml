@@ -1,0 +1,4 @@
+apiVersion: v2
+name: saw-tool-audit-init
+version: 0.1.0
+description: Seal one retained tool audit log before an OpenShell workspace starts

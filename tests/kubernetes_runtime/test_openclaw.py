@@ -85,3 +85,24 @@ def test_browser_policy_is_bound_to_one_owner_and_exact_https_origin(source):
     binding["browser"]["origin"] = "https://*.example.com"
     with pytest.raises(ContractError):
         compile_profile(*source)
+
+
+def test_tool_gate_uses_shared_identity_policy_and_exact_mounts(source):
+    from saw_kubernetes.gate import projection
+    agent(source)
+    binding = source[1]["bindings"]["default/toolbox"]
+    binding["toolGate"] = {
+        "ownerLogin": "alice",
+        "trusted": {"claimName": "saw-gate-test", "uid": "gate-uid", "readOnly": True},
+        "audit": {"claimName": "saw-audit-test", "uid": "audit-uid", "readOnly": False},
+    }
+    plan = compile_profile(*source)
+    spec = plan["workspaces"][0]["sandboxes"][0]["spec"]
+    cm, _ = projection(source[1]["namespace"], "alice", source[1]["ownerSubject"], "default", "toolbox")
+    assert cm["metadata"]["annotations"]["saw.redhat.com/tool-gate-sha256"] in spec["command"][2]
+    mounts = spec["template"]["driver_config"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
+    assert [(m["mount_path"], m["read_only"]) for m in mounts[1:]] == [
+        ("/sandbox/.saw/trusted", True), ("/sandbox/.saw/audit", False)]
+    binding["toolGate"]["trusted"]["readOnly"] = False
+    with pytest.raises(ContractError, match="mount mode"):
+        compile_profile(*source)

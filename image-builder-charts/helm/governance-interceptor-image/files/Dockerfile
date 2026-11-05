@@ -131,24 +131,35 @@ RUN printf '%s\n' \
 '        let Some(values) = values.as_object() else { return false; };' \
 '        if values.iter().any(|(k,v)| !["cpu", "memory", "ephemeral-storage"].contains(&k.as_str()) || !k8s_quantity(v)) { return false; }' \
 '    }' \
-'    if volumes.is_empty() || volumes.len() > 17 || volumes.len() != mounts.len() { return false; }' \
+'    let gate = mounts.get(1).and_then(|m| m.get("name")).and_then(Value::as_str) == Some("saw-gate");' \
+'    let reserved = if gate { 3 } else { 1 };' \
+'    if volumes.len() < reserved || volumes.len() > reserved + 16 || volumes.len() != mounts.len() { return false; }' \
 '    let mut paths: Vec<String> = Vec::new();' \
 '    let mut claims: Vec<String> = Vec::new();' \
 '    for (index, (volume, mount)) in volumes.iter().zip(mounts.iter()).enumerate() {' \
 '        let Some(v) = volume.as_object() else { return false; };' \
 '        let Some(m) = mount.as_object() else { return false; };' \
-'        let name = if index == 0 { "saw-workspace".to_string() } else { format!("data-{}", index-1) };' \
-'        if v.len() != 2 || m.len() != 3 || v.get("name").and_then(Value::as_str) != Some(name.as_str())' \
+'        let name = match (index, gate) {' \
+'            (0, _) => "saw-workspace".into(), (1, true) => "saw-gate".into(), (2, true) => "saw-audit".into(),' \
+'            _ => format!("data-{}", index-reserved),' \
+'        };' \
+'        let reserved_mount = gate && (index == 1 || index == 2);' \
+'        if v.len() != 2 || m.len() != (if reserved_mount { 4 } else { 3 }) || v.get("name").and_then(Value::as_str) != Some(name.as_str())' \
 '            || m.get("name").and_then(Value::as_str) != Some(name.as_str()) { return false; }' \
 '        let Some(pvc) = v.get("persistent_volume_claim").and_then(Value::as_object) else { return false; };' \
 '        if pvc.len() != 2 { return false; }' \
 '        let Some(claim) = pvc.get("claim_name").and_then(Value::as_str) else { return false; };' \
 '        let Some(read_only) = pvc.get("read_only").and_then(Value::as_bool) else { return false; };' \
-'        if !k8s_name(claim) || claims.iter().any(|c| c == claim)' \
+'        if (!reserved_mount && (claim.starts_with("saw-gate-") || claim.starts_with("saw-audit-")))' \
+'            || !k8s_name(claim) || claims.iter().any(|c| c == claim)' \
 '            || m.get("read_only").and_then(Value::as_bool) != Some(read_only) { return false; }' \
 '        let Some(path) = m.get("mount_path").and_then(Value::as_str) else { return false; };' \
 '        if index == 0 {' \
 '            if path != "/sandbox/workspace" || read_only { return false; }' \
+'        } else if gate && index == 1 {' \
+'            if m.get("sub_path").and_then(Value::as_str) != Some("bundle") || path != "/sandbox/.saw/trusted" || !read_only || !claim.starts_with("saw-gate-") { return false; }' \
+'        } else if gate && index == 2 {' \
+'            if m.get("sub_path").and_then(Value::as_str) != Some("log") || path != "/sandbox/.saw/audit" || read_only || !claim.starts_with("saw-audit-") { return false; }' \
 '        } else if !(path == "/data" || path.starts_with("/data/"))' \
 '            || path[1..].split("/").any(|p| p.is_empty() || p == "." || p == "..")' \
 '            || path.chars().any(|c| c.is_control()) { return false; }' \
@@ -270,6 +281,29 @@ RUN printf '%s\n' \
 '            "volumes":[{"name":"saw-workspace","persistent_volume_claim":{"claim_name":"alice-workspace","read_only":false}}],' \
 '            "containers":{"agent":{"volume_mounts":[{"name":"saw-workspace","mount_path":"/sandbox/workspace","read_only":false}],"resources":{"requests":{"cpu":"250m","memory":"512Mi"}}}}' \
 '        }})' \
+'    }' \
+'    #[test]' \
+'    fn kubernetes_tool_gate_requires_fixed_pair_and_admin() {' \
+'        let mut config = k8s();' \
+'        let driver = &mut config["kubernetes"];' \
+'        for (name, sub, path, ro) in [("saw-gate","bundle","/sandbox/.saw/trusted",true),' \
+'                                      ("saw-audit","log","/sandbox/.saw/audit",false)] {' \
+'            driver["volumes"].as_array_mut().unwrap().push(json!({"name":name,"persistent_volume_claim":{"claim_name":format!("{name}-test"),"read_only":ro}}));' \
+'            driver["containers"]["agent"]["volume_mounts"].as_array_mut().unwrap().push(json!({"name":name,"mount_path":path,"sub_path":sub,"read_only":ro}));' \
+'        }' \
+'        assert!(validate_driver_config(Some(&config), &admin()).allowed);' \
+'        for (pointer, value) in [' \
+'            ("/kubernetes/containers/agent/volume_mounts/1/sub_path",json!("..")),' \
+'            ("/kubernetes/containers/agent/volume_mounts/2/mount_path",json!("/etc")),' \
+'            ("/kubernetes/volumes/2/persistent_volume_claim/claim_name",json!("workspace")),' \
+'        ] {' \
+'            let mut bad = config.clone();' \
+'            *bad.pointer_mut(pointer).unwrap() = value;' \
+'            assert!(!validate_driver_config(Some(&bad), &admin()).allowed);' \
+'        }' \
+'        config["kubernetes"]["volumes"][1]["persistent_volume_claim"]["read_only"] = json!(false);' \
+'        config["kubernetes"]["containers"]["agent"]["volume_mounts"][1]["read_only"] = json!(false);' \
+'        assert!(!validate_driver_config(Some(&config), &admin()).allowed);' \
 '    }' \
 '    #[test]' \
 '    fn kubernetes_requires_admin_and_allows_only_pvc_shape() {' \

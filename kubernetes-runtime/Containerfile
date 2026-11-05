@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir grpcio==1.80.0 protobuf==6.33.5 PyYAML==6.0.3
 WORKDIR /opt/saw
 COPY --from=generate /build/python/openshell/_proto /opt/saw/sdk/openshell/_proto
 COPY charts/openshell-saw/files/installer/saw_core.py charts/openshell-saw/files/installer/saw_core.py
+COPY charts/openshell-saw/files/installer/tool-actions.yaml charts/openshell-saw/files/installer/tool-gate.mjs charts/openshell-saw/files/installer/tool-gate-plugin.mjs charts/openshell-saw/files/installer/
 COPY kubernetes-runtime/saw_kubernetes kubernetes-runtime/saw_kubernetes
 ENV PYTHONPATH=/opt/saw/kubernetes-runtime:/opt/saw/sdk PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN python3 -c 'from openshell._proto import openshell_pb2_grpc; from saw_kubernetes import serve'

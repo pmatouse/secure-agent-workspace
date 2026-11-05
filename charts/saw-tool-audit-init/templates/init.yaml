@@ -1,0 +1,107 @@
+{{- if .Values.enabled }}
+{{- $claim := required "auditClaim is required" .Values.auditClaim }}
+{{- $image := required "image is required" .Values.image }}
+{{- if not (regexMatch "^saw-audit-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $claim) }}{{ fail "invalid reserved audit claim" }}{{ end }}
+{{- if not (regexMatch "^[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}$" $image) }}{{ fail "digest-pinned SAW controller image required" }}{{ end }}
+{{- $ns := .Release.Namespace }}
+{{- $id := printf "saw-audit-init-%s" (printf "%s/%s/%s" $ns $claim $image | sha256sum | trunc 16) }}
+{{- $command := list "python3" "-m" "saw_kubernetes.prepare_audit" "/volume/log" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $id }}
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+automountServiceAccountToken: false
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: {{ $id }}
+  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+requiredDropCapabilities: [ALL]
+allowedCapabilities: [LINUX_IMMUTABLE]
+runAsUser: {type: MustRunAsRange}
+seLinuxContext: {type: MustRunAs}
+fsGroup: {type: MustRunAs}
+supplementalGroups: {type: MustRunAs}
+seccompProfiles: [runtime/default]
+volumes: [persistentVolumeClaim]
+users: [{{ printf "system:serviceaccount:%s:%s" $ns $id | quote }}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $id }}
+  annotations: {argocd.argoproj.io/sync-wave: "-3"}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $ns | quote }}}}
+    resourceRules:
+      - {apiGroups: [""], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [pods, pods/ephemeralcontainers]}
+  matchConditions:
+    - name: sealer
+      expression: has(object.spec.serviceAccountName) && object.spec.serviceAccountName == {{ $id | quote }}
+  validations:
+    - expression: >-
+        request.operation != 'CREATE' || (request.userInfo.username in ['system:serviceaccount:kube-system:job-controller','system:kube-controller-manager']
+        && object.metadata.ownerReferences.size() == 1 && object.metadata.ownerReferences[0].kind == 'Job'
+        && object.metadata.ownerReferences[0].name == {{ $id | quote }})
+      message: Only the named batch Job may start this audit preparer.
+    - expression: >-
+        has(object.spec.automountServiceAccountToken) && !object.spec.automountServiceAccountToken
+        && (!has(object.spec.initContainers) || object.spec.initContainers.size() == 0)
+        && (!has(object.spec.ephemeralContainers) || object.spec.ephemeralContainers.size() == 0)
+        && object.spec.volumes.size() == 1 && has(object.spec.volumes[0].persistentVolumeClaim)
+        && object.spec.volumes[0].persistentVolumeClaim.claimName == {{ $claim | quote }}
+        && object.spec.containers.size() == 1 && object.spec.containers.all(c,
+          c.image == {{ $image | quote }} && c.command == {{ $command | toJson }}
+          && (!has(c.args) || c.args.size() == 0) && (!has(c.env) || c.env.size() == 0)
+          && (!has(c.envFrom) || c.envFrom.size() == 0) && !has(c.lifecycle)
+          && !has(c.livenessProbe) && !has(c.readinessProbe) && !has(c.startupProbe)
+          && !has(c.workingDir) && c.volumeMounts.size() == 1
+          && c.volumeMounts[0].name == 'audit' && c.volumeMounts[0].mountPath == '/volume'
+          && !has(c.volumeMounts[0].subPath) && !has(c.volumeMounts[0].subPathExpr))
+      message: The preparer may run only the pinned sealing command against its dedicated audit claim.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $id }}
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  policyName: {{ $id }}
+  validationActions: [Deny]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $id }}
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      serviceAccountName: {{ $id }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: seal
+          image: {{ $image }}
+          command: {{ $command | toJson }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL], add: [LINUX_IMMUTABLE]}
+          volumeMounts: [{name: audit, mountPath: /volume}]
+      volumes:
+        - name: audit
+          persistentVolumeClaim: {claimName: {{ $claim | quote }}}
+{{- end }}

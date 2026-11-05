@@ -1627,3 +1627,22 @@ version changed, update the source lock and revalidate the listed implementation
 assumptions first. Then execute reuse gate B0, B1–B6, C1–C2 and D1–D2 with their
 gates; E remains optional. Leave a per-gate pass/fail/not-run receipt and the exact next action for
 another model, harness or human operator.
+
+### Shared tool gate and OpenShift qualification
+
+Both adapters now build the six trusted files with `saw_core.tool_gate_bundle`.
+That function binds the owner subject, workspace, sandbox and policy hash to
+the same OpenClaw extension shipped by the VM. The Podman adapter imports the
+tree into its named volume. The Kubernetes adapter can publish it to a dedicated
+PVC and pin its digest in the sandbox launch command. The policy and audit paths
+are the same in both runtimes. The storage preparation, scope of its single
+Linux capability, and outstanding dispatch checks are described in
+[the audit preparation chart](../charts/saw-tool-audit-init/README.md).
+
+`kubernetes-runtime/qualify-tool-gate.py` renders a credential-free, network-isolated
+GitOps Job. It loads the plugin with the stock OpenClaw CLI, checks the immutable
+mount, exercises the registered module and checks the four audit decisions.
+Its scratch log covers the plugin interface only. Acceptance of the production
+workspace also requires a real tool invocation, authenticated approval and an
+append-only record that survives workspace replacement. Portal create/update/delete
+and the UEFI worker prerequisite have separate acceptance gates.
