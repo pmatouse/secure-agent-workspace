@@ -19,7 +19,8 @@ const pub = createPublicKey(signer).export({type:'spki',format:'der'}).toString(
 console.log('receipt-public-key=' + pub);
 const insert = db.prepare('INSERT OR IGNORE INTO records(id, body) VALUES (?, ?)');
 const lookup = db.prepare('SELECT body FROM records WHERE id=?');
-const server = https.createServer({cert:fs.readFileSync('/tls/tls.crt'), key:fs.readFileSync('/tls/tls.key')}, async (req,res) => {
+const tls = () => ({cert:fs.readFileSync('/tls/tls.crt'), key:fs.readFileSync('/tls/tls.key')});
+const server = https.createServer(tls(), async (req,res) => {
   const reply = (status,text='') => {res.writeHead(status);res.end(text);};
   const match = /^\/v1\/records\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.exec(req.url);
   if (!match || req.method !== 'POST') return reply(404);
@@ -47,3 +48,8 @@ const server = https.createServer({cert:fs.readFileSync('/tls/tls.crt'), key:fs.
 });
 server.requestTimeout=10000;
 server.listen(8443,'0.0.0.0');
+
+// OpenShift rotates the projected certificate while the history claim stays mounted.
+setInterval(() => {
+  try {server.setSecureContext(tls());} catch {console.error("cannot reload serving certificate");}
+}, 60000).unref();

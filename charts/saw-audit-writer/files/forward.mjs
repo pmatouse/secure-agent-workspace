@@ -5,11 +5,10 @@ import {setTimeout as sleep} from 'node:timers/promises';
 
 const dir='/exchange/log';
 fs.mkdirSync(dir,{recursive:true,mode:0o700});
-const ca=fs.readFileSync('/trust/service-ca.crt');
 function request(id, body) {
   return new Promise((resolve,reject) => {
     const req=https.request(new URL('/v1/records/'+id,process.env.WRITER_URL),
-      {method:'POST',ca,timeout:3000,headers:{'content-length':body.length}}, res=>{
+      {method:'POST',ca:fs.readFileSync('/trust/service-ca.crt'),timeout:3000,headers:{'content-length':body.length}}, res=>{
         let value='';
         res.setEncoding('utf8');
         res.on('data', chunk => {value+=chunk; if(value.length>128) res.destroy(new Error('oversize receipt'));});
