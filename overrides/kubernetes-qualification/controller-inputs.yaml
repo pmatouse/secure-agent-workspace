@@ -1,10 +1,14 @@
 apiVersion: image.openshift.io/v1
 kind: ImageStream
-metadata: {name: saw-runtime-controller, namespace: saw-k8s-build}
+metadata:
+  name: saw-runtime-controller
+  namespace: saw-k8s-build
 ---
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
-metadata: {name: saw-runtime-controller-a5d65cb, namespace: saw-k8s-build}
+metadata:
+  name: saw-runtime-controller-a5d65cb
+  namespace: saw-k8s-build
 spec:
   source:
     type: Git
@@ -13,79 +17,88 @@ spec:
       ref: a5d65cbaa75b6bf1e00b704424707e42a2d8a942
   strategy:
     type: Docker
-    dockerStrategy: {dockerfilePath: kubernetes-runtime/Containerfile}
+    dockerStrategy:
+      dockerfilePath: kubernetes-runtime/Containerfile
   output:
-    to: {kind: ImageStreamTag, name: saw-runtime-controller:a5d65cbaa75b}
-  triggers: [{type: ConfigChange}]
+    to:
+      kind: ImageStreamTag
+      name: saw-runtime-controller:a5d65cbaa75b
+  triggers:
+  - type: ConfigChange
 ---
 apiVersion: v1
 kind: ConfigMap
-metadata: {name: toolbox-profile, namespace: saw-k8s-test}
+metadata:
+  name: toolbox-profile
+  namespace: saw-k8s-test
 data:
-  profiles__input__toolbox__workspace.yaml: |
-    apiVersion: saw.redhat.com/v1alpha1
+  profiles__input__toolbox__workspace.yaml: 'apiVersion: saw.redhat.com/v1alpha1
+
     kind: Workspace
+
     metadata: {name: toolbox}
-  profiles__input__toolbox__providers.yaml: |
-    apiVersion: saw.redhat.com/v1alpha1
+
+    '
+  profiles__input__toolbox__providers.yaml: 'apiVersion: saw.redhat.com/v1alpha1
+
     kind: Providers
+
     spec: {providers: []}
-  profiles__input__toolbox__sandbox.yaml: |
-    apiVersion: saw.redhat.com/v1alpha1
-    kind: Sandboxes
-    spec:
-      sandboxes:
-        - name: shell
-          type: generic
-          image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
-          providers: []
-  profiles__input__agent__workspace.yaml: |
-    apiVersion: saw.redhat.com/v1alpha1
+
+    '
+  profiles__input__toolbox__sandbox.yaml: "apiVersion: saw.redhat.com/v1alpha1\nkind:\
+    \ Sandboxes\nspec:\n  sandboxes:\n    - name: shell\n      type: generic\n   \
+    \   image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5\n\
+    \      providers: []\n"
+  profiles__input__agent__workspace.yaml: 'apiVersion: saw.redhat.com/v1alpha1
+
     kind: Workspace
+
     metadata: {name: agent}
-  profiles__input__agent__providers.yaml: |
-    apiVersion: saw.redhat.com/v1alpha1
-    kind: Providers
-    spec:
-      providers:
-        - {name: openai, type: openai, credentialSecret: inference, credentialSecretKey: api_key}
-  profiles__input__agent__sandbox.yaml: |
-    apiVersion: saw.redhat.com/v1alpha1
-    kind: Sandboxes
-    spec:
-      sandboxes:
-        - name: openclaw-ui
-          type: openclaw
-          image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15
-          providers: [openai]
-          inference:
-            providerRef: openai
-            protocol: openai
-            baseUrl: https://api.openai.com/v1
-            model: gpt-4.1-mini-2025-04-14
+
+    '
+  profiles__input__agent__providers.yaml: "apiVersion: saw.redhat.com/v1alpha1\nkind:\
+    \ Providers\nspec:\n  providers:\n    - {name: openai, type: openai, credentialSecret:\
+    \ inference, credentialSecretKey: api_key}\n"
+  profiles__input__agent__sandbox.yaml: "apiVersion: saw.redhat.com/v1alpha1\nkind:\
+    \ Sandboxes\nspec:\n  sandboxes:\n  - name: openclaw-ui\n    type: openclaw\n\
+    \    image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15\n\
+    \    providers: &id001\n    - openai\n    inference: &id002\n      providerRef:\
+    \ openai\n      protocol: openai\n      baseUrl: https://api.openai.com/v1\n \
+    \     model: gpt-4.1-mini-2025-04-14\n  - name: audited\n    type: openclaw\n\
+    \    image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15\n\
+    \    providers: *id001\n    inference: *id002\n"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: toolbox-workspace
   namespace: saw-k8s-test
-  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
   labels:
     saw.redhat.com/runtime-owner: d8ac361b-9898-4b16-ac35-2d15f86db76b
     openshell.ai/sandbox-attachable: 'true'
     openshell.ai/sandbox-attachable-workspace: toolbox
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes:
+  - ReadWriteOnce
   storageClassName: ocs-external-storagecluster-ceph-rbd
-  resources: {requests: {storage: 1Gi}}
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: controller-ledger
   namespace: saw-k8s-trusted
-  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes:
+  - ReadWriteOnce
   storageClassName: ocs-external-storagecluster-ceph-rbd
-  resources: {requests: {storage: 1Gi}}
+  resources:
+    requests:
+      storage: 1Gi
