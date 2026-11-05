@@ -1,0 +1,17 @@
+{{- /* One-time site migration. Pin exact existing namespace UIDs; never touch their claims. */ -}}
+{{- if and (eq .Values.owner "sawk8sowner") (eq .Values.global.clusterDomain "cluster-glmhg.dyn.redhatworkshops.io") }}
+{{- range $reg,$ids := dict "c8428d7ea7b13a9e" (list "b3f302c5-c6dc-4d47-a5c2-c2bc86200663" "bdeddc47-2615-58ab-b61b-bc72b5fd425f") "31c053e39421a114" (list "06470629-74ed-418a-b0c8-c331de85ac6c" "ba982463-9b1f-5f7a-aff5-512a89cb8901") }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saw-history-{{ $reg }}
+  uid: {{ index $ids 0 }}
+  labels:
+    saw.redhat.com/runtime-owner: {{ index $ids 1 }}
+    saw.redhat.com/registration: {{ $reg | quote }}
+    saw.redhat.com/portal-owner: sawk8sowner
+    pod-security.kubernetes.io/enforce: restricted
+  annotations: {argocd.argoproj.io/compare-options: IgnoreExtraneous, argocd.argoproj.io/sync-options: 'Prune=false,Delete=false', argocd.argoproj.io/sync-wave: "-2"}
+{{- end }}
+{{- end }}
