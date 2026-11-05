@@ -14,6 +14,47 @@ and teardown used the existing shared platform. The foundation manifests
 passed OpenShift server dry-run. First installation on an empty cluster is
 still an outstanding qualification. [Recovery record](../tests/acceptance/container-recovery-2026-11-05.json)
 
+**Clean reinstall on the same cluster:** the official uninstall and install
+both exited successfully. The replacement VMs passed owner inference, then
+all three container images built in a new namespace. A synthetic registration
+was denied enrollment before review. RHDH completed the subsequent real
+registration; the ordinary owner obtained a transcript-verified reply through
+its dedicated OpenShell gateway. All 30 Argo Applications were Synced and
+Healthy. [Clean install receipt](../tests/acceptance/container-clean-install-glmhg-2026-11-05.json)
+· [Deployed site values](https://github.com/pmatouse/secure-agent-workspace/tree/9db73c2cca6401d76498567ad4de0c05081b04e1/overrides)
+
+## Reusing a single test cluster
+
+A destructive SAW replay keeps OpenShift, its login and storage infrastructure
+running. Inventory all VMIs, SAW Applications, namespaces and retained claims
+first. Keep the private installer inputs on the bastion. Record old Pattern,
+workspace, governance and Agent Sandbox UIDs so the new installation can be
+distinguished from a restart. The SAW Keycloak realm is separate from RHDP SSO.
+
+1. Delete RHDH-created workspaces through the owner/admin portal and wait for
+   their Applications to disappear. An orphaned portal `saw-users` Application
+   can recreate its VM during uninstall and block HyperConverged deletion.
+2. Run `./pattern.sh make pattern-uninstall` using the original checkout and
+   cluster context. If the ApplicationSet has already disappeared, inspect any
+   remaining portal Application's owner, destination, source and UID before
+   requesting a normal Argo cascade. Allow Tekton Results to finish finalizing
+   old task runs.
+3. Verify the Pattern and all its Applications are absent. Check SAW's Vault,
+   Keycloak, RHDH, workspace, build and control namespaces. Older Argo
+   applications without cascade finalizers can leave workloads, cluster RBAC
+   and policies behind. Remove only verified SAW-owned leftovers. For a fresh
+   Agent Sandbox installation, verify zero Sandbox objects across **all**
+   namespaces before retiring the previously SAW-installed controller and CRD.
+   Retained audit namespaces can stay isolated from subsequent registrations.
+4. Start from a VM-only branch with an empty GitOps user list. Mirror the pinned
+   golden image into the new namespace and verify its digest. Install the
+   Pattern, wait for shared services, create the new realm users, then commit the
+   VM workspace definitions. Require guest install/apply completion and real
+   owner inference before proceeding with container enrollment.
+5. Build the three container images afresh, resolve the owner's new Keycloak
+   subject, and review the new boundary. A reused login name and cluster DNS
+   name do not preserve realm, Kubernetes object or image identities.
+
 ## 1. Establish the VM baseline
 
 On a new OpenShift 4.22+ cluster with functioning CNV/KVM, follow the
@@ -140,7 +181,10 @@ live network/admission conditions as enrollment; its output is a candidate
 until an administrator reviews it. Record the approved JSON in
 `overrides/container-reviewed-boundary.json`. Delete the staging registration
 through RHDH and wait for foreground cleanup before submitting a real key.
-The history namespace follows the normal retention policy.
+If the synthetic create PipelineRun is still waiting on the intentionally
+blocked enrollment, cancel that exact run before submitting a new registration;
+otherwise it can keep polling the same owner name. The history namespace
+follows the normal retention policy.
 
 ```bash
 python3 scripts/portal-container/render-site.py --inputs "$inputs" \
@@ -175,5 +219,6 @@ Expected results:
 2. The replacement reconciler writes the retained core ledger again. The probe checks its recorded OpenShell IDs, notebook and gateway Pod UIDs, enrollment UID and PVC UIDs before and after recovery.
 3. The ordinary owner reaches the running OpenClaw gateway and obtains a verified model response. Complete the RHDH create and delete tasks. Verify the runtime/control namespaces disappear and the expected history PVC remains Bound.
 
-A separate clean-cluster run is required to qualify operator installation,
-VM baseline creation and first-time activation of the shared dependencies.
+This replay qualified SAW reinstallation, new VM disks, container image builds
+and first-time registration on retained OpenShift infrastructure. Reprovisioning
+OpenShift, RHDP SSO or the storage backend is a different test.

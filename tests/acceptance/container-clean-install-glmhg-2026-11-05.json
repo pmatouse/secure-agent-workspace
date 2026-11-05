@@ -1,0 +1,174 @@
+{
+  "verifiedUTC": "2026-11-05T23:15:07.705943+00:00",
+  "cluster": "glmhg",
+  "openShift": "4.22.20",
+  "scope": "Official SAW uninstall/reinstall on the existing OpenShift cluster. RHDP SSO, storage, installed framework/shared services and operator/image caches persisted. No OpenShift reprovisioning.",
+  "cleanGate": {
+    "checkedAt": "2026-11-05T22:27:49.458729+00:00",
+    "originalPatternAbsent": true,
+    "originalWorkspaceAndPlatformNamespacesAbsent": [
+      "agent-sandbox-system",
+      "external-secrets",
+      "external-secrets-operator",
+      "imperative",
+      "openshell-agents",
+      "openshift-cnv",
+      "rhdh",
+      "rhdh-operator",
+      "saw-k8s-build",
+      "saw-k8s-test",
+      "saw-k8s-trusted",
+      "saw-keycloak",
+      "saw-portal",
+      "saw-runtime-smoke",
+      "saw-sawportalvm",
+      "saw-sawvmother",
+      "saw-sawvmowner",
+      "saw-ui-agent",
+      "vault"
+    ],
+    "originalGitOpsApplications": [],
+    "agentSandboxCRDAbsent": true,
+    "protectedHistoryNamespaces": [
+      "saw-history-10b70b63dd5f0601",
+      "saw-history-27e2a84c9ffa5b88",
+      "saw-history-31c053e39421a114",
+      "saw-history-938f556e0fce196d",
+      "saw-history-a393b0bca875f9d5",
+      "saw-history-c65fc17f4c52de1a",
+      "saw-history-c8428d7ea7b13a9e",
+      "saw-history-cd261895c7e8784b"
+    ]
+  },
+  "teardown": {
+    "uninstallExit": 0,
+    "oldPatternUID": "275ea199-8cd7-4d35-8cd4-4fa79e7666b2",
+    "exception": "Orphaned RHDH portal Application recreated its VM and blocked CNV removal. Normal Argo cascade of the verified orphan, followed by UID-checked cleanup of old qualification namespaces, unused dependency and cluster policies. No forced finalizer removal."
+  },
+  "installation": {
+    "installExit": 0,
+    "patternUID": "2d811a8c-7f87-47fe-87df-69b49d0da767",
+    "created": "2026-11-05T22:28:40Z",
+    "branch": "site/glmhg-clean-replay",
+    "bootstrapRevision": "fd41945ee494594207f6f05f77933e07858c55e8",
+    "approvedRevision": "9db73c2cca6401d76498567ad4de0c05081b04e1",
+    "utilityDigest": "sha256:cdac62c3746f65d69f05b71fd99a347f7dbdf345776c56d9a6893adb1e9aa040",
+    "goldenImage": "sha256:eaf603d12d763c7154c04fcb78b8cae8cebfc3bdf25a155c63adfa6f74e7d31d",
+    "vaultNamespaceUID": "f99548db-c2d7-4460-94f9-049b620a6f63",
+    "sawKeycloakUID": "87527c6c-159f-477f-a41b-2b22fc4c074b"
+  },
+  "vm": {
+    "workspaces": [
+      {
+        "name": "sawvmother",
+        "uid": "50f7e4f4-109d-4ef0-a39b-eed5b34e05ba",
+        "phase": "Running"
+      },
+      {
+        "name": "sawvmowner",
+        "uid": "db299bed-3365-474d-8377-ec594c04691e",
+        "phase": "Running"
+      }
+    ],
+    "owner": "sawvmowner",
+    "directInferenceSandboxes": [
+      "default/notebook",
+      "cuda-dev/cuda-sandbox"
+    ],
+    "undeclaredEgressBlocked": true,
+    "ownerOpenClaw": {
+      "ownerGatewayHealth": true,
+      "freshReplyMatched": true,
+      "provider": "openai",
+      "model": "gpt-4.1-mini"
+    }
+  },
+  "container": {
+    "foundationBuilds": [
+      {
+        "name": "governance-interceptor-fb158a7-1",
+        "phase": "Complete",
+        "digest": "sha256:296d988152c3fe443393878070b0a118348acb02069d5e2b760d37a2e523ef38"
+      },
+      {
+        "name": "saw-openclaw-home-1",
+        "phase": "Complete",
+        "digest": "sha256:1d51568cfe839646f6b93f25fb4352327c366e61b335206ff93a7806eb8beb59"
+      },
+      {
+        "name": "saw-runtime-controller-a4162df-1",
+        "phase": "Complete",
+        "digest": "sha256:3cfde35f995cd8276926973e8b6cc44247b349d86a7935b02e309acb01239300"
+      }
+    ],
+    "agentSandboxCRDUID": "9f4fc06a-92f7-4520-99de-eebf444dc547",
+    "agentSandboxControllerUID": "c21e7a98-39a0-46ec-9d32-f4b5209d8f05",
+    "newOwnerSubject": "351ae03c-0f64-402d-807b-687d1901e3dc",
+    "stagingRegistration": "7156e47be21c1858",
+    "stagingTask": "1f175701-34fb-4a7a-b141-709c167c9778",
+    "stagingDelete": "0005fb79-baf2-4767-bd39-b37887552a17",
+    "stagingOutcome": "Synthetic credential; immutable binding withheld; zero notebook Pods; waiting create PipelineRun cancelled and RHDH deletion completed.",
+    "boundaryChecks": 16,
+    "boundaryRecheckedOnRealRegistration": true,
+    "registration": "77c19106aea3bffd",
+    "realCreate": "c725fe12-4b4f-4fe7-bbf6-aa2b68fb4346",
+    "runtime": {
+      "inputRevision": "3d8703ce651bd33dc0a275297d44a6c0277a3130f6415204b52af75820f0fec1",
+      "observedGeneration": 1,
+      "phase": "GenericReady",
+      "reason": "CoreObserved",
+      "retryAfterSeconds": 30,
+      "schemaVersion": 1
+    },
+    "sandboxPodUID": "92cedcb9-5024-4a78-92af-d42550df8b3a",
+    "restrictedSCC": "restricted-v2",
+    "chat": {
+      "ownerGatewayHealth": true,
+      "freshReplyMatched": true,
+      "provider": "custom-inference",
+      "model": "gpt-4.1-mini",
+      "completion": {
+        "provider": "custom-inference",
+        "model": "gpt-4.1-mini",
+        "responseModel": "gpt-4.1-mini-2025-04-14",
+        "providerResponse": true
+      }
+    },
+    "brokerDenial": {
+      "clientCNIIngressTested": false,
+      "privateCASecretUID": "fb61193d-5a6a-4ca1-915e-5dbbcadd1f1e",
+      "publicCA_SHA256": "6ee2ced3ff58f7104ac39d2298c9d7d4e8dcc7baaab0877517022e78aaff7946",
+      "publicProjectionMatches": true,
+      "runtimeConfigMapUID": "1251c0a6-2560-45d5-8576-3065b7f401b1",
+      "unapprovedHostDenied": true
+    },
+    "brokerLog": "2026/11/05 23:13:44 method=POST host=api.openai.com path=\"/v1/chat/completions\" binding=inference status=200",
+    "auditPVCUID": "daf84c3d-0fce-42e5-8d96-1e8d308ee416",
+    "pipelines": [
+      {
+        "name": "saw-create-j7mcf",
+        "uid": "1fb4b79a-e14d-468f-aeb1-6bf059704f00",
+        "reason": "Cancelled",
+        "time": "2026-11-05T23:05:38Z"
+      },
+      {
+        "name": "saw-create-kh8jf",
+        "uid": "82119cb1-6d38-4411-aab1-61c279598ab6",
+        "reason": "Succeeded",
+        "time": "2026-11-05T23:12:46Z"
+      },
+      {
+        "name": "saw-delete-5c5jz",
+        "uid": "bf3fc7e6-0ba0-41cf-a799-81872047ab43",
+        "reason": "Succeeded",
+        "time": "2026-11-05T23:06:27Z"
+      }
+    ],
+    "leftRunning": true,
+    "rhdhCreateStatus": "completed"
+  },
+  "gitOps": {
+    "applicationCount": 30,
+    "unhealthy": []
+  }
+}

@@ -42,9 +42,11 @@ The assistant transcript identifies the provider and dated response model.
 A fresh owner on the existing 4.22 platform survived an interrupted enrollment
 Job and controller replacement. The ordinary owner received a transcript-verified
 model reply after recovery. The portable single-profile inputs reproduced all
-43 owner-chart objects for that registration. The shared prerequisite manifests
-passed server dry-run. A first installation of those prerequisites and the VM
-baseline together on an empty cluster still needs a separate run.
+43 owner-chart objects for that registration. A subsequent clean SAW reinstall on the same OpenShift cluster verified the VM
+baseline, fresh shared dependencies, three new image builds, first-time
+boundary review, RHDH provisioning and real owner chat. OpenShift and its
+RHDP storage/login infrastructure were retained.
+[Clean reinstall receipt](../tests/acceptance/container-clean-install-glmhg-2026-11-05.json)
 [Site inputs, commands and acceptance gates](container-site-replay.md)
 
 ### Live baseline receipt (2026-11-04)
