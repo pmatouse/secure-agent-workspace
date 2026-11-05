@@ -11,7 +11,7 @@ def main():
     ws, wid = os.environ["WORKSPACE"], os.environ["WORKSPACE_ID"]
     relay, owner = os.environ["SUBJECT"], os.environ["OWNER"]
     if (any(uuid.UUID(v).int == 0 for v in (relay, owner, os.environ["INSTALLATION"]))
-            or relay == owner or ws == "default"):
+            or relay == owner):
         raise ValueError("invalid relay scope")
     g = GrpcGateway(os.environ["ENDPOINT"], "/identity/ca.crt", "/identity/tls.crt", "/identity/tls.key")
     try:
@@ -22,12 +22,18 @@ def main():
             except RpcError as exc:
                 if exc.code not in ("NOT_FOUND","UNAVAILABLE") or attempt == 29: raise
                 time.sleep(2)
-        if not wid and os.environ.get("DISCOVER_ID")=="true" and meta.get("labels",{}).get("saw.redhat.com/managed-by")=="kubernetes-runtime":
+        # The built-in workspace is created by this registration's dedicated
+        # gateway. Its mTLS CA, active workspace UUID and owner membership
+        # anchor the binding; custom workspaces also carry installer labels.
+        builtin = ws == "default" and os.environ.get("DISCOVER_ID")=="true" and not meta.get("labels")
+        managed = (meta.get("labels",{}).get("saw.redhat.com/managed-by")=="kubernetes-runtime" and
+                   meta.get("labels",{}).get("saw.redhat.com/runtime-owner")==os.environ["INSTALLATION"])
+        if not wid and os.environ.get("DISCOVER_ID")=="true" and (managed or builtin):
             wid=meta["id"]
         if not wid or uuid.UUID(wid).int==0:
             raise ValueError("invalid workspace ID")
         if (meta["id"] != wid or meta["name"] != ws or meta.get("deletion_time") or
-                meta["labels"].get("saw.redhat.com/runtime-owner") != os.environ["INSTALLATION"]):
+                not (managed or builtin)):
             raise ValueError("workspace identity mismatch")
         scope = {"workspace_scope":{"workspace":ws}}
         def members():
@@ -40,6 +46,8 @@ def main():
                 if not page:
                     return result
         roles = members()
+        if builtin and set(roles) - {owner,relay}:
+            raise ValueError("unexpected membership in dedicated default workspace")
         if roles.get(owner) != "WORKSPACE_ROLE_ADMIN":
             raise ValueError("owner mismatch")
         if relay not in roles:

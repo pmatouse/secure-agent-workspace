@@ -189,7 +189,7 @@ allowlist into both forms without enabling privileged form parameters. */}}
 {{- range $case := $step.dependencies.profile.oneOf -}}{{- if ne $case.properties.profile.const "audited-openclaw" -}}{{- $cases = append $cases $case -}}{{- end -}}{{- end -}}
 {{- $_ := set $step.dependencies.profile "oneOf" $cases -}}
 {{- end -}}
-{{- $labels := dict "vm" "Virtual machine" "container" "Container (audited OpenClaw)" "kata" "Kata (not yet available)" -}}
+{{- $labels := dict "vm" "Virtual machine" "container" "Container" "kata" "Kata (not yet available)" -}}
 {{- $names := list -}}
 {{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}

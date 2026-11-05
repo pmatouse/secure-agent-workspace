@@ -122,9 +122,12 @@ def main():
             or set(c.get("realm_access",{}).get("roles",[])) != {"openshell-user"} or c.get("resource_access")):
         raise RuntimeError("unexpected relay token scope")
     if public_ns := os.environ.get("PUBLIC_SUBJECT_NAMESPACE"):
-        if not __import__("re").fullmatch("saw-ctl-[a-f0-9]{16}",public_ns) or cid != "saw-portal-"+public_ns[8:]:
+        name=os.environ.get("PUBLIC_SUBJECT_MAP","saw-portal-relay-subject")
+        suffix=cid.removeprefix("saw-portal-")
+        permitted=(name=="saw-portal-relay-subject" and suffix==public_ns[8:]) or name=="saw-portal-relay-"+suffix
+        if not __import__("re").fullmatch("saw-ctl-[a-f0-9]{16}",public_ns) or not __import__("re").fullmatch("saw-portal-[a-f0-9]{16}",cid) or not permitted:
             raise RuntimeError("invalid registration identity")
-        path="https://kubernetes.default.svc/api/v1/namespaces/"+public_ns+"/configmaps/saw-portal-relay-subject"
+        path="https://kubernetes.default.svc/api/v1/namespaces/"+public_ns+"/configmaps/"+name
         opts=dict(token=(sa/"token").read_text(),ca=str(sa/"ca.crt"))
         cm=api(path,**opts)
         if cm["metadata"]["labels"].get("saw.redhat.com/runtime-owner")!=os.environ["INSTALLATION"] or cm.get("data",{}).get("subject",sub)!=sub:

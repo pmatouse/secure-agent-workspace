@@ -36,7 +36,7 @@ data:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata: {name: {{ $n }}-public-subject, namespace: {{ $v.trustedNamespace }}}
-rules: [{apiGroups: [""], resources: [configmaps], resourceNames: [saw-portal-relay-subject], verbs: [get, patch]}]
+rules: [{apiGroups: [""], resources: [configmaps], resourceNames: [{{ $v.publicSubjectMap | default "saw-portal-relay-subject" }}], verbs: [get, patch]}]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -80,6 +80,7 @@ spec:
         - {name: REGISTRATION, value: {{ $v.cleanupRegistration | quote }}}
         {{- end }}
         {{- if and $v.publishSubject (eq $action "create") }}
+        - {name: PUBLIC_SUBJECT_MAP, value: {{ $v.publicSubjectMap | default "saw-portal-relay-subject" }}}
         - {name: PUBLIC_SUBJECT_NAMESPACE, value: {{ $v.trustedNamespace }}}
         {{- end }}
         - {name: UI_NAMESPACE, value: {{ $ui }}}

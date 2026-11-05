@@ -27,6 +27,8 @@ def main():
     p.add_argument("--origin", required=True)
     p.add_argument("--issuer", required=True)
     p.add_argument("--user", required=True)
+    p.add_argument("--profile",default="audited-openclaw")
+    p.add_argument("--model",action="append",default=[],metavar="FIELD=MODEL")
     p.add_argument("--key-file", type=Path)
     p.add_argument("--task")
     p.add_argument("--wait", type=int, default=0, help="poll a status task with the same authenticated session")
@@ -89,11 +91,16 @@ def main():
         data["values"].update(workspace="component:default/saw-"+a.user, confirm=True)
     else:
         props = entity["spec"]["parameters"][-1]["properties"]
-        if "container" not in props.get("deploymentMode", {}).get("enum", []) or "audited-openclaw" not in props["profile"]["enum"]:
+        if "container" not in props.get("deploymentMode", {}).get("enum", []) or a.profile not in props["profile"]["enum"]:
             raise RuntimeError("installed owner template does not offer the requested container profile")
         # The browser places a redacted value in form data to satisfy JSON
         # Schema. Only the separate secrets map carries the credential.
-        data["values"].update(profile="audited-openclaw",deploymentMode="container",inference__api_key="********")
+        data["values"].update(profile=a.profile,deploymentMode="container",inference__api_key="********")
+        for assignment in a.model:
+            field,sep,value=assignment.partition("=")
+            if not sep or not re.fullmatch(r"inference__[a-z_]*model",field) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value):
+                p.error("expected an inference model field and model ID")
+            data["values"][field]=value
         if not a.key_file:
             raise ValueError("private --key-file required")
         data["secrets"]["inference__api_key"] = a.key_file.read_text().strip()

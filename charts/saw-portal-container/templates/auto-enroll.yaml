@@ -3,6 +3,8 @@
 {{- if or (not (regexMatch "^.+@sha256:[a-f0-9]{64}$" $a.image)) (not (regexMatch "^[a-f0-9]{40}$" $a.revision)) (ne (len $a.reference) 16) }}{{ fail "automatic enrollment requires pinned code and a reviewed boundary" }}{{- end }}
 {{- $r := .Values.registration }}{{- $g := .Values.owner }}{{- $n := .Release.Namespace }}
 {{- $t := printf "saw-ctl-%s" $r }}{{- $archive := printf "saw-history-%s" $r }}
+{{- $targets := include "portal.targets" . | fromJson }}
+{{- $bases := list }}{{- range $slot := $targets }}{{- $bases = append $bases $slot.base }}{{- end }}
 {{- $gov := $s.governanceNamespace }}{{- $name := printf "enroll-%s" $r }}{{- $policy := printf "saw-%s-runtime" $n }}
 apiVersion: v1
 kind: ServiceAccount
@@ -32,7 +34,7 @@ metadata: {name: {{ $name }}, namespace: {{ $ns }}}
 rules:
 {{- if eq $ns $n }}
   - {apiGroups: [""], resources: [configmaps], resourceNames: [saw-bom-profiles, {{ $g }}-gateway-config, {{ $g }}-proxy-ca], verbs: [get]}
-  - {apiGroups: [""], resources: [persistentvolumeclaims], resourceNames: [workspace-{{ $g }}, saw-gate-{{ $g }}, saw-audit-{{ $g }}], verbs: [get]}
+  - {apiGroups: [""], resources: [persistentvolumeclaims], resourceNames: {{ include "portal.claims" $ }}, verbs: [get]}
   - {apiGroups: [apps], resources: [statefulsets], resourceNames: [{{ $g }}-gateway], verbs: [get]}
   - {apiGroups: [""], resources: [services], resourceNames: [{{ $g }}-gateway], verbs: [get]}
   - {apiGroups: [networking.k8s.io], resources: [networkpolicies], resourceNames: [{{ $g }}-gateway, {{ $g }}-default-deny], verbs: [get]}
@@ -58,15 +60,18 @@ subjects: [{kind: ServiceAccount, name: {{ $name }}, namespace: {{ $t }}}]
 apiVersion: v1
 kind: ConfigMap
 metadata: {name: saw-portal-enrollment, namespace: {{ $t }}, labels: {saw.redhat.com/runtime-owner: {{ .Values.installationID }}}}
+{{- $names := list "saw-portal-enrollment" }}
+{{- range $slot := $targets }}{{- if $slot.ui }}{{- $names = append $names $slot.subjectMap }}
 ---
 apiVersion: v1
 kind: ConfigMap
-metadata: {name: saw-portal-relay-subject, namespace: {{ $t }}, labels: {saw.redhat.com/runtime-owner: {{ .Values.installationID }}}}
+metadata: {name: {{ $slot.subjectMap }}, namespace: {{ $t }}, labels: {saw.redhat.com/runtime-owner: {{ $.Values.installationID }}}}
+{{- end }}{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata: {name: portal-binding-reader, namespace: {{ $t }}}
-rules: [{apiGroups: [""], resources: [configmaps], resourceNames: [saw-portal-enrollment, saw-portal-relay-subject], verbs: [get]}]
+rules: [{apiGroups: [""], resources: [configmaps], resourceNames: {{ $names | toJson }}, verbs: [get]}]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -89,14 +94,14 @@ apiVersion: v1
 kind: ConfigMap
 metadata: {name: bootstrap-scripts, namespace: {{ $t }}}
 data:
-  config.json: {{ dict "registration" $r "installation" .Values.installationID "user" $g "subject" .Values.ownerSubject "governance" $gov "reference" $a.reference "profileSHA256" $a.profileSHA256 "resources" $a.resources "domain" .Values.global.clusterDomain | toJson | quote }}
+  config.json: {{ dict "registration" $r "installation" .Values.installationID "user" $g "subject" .Values.ownerSubject "governance" $gov "reference" $a.reference "profileSHA256" ($s.selectedDigest | default $a.profileSHA256) "targets" $targets "modelInputs" ($s.modelInputs | default dict) "resources" $a.resources "domain" .Values.global.clusterDomain | toJson | quote }}
 {{ (.Files.Glob "files/*.py").AsConfig | indent 2 }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: bootstrap-writer, namespace: {{ $archive }}}
 spec:
-  podSelector: {matchLabels: {saw-audit-writer: {{ $g }}}}
+  podSelector: {matchExpressions: [{key: saw-audit-writer, operator: In, values: {{ $bases | toJson }}}]}
   policyTypes: [Ingress]
   ingress:
   - from:
@@ -114,7 +119,7 @@ spec:
 {{ toYaml $s.stack.proxy.values.network.bootstrapEgress | indent 4 }}
     - to:
       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ $archive }}}}
-        podSelector: {matchLabels: {saw-audit-writer: {{ $g }}}}
+        podSelector: {matchExpressions: [{key: saw-audit-writer, operator: In, values: {{ $bases | toJson }}}]}
       ports: [{port: 8443, protocol: TCP}]
 ---
 apiVersion: batch/v1

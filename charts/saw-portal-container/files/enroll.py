@@ -42,11 +42,21 @@ def once(x):
     if digest(profile["data"])!=x["profileSHA256"]:raise ValueError("unapproved BOM")
     def pvc(name,ro):
         return dict(claimName=name,uid=obj("persistentvolumeclaim",name)["metadata"]["uid"],readOnly=ro)
-    slot={"workspace":pvc("workspace-"+u,False),"toolGate":{"ownerLogin":u,"receiptKey":receipt_key(u,hist,"/writer-ca/service-ca.crt"),
-          "trusted":pvc("saw-gate-"+u,True),"audit":pvc("saw-audit-"+u,False)},
-          "resources":x["resources"],"browser":{"ownerLogin":u,"origin":"https://"+u+"-agent-audited-ui.apps."+x["domain"]}}
+    slots={}
+    for key, target in x["targets"].items():
+        base=target["base"]
+        slot={"workspace":pvc("workspace-"+base,False),
+              "toolGate":{"ownerLogin":u,"receiptKey":receipt_key(base,hist,"/writer-ca/service-ca.crt"),
+                          "trusted":pvc("saw-gate-"+base,True),"audit":pvc("saw-audit-"+base,False)},
+              "resources":x["resources"]}
+        if target["ui"]:
+            host="-".join((u,target["workspace"],target["sandbox"],"ui"))
+            slot["browser"]={"ownerLogin":u,"origin":"https://"+host+".apps."+x["domain"]}
+        slots[key]=slot
     bindings=dict(ownerID=ident,namespace=ns,namespaceUID=nsobj["uid"],ownerSubject=sub,mode="container",
-       gatewayVersion="0.1.2-rhaiv.6",openAIProxySecret="inference",approvedCredentialFreeProviders=[],bindings={"agent/audited":slot})
+       gatewayVersion="0.1.2-rhaiv.6",openAIProxySecret="inference",approvedCredentialFreeProviders=[],bindings=slots)
+    if x.get("modelInputs"):
+        bindings["modelInputs"]=x["modelInputs"]
     plan=compile_profile_files(profile["data"],bindings)
     KubernetesResourceVerifier(obj,lambda _:None)(plan)  # same snapshot verified above
     intent=json.loads(build_intent(profile,bindings,name="saw-runtime-intent",generation=1,pin_plan=True)["data"]["intent.json"])
