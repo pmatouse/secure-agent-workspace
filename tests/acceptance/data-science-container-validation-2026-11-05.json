@@ -1,0 +1,168 @@
+{
+  "date": "2026-11-05",
+  "cluster": "glmhg",
+  "siteRevisionTested": "15da49221a0cd2f0fb998fa89b73023e558a05f2",
+  "controllerSource": "37dd2e55cf2fd177faedd6db1bf1c71fc18b9a00",
+  "controllerImageDigest": "sha256:14858cb994f291c07e0cb1eabf1fc6650675a418931343738b35ee6e2697f31d",
+  "owner": "sawk8sowner",
+  "registration": "10b70b63dd5f0601",
+  "profile": "data-science",
+  "fixture": "10b70b6353e0ab79",
+  "tasks": {
+    "create": "3af9ab53-cf4f-463f-9ef8-9ad0b73cb9d5",
+    "update": "8e3dc56e-6639-446d-b579-508ace9fafe6",
+    "delete": "90ceb56d-df61-4130-8823-7ad077495581"
+  },
+  "sandboxes": {
+    "cuda-dev/cuda-sandbox": {
+      "archiveUID": "22f53e0e-0175-4d5a-b378-236f1652e541",
+      "verified": {
+        "records": 5,
+        "sha256": "74e06ac29175020d5ecfce1f484fbd8a43f5a8edb9c5afacce8d5978d1311652",
+        "byTurn": {
+          "read": [
+            {
+              "tool": "read",
+              "decision": "allow"
+            }
+          ],
+          "deny": [
+            {
+              "tool": "exec",
+              "decision": "approval_required"
+            },
+            {
+              "tool": "exec",
+              "decision": "rejected"
+            }
+          ],
+          "approve": [
+            {
+              "tool": "exec",
+              "decision": "approval_required"
+            },
+            {
+              "tool": "exec",
+              "decision": "approved"
+            }
+          ]
+        }
+      }
+    },
+    "default/notebook": {
+      "archiveUID": "335150eb-8481-4b9c-9910-d4872f57dbd5",
+      "verified": {
+        "records": 5,
+        "sha256": "9e60c0f70fcbd102db2c320f82780bd213e60bd8c159e75dd6f5405aa0409a9e",
+        "byTurn": {
+          "read": [
+            {
+              "tool": "read",
+              "decision": "allow"
+            }
+          ],
+          "deny": [
+            {
+              "tool": "exec",
+              "decision": "approval_required"
+            },
+            {
+              "tool": "exec",
+              "decision": "rejected"
+            }
+          ],
+          "approve": [
+            {
+              "tool": "exec",
+              "decision": "approval_required"
+            },
+            {
+              "tool": "exec",
+              "decision": "approved"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "backstage": "All three owner tasks completed",
+  "tekton": [
+    {
+      "name": "saw-create-kjhqm",
+      "start": "2026-11-05T13:40:46Z",
+      "end": "2026-11-05T13:48:38Z",
+      "result": "Succeeded"
+    },
+    {
+      "name": "saw-create-tvk8j",
+      "start": "2026-11-05T13:53:18Z",
+      "end": "2026-11-05T13:55:28Z",
+      "result": "Succeeded"
+    },
+    {
+      "name": "saw-delete-bg4ql",
+      "start": "2026-11-05T14:01:26Z",
+      "end": "2026-11-05T14:06:43Z",
+      "result": "Succeeded"
+    }
+  ],
+  "enrollmentBoundaryResources": 16,
+  "generations": [
+    {
+      "generation": 1,
+      "inputRevision": "6f8b04040d3144ef769234f8a628a98768acb7308115c17d4e693befb605a1ca"
+    },
+    {
+      "generation": 2,
+      "inputRevision": "9c307ef379572ed018a6a23a897a4348e751d3628194ea208a5133d28538677f"
+    }
+  ],
+  "updateScope": "Owner reapplied the same two model selections via RHDH; checked both fresh post-update chat replies, earlier audit records, workspace contents, unchanged Pod and archive UIDs.",
+  "inference": {
+    "model": "openai/gpt-4.1-mini",
+    "endpoint": "https://api.openai.com/v1",
+    "podUIDs": {
+      "notebook": "cf912b27-f87d-4f9f-b0d1-f9e6ff7e7448",
+      "cudaSandbox": "5d90855d-a447-4d30-aac6-ea6656e34e8f"
+    },
+    "userID": 1001240000,
+    "optionalInlineHarness": false,
+    "localGPUComputeTested": false
+  },
+  "afterDelete": {
+    "scopedVaultCleanupLogged": true,
+    "ownerRegistryRemoved": true,
+    "runtimeControlAndBothUINamespacesRemoved": true,
+    "bothKeycloakClientsAndCallbacksRemoved": true,
+    "readOnlyArchiveJobs": [
+      "verify-bb94ad4dfd45",
+      "verify-f1a7ace1e3f5"
+    ],
+    "originalThreeVMsRunningAndReady": true
+  },
+  "qualification": {
+    "vmBOM": "8a99985f86f9da4e8501fffb54437aa8eb91089d44ccea9988e7bd5fc66d8c2c",
+    "runtimeBOM": "edee1411fdcae06c8081fe93460f239195de1489fe6169a870f9e16e6f89ae99",
+    "initialCreate": {
+      "task": "e9921222-18e6-46e9-93cb-f077effe7281",
+      "registration": "27e2a84c9ffa5b88",
+      "pipeline": "saw-create-9g7wv",
+      "outcome": "Failed",
+      "reason": "The notebook supervisor could not launch sh. UID/GID 1001190000 could not traverse the original image's mode-0770 /sandbox (uid 1000, gid 0)."
+    },
+    "initialNemoChat": {
+      "sandbox": "cuda-dev/cuda-sandbox",
+      "result": "Signed-in owner received expected nonce",
+      "openclaw": "2026.9.2"
+    },
+    "notebookOverlay": {
+      "base": "quay.io/aipcc/base-images/agentic/openclaw@sha256:896d1526ee29b53167034ba65d1c758c8da777f441ed094e19f3bcf6d7445c61",
+      "image": "image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-openclaw-home@sha256:a89f54d5ffe6d1ee9df9c9a65978c26c54fd46aaf5f0b4e4c2c2c0c64ad5b18a",
+      "change": "chmod o+x /sandbox; restored image USER sandbox:sandbox",
+      "restrictedJob": "ds-test-original-image-traversal",
+      "numericUID": 1001030000,
+      "numericGID": 1001030000,
+      "mode": "0771"
+    }
+  }
+}

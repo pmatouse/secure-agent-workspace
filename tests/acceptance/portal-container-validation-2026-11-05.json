@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-05",
+  "cluster": "glmhg",
+  "owner": "sawk8sowner",
+  "deploymentMode": "container",
+  "profile": "audited-openclaw",
+  "registration": "a393b0bca875f9d5",
+  "tasks": {
+    "create": "1fe672ca-af94-47ce-9325-c0711f08fbe8",
+    "update": "0f78bbca-bf90-44ac-947f-25e94c8475cb",
+    "delete": "16ec8f5e-9297-4d4b-81b6-5947d9f64ea0"
+  },
+  "archiveUID": "81ab9bc5-76c3-46cc-ac41-26aeb4e99cca",
+  "verified": {
+    "records": 5,
+    "sha256": "284739d07fb5e3aad9ee3cce6eb882705ba328aaa9294b21c562f21718b253b9",
+    "byTurn": {
+      "read": [
+        {
+          "tool": "read",
+          "decision": "allow"
+        }
+      ],
+      "deny": [
+        {
+          "tool": "exec",
+          "decision": "approval_required"
+        },
+        {
+          "tool": "exec",
+          "decision": "rejected"
+        }
+      ],
+      "approve": [
+        {
+          "tool": "exec",
+          "decision": "approval_required"
+        },
+        {
+          "tool": "exec",
+          "decision": "approved"
+        }
+      ]
+    }
+  },
+  "backstage": "all three tasks completed",
+  "pipelineRuns": {
+    "create": {
+      "name": "saw-create-cfmhz",
+      "result": "Succeeded",
+      "seconds": 358
+    },
+    "update": {
+      "name": "saw-create-6xhx7",
+      "result": "Succeeded",
+      "seconds": 246
+    },
+    "delete": {
+      "name": "saw-delete-l8vm6",
+      "result": "Succeeded",
+      "seconds": 232
+    }
+  },
+  "generations": [
+    {
+      "observedGeneration": 1,
+      "phase": "GenericReady",
+      "inputRevision": "70d12754d4b1ee1f4e9d761f72062366bdd6f1f8ba552701c2d823463a64e6e9"
+    },
+    {
+      "observedGeneration": 2,
+      "phase": "GenericReady",
+      "inputRevision": "bc013d69615b520c0876d174d532ca2384bf685c074bfab2fa7c54355444715a"
+    }
+  ],
+  "sandboxPodUIDBeforeAndAfterUpdate": "7531c44a-0bb2-414b-b414-d4893299de94",
+  "afterDelete": {
+    "runtimeControlAndUINamespacesAbsent": true,
+    "registryAbsent": true,
+    "registrationVaultCleanupLogged": true,
+    "relayClientRemoved": true,
+    "callbackRemoved": true,
+    "archiveVerifiedReadOnlyBy": "verify-9e1378e1492a",
+    "unchangedAuditDigest": true
+  },
+  "qualificationNotes": [
+    "Create began with no owner namespace or registry entry. The observer resumed the same task after a transient login failure; create was not resubmitted.",
+    "During update, a GitOps metadata migration excluded retained audit namespaces from future owner sync comparisons. No workload, claim or audit record was patched."
+  ]
+}

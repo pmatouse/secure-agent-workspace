@@ -338,10 +338,17 @@ def container_profiles(site):
     return automatic.get("approvedProfiles", {AUDITED_PROFILE: automatic.get("profileSHA256", "")})
 
 
+def enabled_catalog_sandboxes(profile):
+    for workspace in profile.get("workspaces", []):
+        if workspace.get("enabled"):
+            for sandbox in workspace.get("sandboxes", []):
+                if sandbox.get("enabled"):
+                    yield workspace["name"], sandbox
+
+
 def sandbox_targets(user, registration, profile):
     """Expand the shared BOM catalog into isolated Kubernetes attachments."""
-    enabled = [(w["name"], sb) for w in profile["workspaces"] if w["enabled"]
-               for sb in w["sandboxes"] if sb["enabled"]]
+    enabled = list(enabled_catalog_sandboxes(profile))
     targets = {}
     for workspace, sb in enabled:
         key = workspace + "/" + sb["name"]
@@ -357,12 +364,14 @@ def sandbox_targets(user, registration, profile):
 def public_model_inputs(profile, secrets):
     """Only catalog-declared, noncredential model selectors can enter public intent."""
     values = {}
-    for key in {sb["modelInput"] for w in profile["workspaces"] if w["enabled"]
-                for sb in w["sandboxes"] if sb["enabled"] and sb.get("modelInput")}:
+    confidential = {secrets.get(name, {}).get(field["key"])
+                    for name, entry in profile.get("secrets", {}).items()
+                    for field in entry["fields"] if field["kind"] == "secret"}
+    for key in {sb["modelInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("modelInput")}:
         secret, field = key.split(".",1)
         allowed = any(f["key"] == field and f["kind"] == "text" for f in profile["secrets"][secret]["fields"])
         value = secrets.get(secret,{}).get(field)
-        if not allowed or value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value):
+        if not allowed or value and (value in confidential or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value)):
             raise PortalError("invalid public model selector")
         if value:
             values[key]=value
@@ -428,7 +437,7 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
                  and app_status.get("health", {}).get("status") == "Healthy" and all(ping(url) for _,url in links))
     observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
                     (bound, "Intent for this registration and update"),
-                    (running, "Audited OpenShell sandbox running"), (ready, "Owner chat route available")]
+                    (running, "Profile sandboxes running"), (ready, "Owner chat routes available")]
     phase = "none"
     steps = []
     waiting = False
@@ -440,7 +449,7 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
             waiting = True
         steps.append(dict(id=stage, title=title, detail=title, state=state))
     failed = bool(current and st.get("phase") == "Blocked" or app_ok and app_status.get("operationState", {}).get("phase") in ("Error", "Failed"))
-    message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Audited OpenClaw ready")
+    message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Workspace ready")
     return dict(user=user, deploymentMode="container", phase="failed" if failed else phase, title=message,
                 message=message, text=message, ready=ready and not failed, failed=failed, steps=steps,
                 links=[dict(title=title,url=url) for title,url in links] if ready and not failed else [])
@@ -721,11 +730,10 @@ def ui_links(user, profiles, catalog, domain):
 def sandbox_ui_links(user, profiles, catalog, domain):
     out = []
     for profile in profiles:
-        for w in catalog.get(profile, {}).get("workspaces", []):
-            for sb in w.get("sandboxes", []):
-                if w.get("enabled") and sb.get("enabled") and sb.get("uiRoute"):
-                    out.append((f"{sb['name']} UI ({w['name']})",
-                                f"https://{user}-{w['name']}-{sb['name']}-ui.apps.{domain}"))
+        for workspace, sb in enabled_catalog_sandboxes(catalog.get(profile, {})):
+            if sb.get("uiRoute"):
+                out.append((f"{sb['name']} UI ({workspace})",
+                            f"https://{user}-{workspace}-{sb['name']}-ui.apps.{domain}"))
     return out
 
 
