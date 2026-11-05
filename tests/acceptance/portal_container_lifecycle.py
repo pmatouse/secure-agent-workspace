@@ -24,8 +24,9 @@ def eventually(fn, label, seconds=1200):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    for k in ("user","portal","issuer","domain","openclaw-version","password-file","key-file"):
+    for k in ("user","portal","issuer","domain","password-file","key-file"):
         p.add_argument("--"+k,required=True)
+    p.add_argument("--openclaw-version",help=argparse.SUPPRESS)  # accepted by older invocations
     p.add_argument("--profile",default="audited-openclaw")
     p.add_argument("--model",action="append",default=[])
     p.add_argument("--resume-create",nargs=2,metavar=("TASK_UUID","REGISTRATION"),help="resume observation of this exact owner registration after a client interruption")
@@ -99,7 +100,25 @@ def main():
         agent("sh","-ec",'umask 077; mkdir "$1"; cd "$1"; printf %s "$2" >canary; touch allow-me deny-me',"fixture",folder,canary)
         # The stock Control UI verifies buildId, even for two versions
         # speaking the same wire protocol. Read only its public build metadata.
-        version=agent("sh","-ec", """node -e 'const fs=require("fs"),p=require("path");let d=p.dirname(fs.realpathSync(process.argv[1]));for(;;){for(const f of ["dist/build-info.json","openclaw/dist/build-info.json","node_modules/openclaw/dist/build-info.json"]){const file=p.join(d,f);if(fs.existsSync(file)){const id=JSON.parse(fs.readFileSync(file)).buildId;if(id){process.stdout.write(id);process.exit(0)}}}if(d===p.dirname(d))break;d=p.dirname(d)}process.exit(1)' "$(command -v openclaw)" """)
+        executable=agent("sh","-ec","command -v openclaw")
+        version=agent("node","-e", """
+const fs = require('node:fs');
+const path = require('node:path');
+let directory = path.dirname(fs.realpathSync(process.argv[1]));
+const candidates = ['dist/build-info.json', 'openclaw/dist/build-info.json',
+                    'node_modules/openclaw/dist/build-info.json'];
+while (directory !== path.dirname(directory)) {
+    for (const relative of candidates) {
+        const file = path.join(directory, relative);
+        if (fs.existsSync(file)) {
+            const id = JSON.parse(fs.readFileSync(file)).buildId;
+            if (id) { process.stdout.write(id); process.exit(0); }
+        }
+    }
+    directory = path.dirname(directory);
+}
+process.exit(1);
+""",executable)
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,150}",version):raise RuntimeError("invalid UI build ID")
         origin=slot["browser"]["origin"]
         prefix="agent:main:portal-"+registration[:8]+"-"

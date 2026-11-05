@@ -364,11 +364,14 @@ def sandbox_targets(user, registration, profile):
 def public_model_inputs(profile, secrets):
     """Only catalog-declared, noncredential model selectors can enter public intent."""
     values = {}
+    confidential = {secrets.get(name, {}).get(field["key"])
+                    for name, entry in profile.get("secrets", {}).items()
+                    for field in entry["fields"] if field["kind"] == "secret"}
     for key in {sb["modelInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("modelInput")}:
         secret, field = key.split(".",1)
         allowed = any(f["key"] == field and f["kind"] == "text" for f in profile["secrets"][secret]["fields"])
         value = secrets.get(secret,{}).get(field)
-        if not allowed or value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value):
+        if not allowed or value and (value in confidential or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value)):
             raise PortalError("invalid public model selector")
         if value:
             values[key]=value

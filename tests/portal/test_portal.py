@@ -1663,3 +1663,13 @@ def test_generator_publishes_only_immutable_owner_bound_data(portal):
     with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
     cm["immutable"]=True;intent["bindings"]["ownerID"]="foreign"
     with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
+
+def test_model_input_cannot_publish_a_submitted_credential(portal):
+    profile={"workspaces":[{"name":"research","enabled":True,"sandboxes":[
+        {"name":"notebook","enabled":True,"modelInput":"provider.choice"}]}],
+        "secrets":{"provider":{"fields":[{"key":"choice","kind":"text"},{"key":"api_key","kind":"secret"}]}}}
+    inputs={"provider":{"api_key":"synthetic-private-value","choice":"model-x"}}
+    assert portal.public_model_inputs(profile, inputs)=={"provider.choice":"model-x"}
+    inputs["provider"]["choice"]=inputs["provider"]["api_key"]
+    with pytest.raises(portal.PortalError,match="invalid public model selector"):
+        portal.public_model_inputs(profile, inputs)

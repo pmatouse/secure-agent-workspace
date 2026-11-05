@@ -60,8 +60,8 @@ Use an enrolled **disposable owner with no current registration or runtime names
 ```sh
 python3 tests/acceptance/portal_container_lifecycle.py \
   --user "$TEST_OWNER" --portal "$RHDH_URL" --issuer "$KEYCLOAK_REALM_URL" \
-  --domain "$CLUSTER_DOMAIN" --openclaw-version "$OPENCLAW_CLIENT_VERSION" \
+  --domain "$CLUSTER_DOMAIN" --profile "$PROFILE" \
   --password-file "$OWNER_PASSWORD_FILE" --key-file "$INFERENCE_KEY_FILE"
 ```
 
-The final JSON contains three Backstage task IDs, the archive PVC UID, decision sequences and a before/after SHA-256. An intermediate task ID or PipelineRun does not indicate completion. On a failed step the harness stops and leaves evidence for inspection. To retry a clean cycle, first inspect the task and remove only the disposable registration using the normal RHDH delete template. The example site uses OpenClaw client version `2026.9.6-eb377ac59e6c-2026-09-23T16-32-01.435Z`.
+The final JSON contains three Backstage task IDs, the archive PVC UID, decision sequences and a before/after SHA-256. An intermediate task ID or PipelineRun does not indicate completion. On a failed step the harness stops and leaves evidence for inspection. To retry a clean cycle, first inspect the task and remove only the disposable registration using the normal RHDH delete template. The harness reads the public UI build ID from each installed sandbox package for the signed browser handshake.
