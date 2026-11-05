@@ -21,4 +21,5 @@ resources:
   - audit-gate-prep.yaml
   - portal-controller-build.yaml
   - profile-controller-build.yaml
+  - model-controller-build.yaml
   - ds-nonroot-image.yaml
