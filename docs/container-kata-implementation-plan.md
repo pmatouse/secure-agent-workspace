@@ -1683,3 +1683,41 @@ the isolated sandbox replaced the workload and supervisor Pods. The writer
 also restarted, recovered its key and six committed records, and signed a new
 decision for a fresh chat. Production rollout to other workspace profiles and
 qualification on Kata are separate.
+
+### Container owner model and power lifecycle
+
+The site can set `portal.containerSites.<owner>.modelLifecycle: true` before
+enrolling an owner. Existing registrations keep the contract they enrolled with.
+The owner selects the inference model in the existing **Create or update my agent
+workspace** form. The shared BOM catalog identifies the selector for each
+sandbox. On the OpenAI data-science site these are `inference.model` for the
+notebook and `inference.cuda_model` for the CUDA sandbox.
+
+| Transition | What happens |
+|---|---|
+| Create | The portal records the initial BOM inputs. Enrollment pins the plan, owner, proxy and PVC identities. Each model-bound sandbox gets a dedicated RWX gate claim mounted read-only into its workload. The site needs an RWX storage class. |
+| Update model | The owner submits the same profile with the new selectors. A restricted Argo Job publishes each selector atomically on its gate claim before Argo advances the runtime intent. A generation fence prevents an older Job from replacing a newer selection. |
+| Apply | The controller asks stock OpenShell to stop its recorded sandboxes, persists the confirmed stop, then starts them. The new OpenClaw processes read the published model and verify the pinned tool-gate bundle. Workspace and audit claims remain attached to the registration. Both sandboxes cycle on a model change. |
+| Stop or start | **Stop or start my container workspace** uses the same signed request and Tekton pipeline as create. The request binds the owner, registration and observed registry generation. Stop retains workspace and audit data. Start rechecks the approved boundary before enabling chat. |
+
+The provider key stays on the existing Vault/ESO/proxy path. The gate file
+contains only the model identifier and publication generation. A fixed-model
+sandbox continues to use its BOM model. A profile change still requires a new
+registration.
+
+The owner CLI uses the same RHDH endpoints. Supply a private file containing a
+Backstage identity token and the HTTPS origin of Developer Hub.
+
+```sh
+export SAW_RHDH_URL=https://backstage.example.org
+export SAW_RHDH_TOKEN_FILE=/private/path/backstage-token
+openshell-saw workspace status
+openshell-saw workspace stop
+openshell-saw workspace start
+openshell-saw workspace logs <tekton-run-name>
+```
+
+Stop and start return a scaffolder task ID. Wait for the task to finish before
+requesting the next transition. Status reports requested state, observed
+generation and owner chat links. Logs show the provisioning run. The existing
+operator CLI retains its VM diagnostics.

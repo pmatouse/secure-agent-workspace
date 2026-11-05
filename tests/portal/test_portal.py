@@ -1673,3 +1673,27 @@ def test_model_input_cannot_publish_a_submitted_credential(portal):
     inputs["provider"]["choice"]=inputs["provider"]["api_key"]
     with pytest.raises(portal.PortalError,match="invalid public model selector"):
         portal.public_model_inputs(profile, inputs)
+
+
+def test_owner_state_change_is_generation_scoped_and_does_not_touch_vault(portal, world, monkeypatch):
+    fake, signer = world
+    site = {"subject": "478fdd1f-8db9-41e8-97ad-b563215c89e9", "modelLifecycle": True}
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES", json.dumps({"alice": site}))
+    fake.request("saw-req-1", ds_request(signer, deploymentMode="container", profile="audited-openclaw"))
+    assert portal.main(["create", "saw-req-1"]) == 0
+    entry = portal.read_entry(fake.objects[REGISTRY])
+    registration = portal.entry_generation("alice", entry)
+    vault_before = json.dumps(fake.vault, sort_keys=True)
+    def state(name, operation, generation, **extra):
+        fake.request(name, {"action": "create", "token": signer.token(), "runtimeAction": operation,
+                            "registration": registration, "expectedGeneration": "g-" + str(generation), **extra})
+        return portal.main(["create", name])
+    assert state("saw-req-2", "stop", 1, forUser="bob") != 0
+    assert state("saw-req-3", "stop", 1, registration="0"*16) != 0
+    assert state("saw-req-4", "stop", 1) == 0
+    assert portal.read_entry(fake.objects[REGISTRY])["desiredState"] == "Stopped"
+    assert state("saw-req-5", "start", 1) != 0
+    assert state("saw-req-6", "start", 2) == 0
+    assert portal.read_entry(fake.objects[REGISTRY]) == {**entry, "intentGeneration": 3}
+    assert json.dumps(fake.vault, sort_keys=True) == vault_before

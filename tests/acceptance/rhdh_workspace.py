@@ -5,6 +5,7 @@ import http.cookiejar
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 import time
 import urllib.parse as u
@@ -23,7 +24,7 @@ class LoginForm(HTMLParser):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=("inspect", "create", "update", "delete", "status"))
+    p.add_argument("action", choices=("inspect", "create", "update", "delete", "status", "start", "stop", "workspace-status", "logs"))
     p.add_argument("--origin", required=True)
     p.add_argument("--issuer", required=True)
     p.add_argument("--user", required=True)
@@ -31,6 +32,7 @@ def main():
     p.add_argument("--model",action="append",default=[],metavar="FIELD=MODEL")
     p.add_argument("--key-file", type=Path)
     p.add_argument("--task")
+    p.add_argument("--run")
     p.add_argument("--wait", type=int, default=0, help="poll a status task with the same authenticated session")
     a = p.parse_args()
     root, issuer = a.origin.rstrip("/"), a.issuer.rstrip("/")
@@ -74,6 +76,16 @@ def main():
                         headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"})
         with r.build_opener(NoRedirect()).open(req, timeout=30) as res:
             return json.load(res)
+    if a.action in ("start", "stop", "workspace-status", "logs"):
+        cmd = "status" if a.action == "workspace-status" else a.action
+        args = [sys.executable, "-m", "openshell_saw.cli", "workspace", "--url", root, "--token-file", "-", cmd]
+        if cmd == "logs":
+            if not a.run:
+                p.error("--run is required")
+            args.append(a.run)
+        output = subprocess.check_output(args, input=token, text=True)
+        print(json.dumps({"text": output}) if cmd == "logs" else output.strip())
+        return
     if a.action == "status":
         deadline=time.monotonic()+min(max(a.wait,0),3600)
         while True:

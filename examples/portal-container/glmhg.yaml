@@ -4,6 +4,7 @@ portal:
   - container
   containerSites:
     sawk8sowner:
+      modelLifecycle: true
       governanceNamespace: saw-k8s-build
       subject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
       stack:
@@ -271,7 +272,7 @@ portal:
             route:
               enabled: false
         audit:
-          revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
+          revision: 661194fd49c75b4e7dd202d4d2ad5fa7b04934e3
           values:
             enabled: true
             trustedNamespace: '@ARCHIVE@'
@@ -286,8 +287,8 @@ portal:
               workspace: agent
               sandbox: audited
       automaticEnrollment:
-        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:14858cb994f291c07e0cb1eabf1fc6650675a418931343738b35ee6e2697f31d
-        revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:966c76c969f074ea088e1499d40fd8d993ecb4df527239736df554d9d726c6d0
+        revision: 661194fd49c75b4e7dd202d4d2ad5fa7b04934e3
         buildNamespace: saw-k8s-build
         profileSHA256: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
         resources:
@@ -359,7 +360,7 @@ portal:
             ports:
             - protocol: TCP
               port: 443
-          revision: 887bd2619a2915c51c0e11fc9d3cc1e21d6cf3ac
+          revision: 661194fd49c75b4e7dd202d4d2ad5fa7b04934e3
         approvedProfiles:
           audited-openclaw: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
           data-science: edee1411fdcae06c8081fe93460f239195de1489fe6169a870f9e16e6f89ae99
