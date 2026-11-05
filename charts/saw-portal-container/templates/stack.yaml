@@ -27,7 +27,7 @@ metadata:
     saw.redhat.com/portal-owner: {{ $u | quote }}
     pod-security.kubernetes.io/enforce: restricted
   {{- if eq $dest "retained" }}
-  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false', argocd.argoproj.io/sync-wave: "-2"}
+  annotations: {argocd.argoproj.io/compare-options: IgnoreExtraneous, argocd.argoproj.io/sync-options: 'Prune=false,Delete=false', argocd.argoproj.io/sync-wave: "-2"}
   {{- else }}
   annotations: {argocd.argoproj.io/sync-wave: "-2"}
   {{- end }}
