@@ -1,0 +1,67 @@
+{{- if .Values.enabled }}
+{{- $v := .Values }}{{- $n := .Release.Name }}{{- $ui := .Release.Namespace }}
+{{- if or (eq $ui $v.keycloakNamespace) (eq $ui $v.trustedNamespace) (not (hasPrefix "https://" $v.issuer)) (not $v.clientID) (not $v.workspace) (not $v.installationID) }}{{ fail "dedicated UI namespace, HTTPS issuer and explicit client/workspace scope required" }}{{ end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: relay-credentials
+  labels: {saw.redhat.com/runtime-owner: {{ $v.installationID | quote }}}
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+type: Opaque
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: {{ $n }}-identity, namespace: {{ $v.keycloakNamespace }}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: {{ $n }}-identity}
+rules:
+- {apiGroups: [""], resources: [secrets], resourceNames: [relay-credentials], verbs: [get, patch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: {{ $n }}-identity}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $n }}-identity}
+subjects: [{kind: ServiceAccount, name: {{ $n }}-identity, namespace: {{ $v.keycloakNamespace }}}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: {{ $n }}-identity, namespace: {{ $v.keycloakNamespace }}}
+data:
+  identity.py: |
+{{ .Files.Get "files/identity.py" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $n }}-identity-{{ printf "%s%s%s%s" (.Files.Get "files/identity.py") $v.clientID $v.installationID $v.issuer | sha256sum | trunc 8 }}
+  namespace: {{ $v.keycloakNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: '1'}
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $n }}-identity
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: provision
+        image: {{ $v.pythonImage }}
+        command: [python3, /scripts/identity.py]
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        env:
+        - {name: UI_NAMESPACE, value: {{ $ui }}}
+        - {name: INSTALLATION, value: {{ $v.installationID | quote }}}
+        - {name: WORKSPACE, value: {{ $v.workspace | quote }}}
+        - {name: ISSUER, value: {{ $v.issuer | quote }}}
+        - {name: CLIENT_ID, value: {{ $v.clientID | quote }}}
+        - {name: AUDIENCE, value: {{ $v.audience | quote }}}
+        volumeMounts:
+        - {name: script, mountPath: /scripts, readOnly: true}
+        - {name: kc, mountPath: /kc-admin, readOnly: true}
+      volumes:
+      - {name: script, configMap: {name: {{ $n }}-identity}}
+      - {name: kc, secret: {secretName: {{ required "Keycloak bootstrap Secret required" $v.keycloakAdminSecret }}, defaultMode: 0440}}
+{{- end }}
