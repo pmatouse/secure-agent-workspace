@@ -1554,3 +1554,11 @@ def test_unqualified_runtime_never_uses_vm_readiness(portal, mode):
     assert status["phase"] == "runtime-not-qualified"
     assert status["ready"] is False and status["failed"] is True
     assert not status["links"]
+
+
+def test_linked_container_catalog_entry_is_owned_and_links_only_to_the_site(portal, catalog, monkeypatch):
+    monkeypatch.setenv("SAW_LINKED_WORKSPACES", json.dumps([{"owner":"alice","routeLabel":"alice-agent-ui","title":"OpenClaw"}]))
+    docs = entity_docs(portal.entities_yaml([], catalog, "example.com", ""))
+    entry = next(d for d in docs if d["metadata"]["name"] == "linked-alice-agent-ui")
+    assert entry["spec"]["owner"] == "user:default/alice"
+    assert entry["metadata"]["links"] == [{"title":"OpenClaw UI","icon":"web","url":"https://alice-agent-ui.apps.example.com"}]
