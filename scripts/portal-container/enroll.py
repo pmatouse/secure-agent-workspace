@@ -8,12 +8,14 @@ import argparse
 import base64
 import json
 import re
+from pathlib import Path
 import subprocess
 import uuid
 from saw_kubernetes.audit import capture
 from saw_kubernetes.adapters import KubernetesResourceVerifier
 from saw_kubernetes.compiler import compile_profile_files
 from saw_kubernetes.intent import build_intent
+from saw_kubernetes.portal_contract import verify_contract
 
 
 def oc(*args):
@@ -30,6 +32,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for k in ("owner","subject","registration","domain","governance-namespace","build-namespace","revision","image"):
         p.add_argument("--"+k,required=True)
+    p.add_argument("--approved-template",type=Path,help="compare observed resources to a previously reviewed site reference")
     a=p.parse_args()
     u,reg=a.owner,a.registration
     if not re.fullmatch(r"[a-z0-9]([-a-z0-9]{0,17}[a-z0-9])?",u) or not re.fullmatch("[0-9a-f]{16}",reg) or not re.fullmatch("[a-f0-9]{40}",a.revision) or not re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}",a.image):
@@ -43,7 +46,14 @@ def main():
     assert runtime["labels"]["saw.redhat.com/runtime-owner"]==uid and not runtime.get("deletionTimestamp")
     cfg=dict(namespace=ns,namespaceUID=runtime["uid"],ownerID=uid,mode="container",trustedNamespace=t,
              governanceNamespace=a.governance_namespace,gateway=u,proxyPolicy=u+"-proxy-policy")
-    approved=capture(cfg,lambda path:json.loads(oc("get","--raw",path)))["approved"]
+    snapshot={}
+    def observed(path):
+        if path not in snapshot:
+            snapshot[path]=json.loads(oc("get","--raw",path))
+        return snapshot[path]
+    approved=capture(cfg,observed)["approved"]
+    if a.approved_template:
+        verify_contract(cfg,observed,json.loads(a.approved_template.read_text()))
     profile=resource("cm","saw-bom-profiles",ns)
     writer=resource("deployment",u+"-writer",h)
     assert writer["spec"]["template"]["spec"]["containers"][0]["name"]=="writer"
