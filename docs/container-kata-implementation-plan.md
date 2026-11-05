@@ -13,14 +13,19 @@ Implement missing capabilities on the container path, share BOM interpretation
 and validation wherever possible, and use VM regression tests when shared code
 changes. New VM operations are outside this milestone.
 
-The next feature is container support for the BOM's `harnessRef` and
-`harnessRequired`. The existing `personal-assistant` profile selects the
-`daily-briefing` bundle. The Kubernetes compiler currently rejects harness
-references. Start with the same bundle on a container: verify it using the
-VM trust rules, mount it read-only at `/sandbox/harness`, and show that
-OpenClaw discovers the skill and its MCP tools. Test that a missing or
-untrusted required bundle prevents startup. Qualify Slack and Gmail through
-their governed providers separately before claiming full profile parity.
+The container path now supports the existing inline `harnessRef` and
+`harnessRequired` from the personal-assistant BOM. Both backends use the same
+bundle verifier, governance declarations, credential-proxy policy renderer,
+MCP configuration and tool policy. A restricted OpenShift Job exercised the
+stock agent, audit writer and forwarder with synthetic providers. OpenClaw
+returned a briefing using both sources and identified the unavailable source
+when Slack or Gmail denied access independently.
+
+The remaining personal-assistant acceptance gate is a fresh RHDH owner
+registration served by the stock OpenShell gateway, with an authorized test
+inference account, Slack channel and Gmail mailbox. Verify the real provider
+proxy path, Google OAuth refresh, owner HTTPS chat and lifecycle in that run.
+[Reproduction instructions](../charts/saw-portal-container/README.md#personal-assistant-and-inline-harnesses)
 
 ### Live baseline receipt (2026-11-04)
 

@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-05",
+  "cluster": "glmhg",
+  "runtimeSource": "c26d3f3d635306a8afd248d432f1966487146da0",
+  "runtimeImage": "sha256:d62e4bccf1f455bce1a014298545cd5db8d361dd158eccbcf7a6d7949e26a5c6",
+  "agentImage": "ghcr.io/validatedpatterns-sandbox/nemoclaw-sandbox@sha256:28457eec59e71eca310cd72fc4b57c71506c3fce4c30f2636a237dca85725dbd",
+  "inlineBundleDigest": "sha256:ce55fc6201812dc6a54c8930015f0f3581b4750aafa558e8199957a84d2cdc6f",
+  "scope": "Credential-free restricted OpenShift Job using the production compiled startup checks, stock NemoClaw/OpenClaw, SAW audit writer and forwarder. Slack, Gmail and model HTTP services were deterministic loopback fixtures. The chat client invoked the local OpenClaw agent.",
+  "job": "briefing-fixture-final",
+  "jobUID": "c018e5ca-fa4b-48ba-ab0a-51458b7acb32",
+  "started": "2026-11-05T19:17:56Z",
+  "completed": "2026-11-05T19:22:57Z",
+  "podUID": "c40650be-656b-4506-9bef-6cf20304da31",
+  "scc": "restricted-v2",
+  "automountServiceAccountToken": false,
+  "checks": [
+    {
+      "bundle": "daily-briefing",
+      "skill": true,
+      "registered": [
+        "slack-reader",
+        "gmail-reader",
+        "briefing-writer"
+      ]
+    },
+    {
+      "slackItems": 1,
+      "gmailItems": 1,
+      "briefingSaved": true,
+      "denied": [
+        "slack",
+        "gmail"
+      ]
+    },
+    {
+      "openClawChat": true,
+      "fixtureModel": true,
+      "scenario": "allow",
+      "reply": "Slack: Can you review the PR today? Gmail: Q3"
+    },
+    {
+      "openClawChat": true,
+      "fixtureModel": true,
+      "scenario": "deny-slack",
+      "reply": "Slack: access denied (HTTP 401) Gmail: Q3"
+    },
+    {
+      "openClawChat": true,
+      "fixtureModel": true,
+      "scenario": "deny-gmail",
+      "reply": "Slack: Can you review the PR today? Gmail: access denied (HTTP 401)"
+    }
+  ],
+  "publicGatewayChecks": {
+    "slack": "ea2649d3b4b19f884cc72206a32913aaa9ddd13a73b78f4ed9839b722e4520d2",
+    "gmail": "34db67ba9ad4b2dfceeac01243fdd5543109302095774bbabded2ec0da195051",
+    "nvidia": "6e3e4aea7c771c6a47de11712ed86faa8800b553bd26f419217b659b11dfde9c"
+  },
+  "verificationNotes": [
+    "The stock gateway's GetProviderProfile RPC returned the expected environment slots, HTTPS port and enforced endpoints for all three public profiles. The hashes are SHA-256 over each live governance profile parsed as YAML and serialized as sorted compact JSON.",
+    "Read-only observation of the stock audit writer found allowed calls to both reader tools. Upstream 401 responses were surfaced independently by the agent.",
+    "The final Job used ephemeral storage. It did not exercise owner RHDH registration, durable PVCs, production OAuth refresh, external account access, real model inference or Kata placement."
+  ]
+}

@@ -25,15 +25,20 @@ on:
     paths:
       - "charts/saw-bom/profiles/**"
       - "charts/governance-policy/profiles/**"
+      - "charts/openshell-saw/templates/_governed-proxy-policy.tpl"
       - "charts/openshell-saw/files/provider-profiles/**"
       - "scripts/saw-profile-catalog.py"
       - "charts/saw-users/files/profile-catalog.json"
+      - "charts/saw-users/files/governed-profiles.json"
+      - "charts/saw-users/templates/_governed-proxy-policy.tpl"
       - "charts/openshell-rhdh/files/profile-catalog.json"
       - "charts/openshell-rhdh/files/create-workspace*.yaml"
       - "charts/openshell-rhdh/files/delete-workspace*.yaml"
   push:
     branches: [main]
     paths:
+      - "charts/governance-policy/profiles/**"
+      - "charts/openshell-saw/templates/_governed-proxy-policy.tpl"
       - "charts/saw-bom/profiles/**"
       - "scripts/saw-profile-catalog.py"
   workflow_dispatch:

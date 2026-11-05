@@ -12,7 +12,7 @@ set -euo pipefail
 # Capture first: `git diff | grep -q` under pipefail can fail with SIGPIPE
 # when grep stops reading early, which would skip the regeneration.
 staged=$(git diff --cached --name-only)
-if ! grep -qE '^(charts/saw-bom/profiles/|charts/governance-policy/profiles/|scripts/saw-profile-catalog\.py$)' <<<"$staged"; then
+if ! grep -qE '^(charts/saw-bom/profiles/|charts/governance-policy/profiles/|charts/openshell-saw/templates/_governed-proxy-policy\.tpl$|scripts/saw-profile-catalog\.py$)' <<<"$staged"; then
   exit 0
 fi
 

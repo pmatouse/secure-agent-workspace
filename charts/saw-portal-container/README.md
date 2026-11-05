@@ -155,3 +155,8 @@ the agent's response with both sources available and each source denied in
 turn. Live OAuth exchange, real inference, stock OpenShell provisioning and
 RHDH owner-route qualification for this profile require a separate live run.
 OCI harness-image delivery is outside this inline-bundle test.
+
+On glmhg, the tested controller image digest was
+`sha256:d62e4bccf1f455bce1a014298545cd5db8d361dd158eccbcf7a6d7949e26a5c6`
+in `image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller`.
+[OpenShift qualification record](../../tests/acceptance/personal-assistant-container-fixture-2026-11-05.json)

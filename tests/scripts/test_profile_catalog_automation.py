@@ -63,12 +63,14 @@ def test_attached_model_fields_follow_enabled_sandbox_providers(scratch, enabled
 
 def test_list_names_every_generated_file():
     listed = outputs()
-    # The six catalog/form files, plus the installer's mirror of every
-    # shipped governance profile.
+    # Catalogs, owner/admin forms, shared broker inputs and the governance mirrors.
     mirrored = [p for p in listed if p.startswith("charts/openshell-saw/files/provider-profiles/")]
     shipped = sorted(p.name for p in (ROOT / "charts/governance-policy/profiles").glob("*.yaml"))
     # ... plus the mirror directory itself (so a removed mirror is staged too).
-    assert len(listed) == 6 + len(shipped) + 1
+    assert "charts/saw-users/templates/_governed-proxy-policy.tpl" in listed
+    assert "charts/saw-users/files/governed-profiles.json" in listed
+    assert "charts/openshell-rhdh/files/set-workspace-state.yaml" in listed
+    assert len(listed) == 9 + len(shipped) + 1
     assert sorted(p.rsplit("/", 1)[1] for p in mirrored) == shipped
     assert "charts/openshell-saw/files/provider-profiles" in listed
     assert "charts/openshell-rhdh/files/create-workspace.yaml" in listed
@@ -81,7 +83,7 @@ def scratch(tmp_path):
     """A git repo with the generator, the profiles and their outputs, and a
     PATH whose python/python3 are this interpreter (it has PyYAML)."""
     repo = tmp_path / "repo"
-    for rel in ["scripts/saw-profile-catalog.py", ".githooks/pre-commit", *outputs()]:
+    for rel in ["scripts/saw-profile-catalog.py", ".githooks/pre-commit", "charts/openshell-saw/templates/_governed-proxy-policy.tpl", *outputs()]:
         if (ROOT / rel).is_dir():          # the mirror directory is listed as an owned path
             continue
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
