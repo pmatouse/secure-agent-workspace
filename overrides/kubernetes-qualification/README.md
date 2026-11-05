@@ -223,3 +223,28 @@ generate the intent with --pin-plan. The first combined upgrade allowed an old
 controller to consume a new request. Historical diagnostic manifests are
 available in openclaw-image-check.yaml for replay outside the active sync.
 [Live receipt](../../docs/evidence/glmhg-container-openclaw.json).
+
+## Owner browser access through RHDH
+
+Generation 15 serves `agent/openclaw-ui` on the same retained
+`openclaw-chat-workspace` claim. Open the **OpenClaw container workspace**
+Component in RHDH, then **OpenClaw UI**. Sign in as `sawk8sowner`. The signed-in
+owner can connect through the UI without copying an OpenClaw gateway token.
+
+Keycloak client `saw-relay-glmhg-agent` uses client credentials and an
+audience of `openshell-cli`. Its service subject holds the stock workspace
+user role on `agent`. The relay listed only that workspace. Queries for
+`toolbox` and `default` were denied. The owner received HTTP 200 from both
+catalog and UI. A second user received catalog 404 and UI 403. A forged owner
+header without login received a login redirect. A fresh signed device returned
+a unique model reply over the external WebSocket with read/write scopes. The
+ordinary owner's CLI also verified the model and reply. The WebSocket test ran
+inside the bastion's HTTPS login process, without moving authenticated cookies.
+
+Applying a live auth change terminated the original canonical process. The
+stock stop RPC treated that failed process as already stopped while compute
+was still present. One identity-checked recovery Job started and quiesced it;
+the controller then reused its PVC. Browser settings are now part of the
+pinned launch plan. The archived Job is excluded from the active Kustomization.
+
+[Live evidence](../../docs/evidence/glmhg-keycloak-relay.json).

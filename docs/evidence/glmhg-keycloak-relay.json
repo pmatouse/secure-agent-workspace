@@ -1,0 +1,60 @@
+{
+  "cluster": "glmhg",
+  "openshift": "4.22.20",
+  "verifiedLocalDate": "2026-11-05",
+  "generation": 15,
+  "sandbox": "agent/openclaw-ui",
+  "sandboxId": "275f0ff5-17a0-4529-9733-038ba10f5a61",
+  "workspaceID": "386f3c54-0d5a-46c9-8935-bf772fc1d957",
+  "pvc": "openclaw-chat-workspace",
+  "pvcUID": "8581a1f4-d45a-4d7b-8f61-ef30404346d3",
+  "client": {
+    "id": "saw-relay-glmhg-agent",
+    "subject": "7ae33856-a818-4849-bdcb-3508930e381c",
+    "grant": "client_credentials",
+    "audience": [
+      "openshell-cli"
+    ],
+    "realmRoles": [
+      "openshell-user"
+    ],
+    "workspaceRole": "WORKSPACE_ROLE_USER",
+    "visibleWorkspaces": [
+      "agent"
+    ],
+    "deniedWorkspaces": [
+      "toolbox",
+      "default"
+    ]
+  },
+  "catalog": {
+    "entity": "component:default/linked-sawk8sowner-agent-openclaw-ui",
+    "owner": "user:default/sawk8sowner",
+    "ownerHttp": 200,
+    "nonownerHttp": 404
+  },
+  "route": {
+    "url": "https://sawk8sowner-agent-openclaw-ui.apps.cluster-glmhg.dyn.redhatworkshops.io",
+    "ownerHttp": 200,
+    "nonownerHttp": 403,
+    "forgedOwnerHeaderWithoutLogin": 302
+  },
+  "chat": {
+    "protocol": 4,
+    "verifiedTLS": true,
+    "deviceSignature": "Ed25519",
+    "requestedScopes": [
+      "operator.read",
+      "operator.write"
+    ],
+    "uniqueModelReplyMatched": true,
+    "ownerCLIModel": "gpt-4.1-mini-2025-04-14",
+    "fullGraphicalBrowserTest": false
+  },
+  "recovery": "Hot-changing gateway authentication terminated the canonical process. A scoped stock RPC Job recovered and stopped the old sandbox. The replacement initialized the browser policy before starting the application and reused the same PVC.",
+  "limits": [
+    "Catalog link to an existing deployment; RHDH self-service creation is VM-only",
+    "Tool approvals and durable tool audit remain separate",
+    "Kata still pending supported UEFI worker"
+  ]
+}
