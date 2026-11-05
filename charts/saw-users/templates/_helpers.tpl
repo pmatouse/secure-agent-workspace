@@ -415,6 +415,10 @@ spec:
     # hand (e.g. while cleaning up an older install) are restored.
     automated:
       selfHeal: true
+      {{- if and (eq .path "charts/saw-portal-container") (eq (int ($user.lifecycleVersion | default 0)) 1) }}
+      # Retire superseded publication Jobs. Audit archives opt out of prune and delete.
+      prune: true
+      {{- end }}
     retry:
       limit: {{ $root.Values.argo.retryLimit }}
     # Server-side apply: client-side apply copies every object into its
