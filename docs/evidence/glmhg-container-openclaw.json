@@ -1,0 +1,50 @@
+{
+  "cluster": "glmhg",
+  "openshift": "4.22.20",
+  "gatewayVersion": "0.1.2-rhaiv.6",
+  "generation": 14,
+  "workspace": "agent",
+  "sandbox": "openclaw",
+  "sandboxId": "3cf09a2e-c2b0-42cd-92a1-0ce309a0b5eb",
+  "owner": "sawk8sowner",
+  "appVersion": "2026.9.6",
+  "image": "ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15",
+  "controller": "sha256:afb8f2397d2787b1726272201c68ac9f6631c8b13274b1c935304146c3176322",
+  "pvc": {
+    "name": "openclaw-chat-workspace",
+    "uid": "8581a1f4-d45a-4d7b-8f61-ef30404346d3",
+    "mount": "/sandbox/workspace"
+  },
+  "pods": {
+    "workload": "bae8982d-70d4-448b-b2cc-3b3f78ae1f5c",
+    "supervisor": "a144d03b-4288-495f-92ce-f452838c6358",
+    "scc": "restricted-v2",
+    "mode": "container"
+  },
+  "checks": {
+    "ownerOIDC": true,
+    "directProviderHTTP": 200,
+    "openClawGatewayHealth": true,
+    "openClawAgentFreshNonceMatched": true,
+    "reportedProvider": "openai",
+    "reportedModel": "gpt-4.1-mini-2025-04-14",
+    "ownerForwardReturnedUI": true,
+    "secondUserMembershipDenied": true,
+    "unauthorizedToolApiHttp": 401,
+    "authorizedExecToolHttp": 404,
+    "execToolRan": false
+  },
+  "stockSupervisorObservations": [
+    "Isolation boundary enforcement confirmed",
+    "ALLOWED /usr/local/bin/node -> api.openai.com:443 (_provider_openai)",
+    "DENIED telemetry.openclaw.ai:443"
+  ],
+  "scope": "Authenticated CLI, loopback UI transport and deny-all application tools. RHDH self-service, browser login, signed SAW tool approvals and persistent tool audit require separate acceptance.",
+  "imageDiagnosis": {
+    "aipcc": "/sandbox mode 0770, UID 1000, GID 0. Traversal failed under 1001010000:1001010000 with strict supplemental groups.",
+    "official": "Same app version, /sandbox traversable and PVC writable under exactly the same UID/GID.",
+    "failedSandbox": "1993d833-a6ce-48ac-b8d0-b8b3c679681a",
+    "gatewayCleanupCompleted": true
+  },
+  "testedOnLocalDate": "2026-11-05"
+}

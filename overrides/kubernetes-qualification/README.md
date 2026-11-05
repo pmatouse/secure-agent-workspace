@@ -190,3 +190,36 @@ have separate acceptance gates. The original VM model test and all three VMIs
 remain separate. The gateway occasionally logged a Kubernetes list transport
 warning, and the workload reported an unlimited PID cgroup. Both merit production
 qualification. [Lifecycle receipt](../../docs/evidence/glmhg-stock-container-lifecycle.json).
+
+## Container OpenClaw
+
+Generation 14 runs OpenClaw 2026.9.6 in `agent/openclaw`, alongside the
+generic toolbox. Both agent and supervisor run under `restricted-v2`. Argo
+supplies the pinned profile, storage bindings and plan hash. An OIDC owner
+reaches the agent through the stock gateway.
+
+```bash
+python3 tests/acceptance/kubernetes_openclaw.py \
+  --gateway saw-k8s-test --workspace agent --sandbox openclaw \
+  --model gpt-4.1-mini-2025-04-14
+openshell forward service -g saw-k8s-test --workspace agent openclaw \
+  --target-port 18789 --local 127.0.0.1:18789
+```
+
+The acceptance script calls OpenClaw's own loopback gateway, sends a unique
+prompt, and verifies both the reply and reported model. The forward serves the
+stock UI to the owner's local browser. OpenClaw gateway token authentication
+also applies. No shared browser URL or automatic RHDH provisioning is enabled.
+The agent's application tool policy currently denies every tool. An authenticated
+exec-tool request returned HTTP 404; an invalid gateway token returned HTTP 401.
+
+The VM's AIPCC image has a 0770 root workspace owned by 1000:0. A strict
+workload with the assigned project UID/GID cannot traverse it. The unmodified
+official upstream image at the same OpenClaw version passed the identical test.
+Set the boundary process TMPDIR to /tmp in the workload template. Set the
+application home and temporary state below the retained mount in the launch
+command. Publish an upgraded controller first and wait for rollout, then
+generate the intent with --pin-plan. The first combined upgrade allowed an old
+controller to consume a new request. Historical diagnostic manifests are
+available in openclaw-image-check.yaml for replay outside the active sync.
+[Live receipt](../../docs/evidence/glmhg-container-openclaw.json).
