@@ -80,7 +80,7 @@ def main():
         print(json.dumps({"user":a.user,"template":template,"deploymentModes":fields.get("deploymentMode", {"enum":["vm"]})["enum"],"profiles":fields["profile"]["enum"]})); return
     data = {"templateRef":"template:default/"+template, "values":{},"secrets":{}}
     if a.action == "delete":
-        data["values"]["workspace"]="component:default/saw-"+a.user
+        data["values"].update(workspace="component:default/saw-"+a.user, confirm=True)
     else:
         props = entity["spec"]["parameters"][-1]["properties"]
         if "container" not in props.get("deploymentMode", {}).get("enum", []) or "audited-openclaw" not in props["profile"]["enum"]:
