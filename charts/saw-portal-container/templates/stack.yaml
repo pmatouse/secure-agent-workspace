@@ -81,6 +81,7 @@ data:
 {{- $slot := index $c 2 }}
 {{- $release = $slot.base }}
 {{- $v := $values | fromJson }}
+{{- if and $site.lifecycleVersion $slot.modelInput }}{{- $_ := set $v "shareGateForModelSelection" true }}{{- end }}
 {{- $_ := set $v.identity "workspace" $slot.workspace }}{{- $_ := set $v.identity "sandbox" $slot.sandbox }}
 {{- $values = toJson $v }}
 {{- end }}

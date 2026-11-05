@@ -49,6 +49,8 @@ def once(x):
               "toolGate":{"ownerLogin":u,"receiptKey":receipt_key(base,hist,"/writer-ca/service-ca.crt"),
                           "trusted":pvc("saw-gate-"+base,True),"audit":pvc("saw-audit-"+base,False)},
               "resources":x["resources"]}
+        if x.get("lifecycleVersion") == 1 and target.get("modelInput"):
+            slot["toolGate"]["modelSelector"] = True
         if target["ui"]:
             host="-".join((u,target["workspace"],target["sandbox"],"ui"))
             slot["browser"]={"ownerLogin":u,"origin":"https://"+host+".apps."+x["domain"]}

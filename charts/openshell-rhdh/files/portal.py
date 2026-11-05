@@ -346,7 +346,7 @@ def enabled_catalog_sandboxes(profile):
                     yield workspace["name"], sandbox
 
 
-def sandbox_targets(user, registration, profile):
+def sandbox_targets(user, registration, profile, *, model_lifecycle=False):
     """Expand the shared BOM catalog into isolated Kubernetes attachments."""
     enabled = list(enabled_catalog_sandboxes(profile))
     targets = {}
@@ -358,6 +358,8 @@ def sandbox_targets(user, registration, profile):
                             base=user if single else user+"-"+suffix[:8],
                             relayID=registration if single else suffix,
                             subjectMap="saw-portal-relay-subject" if single else "saw-portal-relay-"+suffix)
+        if model_lifecycle and sb.get("modelInput"):
+            targets[key]["modelInput"] = sb["modelInput"]
     return targets
 
 
@@ -380,6 +382,8 @@ def public_model_inputs(profile, secrets):
 
 def registered_links(entry, catalog, domain):
     if entry_deployment_mode(entry) == "container":
+        if entry.get("desiredState") == "Stopped":
+            return []
         return sandbox_ui_links(entry["name"], entry.get("profiles", []), catalog, domain) if domain else []
     return ui_links(entry["name"], entry.get("profiles", []), catalog, domain)
 
@@ -420,6 +424,8 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
                  and intent.get("bindings", {}).get("namespace") == ns
                  and intent.get("bindings", {}).get("mode") == "container"
                  and intent.get("bindings", {}).get("ownerID") == installation_id(user, reg))
+    desired = entry.get("desiredState", "Running")
+    bound = bound and intent.get("desiredState") == desired
     st = read("saw-runtime-status", "status.json") if bound else {}
     profile = (k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/saw-bom-profiles", ok404=True) or {}) if bound else {}
     files = profile.get("data", {})
@@ -438,6 +444,9 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
     observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
                     (bound, "Intent for this registration and update"),
                     (running, "Profile sandboxes running"), (ready, "Owner chat routes available")]
+    stopped = bool(current and desired == "Stopped" and st.get("phase") == "Stopped")
+    if desired == "Stopped":
+        observations[-2:] = [(stopped, "OpenShell sandboxes stopped"), (stopped, "Storage retained")]
     phase = "none"
     steps = []
     waiting = False
@@ -450,7 +459,12 @@ def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
         steps.append(dict(id=stage, title=title, detail=title, state=state))
     failed = bool(current and st.get("phase") == "Blocked" or app_ok and app_status.get("operationState", {}).get("phase") in ("Error", "Failed"))
     message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Workspace ready")
+    if stopped and not failed:
+        message = "Workspace stopped"
+        phase = "stopped"
     return dict(user=user, deploymentMode="container", phase="failed" if failed else phase, title=message,
+                registration=reg, generation=rev, observedGeneration=st.get("observedGeneration"),
+                desiredState=desired, modelInputs=entry.get("modelInputs", {}),
                 message=message, text=message, ready=ready and not failed, failed=failed, steps=steps,
                 links=[dict(title=title,url=url) for title,url in links] if ready and not failed else [])
 
@@ -1394,7 +1408,22 @@ def handle(action, request_name):
         name = f"saw-ws-{user}"
         cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/{name}", ok404=True)
         deleting = cm is not None and is_deleting(cm)
-        if action == "create":
+        if action == "create" and "runtimeAction" in data:
+            entry = read_entry(cm)
+            operation = data["runtimeAction"]
+            if (operation not in ("start", "stop") or caller != user or deleting or not cm
+                    or entry_deployment_mode(entry) != "container" or entry.get("lifecycleVersion") != 1
+                    or entry_generation(user, entry) != data.get("registration")
+                    or f"g-{entry.get('intentGeneration')}" != data.get("expectedGeneration")):
+                raise PortalError("lifecycle request does not match the current owner registration and generation")
+            desired = "Running" if operation == "start" else "Stopped"
+            if entry["desiredState"] != desired:
+                entry["desiredState"] = desired
+                entry["intentGeneration"] += 1
+                cm["data"]["user.json"] = json.dumps(entry, sort_keys=True)
+                k8s.call("PUT", f"/api/v1/namespaces/{ns}/configmaps/{name}", cm)
+            log(f"workspace {user} requested {desired}")
+        elif action == "create":
             if deleting:
                 raise PortalError(f"workspace saw-{user} is being deleted; request it again when "
                                   "the delete pipeline has finished")
@@ -1413,7 +1442,9 @@ def handle(action, request_name):
                 if cm and read_entry(cm)["profiles"] != [profile]:
                     raise PortalError("changing the profile requires a new container registration")
                 models = public_model_inputs(catalog[profile], secrets)
-                if cm and read_entry(cm).get("modelInputs", {}) != models:
+                previous = read_entry(cm) if cm else {}
+                lifecycle = previous.get("lifecycleVersion") == 1 if cm else container_site(user).get("modelLifecycle") is True
+                if cm and not lifecycle and previous.get("modelInputs", {}) != models:
                     raise PortalError("changing model selection requires a new container registration")
             check_namespace_is_ours(k8s, user)
             check_applications_are_ours(k8s, user)
@@ -1427,6 +1458,13 @@ def handle(action, request_name):
                 log(f"Vault: {prefix}/{secret} ({', '.join(sorted(values))})")
             entry = registry_entry(user, profile, generation, mode)
             if mode == "container":
+                if lifecycle:
+                    entry["lifecycleVersion"] = 1
+                    entry["initialModelInputs"] = previous.get("initialModelInputs", models)
+                    entry["desiredState"] = previous.get("desiredState", "Running")
+                    changed = bool(cm and previous.get("modelInputs", {}) != models)
+                    entry["restartGeneration"] = (previous["intentGeneration"] + 1 if changed
+                                                  else previous.get("restartGeneration", 0))
                 if models:
                     entry["modelInputs"] = models
                 if "approvedProfiles" in container_site(user).get("automaticEnrollment",{}):
@@ -1657,8 +1695,13 @@ def generator_params(workspaces, defaults, read=None, catalog=None):
                     # Use the existing saw-bom imageOverrides API. The owner
                     # never supplies an image or its pull authorization.
                     ws["imageOverrides"]=image_overrides
-                site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected]),
+                managed = ws.get("lifecycleVersion") == 1
+                site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected], model_lifecycle=managed),
                       "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
+                if managed:
+                    site.update(lifecycleVersion=1, modelInputs=ws["initialModelInputs"],
+                                requestedModels=ws.get("modelInputs", {}), desiredState=ws["desiredState"],
+                                restartGeneration=ws["restartGeneration"])
             values["containerSites"]={ws["name"]:enrolled_site(site,ws,read)}
         out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
     return out

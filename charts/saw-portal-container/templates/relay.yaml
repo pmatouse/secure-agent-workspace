@@ -29,6 +29,9 @@ spec:
       releaseName: {{ printf "ui-%s" $rid }}
       valuesObject:
         enabled: true
+        {{- if $site.lifecycleVersion }}
+        paused: {{ eq $site.desiredState "Stopped" }}
+        {{- end }}
         publishSubject: {{ $site.automaticEnrollment | empty | not }}
         publicSubjectMap: {{ $target.subjectMap }}
         cleanupRegistration: {{ $rid | quote }}
