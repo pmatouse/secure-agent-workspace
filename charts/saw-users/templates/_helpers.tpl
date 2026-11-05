@@ -454,7 +454,7 @@ openshellValues. Keep omission as vm without changing existing rendered values. 
 {{- else if and (eq $mode "container") (hasKey (.root.Values.containerSites | default dict) .user.name) -}}
 {{- $u := .user -}}
 {{- $site := index .root.Values.containerSites $u.name -}}
-{{- if or (not $u.ownerSubject) (ne $u.ownerSubject $site.subject) (not (regexMatch "^[0-9a-f]{16}$" (default "" $u.registration))) (ne (toJson $u.profiles) (toJson (list "audited-openclaw"))) (not $u.pruneOnRemove) -}}
+{{- if or (not $u.ownerSubject) (ne $u.ownerSubject $site.subject) (not (regexMatch "^[0-9a-f]{16}$" (default "" $u.registration))) (or (ne (len $u.profiles) 1) (not (hasKey (dig "automaticEnrollment" "approvedProfiles" (dict "audited-openclaw" true) $site) (first $u.profiles)))) (not $u.pruneOnRemove) -}}
 {{- fail "container requires verified owner subject, scoped registration, audited-openclaw profile and foreground cleanup" -}}
 {{- end -}}
 {{- else if ne $mode "vm" -}}

@@ -185,6 +185,9 @@ def catalog():
                                   "enabled": sb.get("enabled", True),
                                   "uiRoute": bool(ui.get("route", False)),
                                   "harnessRequired": bool(sb.get("harnessRef") and sb.get("harnessRequired"))})
+                model_ref = secret_ref((sb.get("inference") or {}).get("model"))
+                if model_ref:
+                    sandboxes[-1]["modelInput"] = ".".join(model_ref)
             workspaces.append({"name": name, "description": description, "enabled": enabled,
                                "sandboxes": sandboxes})
             if not enabled:

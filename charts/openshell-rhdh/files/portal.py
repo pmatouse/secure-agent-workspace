@@ -333,13 +333,49 @@ def container_url(user, domain):
     return f"https://{user}-agent-audited-ui.apps.{domain}"
 
 
+def container_profiles(site):
+    automatic = site.get("automaticEnrollment", {})
+    return automatic.get("approvedProfiles", {AUDITED_PROFILE: automatic.get("profileSHA256", "")})
+
+
+def sandbox_targets(user, registration, profile):
+    """Expand the shared BOM catalog into isolated Kubernetes attachments."""
+    enabled = [(w["name"], sb) for w in profile["workspaces"] if w["enabled"]
+               for sb in w["sandboxes"] if sb["enabled"]]
+    targets = {}
+    for workspace, sb in enabled:
+        key = workspace + "/" + sb["name"]
+        suffix = hashlib.sha256((registration+"/"+key).encode()).hexdigest()[:16]
+        single = len(enabled)==1
+        targets[key] = dict(workspace=workspace, sandbox=sb["name"], ui=bool(sb.get("uiRoute")),
+                            base=user if single else user+"-"+suffix[:8],
+                            relayID=registration if single else suffix,
+                            subjectMap="saw-portal-relay-subject" if single else "saw-portal-relay-"+suffix)
+    return targets
+
+
+def public_model_inputs(profile, secrets):
+    """Only catalog-declared, noncredential model selectors can enter public intent."""
+    values = {}
+    for key in {sb["modelInput"] for w in profile["workspaces"] if w["enabled"]
+                for sb in w["sandboxes"] if sb["enabled"] and sb.get("modelInput")}:
+        secret, field = key.split(".",1)
+        allowed = any(f["key"] == field and f["kind"] == "text" for f in profile["secrets"][secret]["fields"])
+        value = secrets.get(secret,{}).get(field)
+        if not allowed or value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value):
+            raise PortalError("invalid public model selector")
+        if value:
+            values[key]=value
+    return values
+
+
 def registered_links(entry, catalog, domain):
     if entry_deployment_mode(entry) == "container":
-        return [("Audited OpenClaw", container_url(entry["name"], domain))] if domain else []
+        return sandbox_ui_links(entry["name"], entry.get("profiles", []), catalog, domain) if domain else []
     return ui_links(entry["name"], entry.get("profiles", []), catalog, domain)
 
 
-def container_status(k8s, user, entry, argo_ns, domain, ping):
+def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
     # Reuse the VM pipeline's wire stage IDs so old RHDH tasks can finish.
     # Only observations and their user-facing names differ.
     ns = f"saw-{user}"
@@ -387,8 +423,9 @@ def container_status(k8s, user, entry, argo_ns, domain, ping):
                and type(st.get("observedGeneration")) is int and st["observedGeneration"] == rev
                and st.get("inputRevision") == digest({"intent": intent, "files": files}))
     running = current and st.get("phase") == "GenericReady" and intent.get("desiredState") == "Running"
-    ready = bool(running and domain and app_status.get("sync", {}).get("status") == "Synced"
-                 and app_status.get("health", {}).get("status") == "Healthy" and ping(container_url(user, domain)))
+    links = registered_links(entry,catalog,domain) if catalog else [("Audited OpenClaw",container_url(user,domain))]
+    ready = bool(running and links and domain and app_status.get("sync", {}).get("status") == "Synced"
+                 and app_status.get("health", {}).get("status") == "Healthy" and all(ping(url) for _,url in links))
     observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
                     (bound, "Intent for this registration and update"),
                     (running, "Audited OpenShell sandbox running"), (ready, "Owner chat route available")]
@@ -406,7 +443,7 @@ def container_status(k8s, user, entry, argo_ns, domain, ping):
     message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Audited OpenClaw ready")
     return dict(user=user, deploymentMode="container", phase="failed" if failed else phase, title=message,
                 message=message, text=message, ready=ready and not failed, failed=failed, steps=steps,
-                links=[dict(title="Audited OpenClaw", url=container_url(user, domain))] if ready and not failed else [])
+                links=[dict(title=title,url=url) for title,url in links] if ready and not failed else [])
 
 
 def installation_id(user, registration):
@@ -1056,7 +1093,7 @@ def workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping=None):
                 "text": f"Deleting: {detail}"}
     mode = entry_deployment_mode(entry)
     if mode == "container" and container_site(user):
-        return container_status(k8s, user, entry, argo_ns, domain, ping or owner_route_available)
+        return container_status(k8s, user, entry, argo_ns, domain, ping or owner_route_available, catalog)
     if mode not in PROVISIONABLE_MODES:
         message = f"{mode} workspace lifecycle and readiness are not qualified in this release"
         return {"user": user, "deploymentMode": mode, "phase": "runtime-not-qualified",
@@ -1147,7 +1184,10 @@ def removal_status(k8s, user, argo_ns, entry=None):
         reg = entry_generation(user, entry)
         if not reg:
             raise PortalError("refusing container cleanup without a registration")
-        for scoped in [f"saw-ctl-{reg}", f"saw-ui-{reg}"]:
+        ui_names=entry.get("uiNamespaces",[f"saw-ui-{reg}"])
+        if any(not re.fullmatch("saw-ui-[a-f0-9]{16}", n) for n in ui_names):
+            raise PortalError("invalid portal UI namespace reference")
+        for scoped in [f"saw-ctl-{reg}", *ui_names]:
             if k8s.call("GET", "/api/v1/namespaces/" + scoped, ok404=True) is not None:
                 left.append("namespace " + scoped)
     return not left, ("removed" if not left else "Argo CD is removing " + ", ".join(left))
@@ -1354,13 +1394,19 @@ def handle(action, request_name):
             if cm is not None:
                 assert_mode_unchanged(read_entry(cm), mode)
             if mode == "container" and container_site(user):
-                if data.get("profile") != AUDITED_PROFILE or os.environ.get("PRUNE_ON_REMOVE", "true") != "true":
-                    raise PortalError("container requires audited-openclaw and foreground cleanup")
+                if data.get("profile") not in container_profiles(container_site(user)) or os.environ.get("PRUNE_ON_REMOVE", "true") != "true":
+                    raise PortalError("container requires an approved profile and foreground cleanup")
             elif mode not in PROVISIONABLE_MODES:
                 raise PortalError(f"{mode} workspace provisioning is not available in this release")
             if mode != "container" and data.get("profile") == AUDITED_PROFILE:
                 raise PortalError("audited-openclaw requires container deployment")
             profile, secrets = parse_request(data, catalog)
+            if mode == "container":
+                if cm and read_entry(cm)["profiles"] != [profile]:
+                    raise PortalError("changing the profile requires a new container registration")
+                models = public_model_inputs(catalog[profile], secrets)
+                if cm and read_entry(cm).get("modelInputs", {}) != models:
+                    raise PortalError("changing model selection requires a new container registration")
             check_namespace_is_ours(k8s, user)
             check_applications_are_ours(k8s, user)
             # An update keeps the entry's keys where they are; a new
@@ -1373,6 +1419,11 @@ def handle(action, request_name):
                 log(f"Vault: {prefix}/{secret} ({', '.join(sorted(values))})")
             entry = registry_entry(user, profile, generation, mode)
             if mode == "container":
+                if models:
+                    entry["modelInputs"] = models
+                if "approvedProfiles" in container_site(user).get("automaticEnrollment",{}):
+                    slots=sandbox_targets(user,generation,catalog[profile])
+                    entry["uiNamespaces"]=sorted({"saw-ui-"+slot["relayID"] for slot in slots.values() if slot["ui"]})
                 entry["intentGeneration"] = read_entry(cm).get("intentGeneration", 0) + 1
             put_configmap(k8s, ns, name, {"user.json": json.dumps(entry, sort_keys=True)},
                           {WORKSPACE_LABEL: "true", "openshell.pattern/owner": user},
@@ -1559,9 +1610,12 @@ def enrolled_site(site, ws, read):
     if set(bound)!={"registration","intent","approved","gatewayCA"} or bound["registration"]!=reg or set(bound["approved"])!=set(a["reference"]):
         raise PortalError("invalid published enrollment")
     intent=bound["intent"]
-    if intent["bindings"]["ownerID"]!=install or intent["bindings"]["namespace"]!="saw-"+ws["name"] or intent["bindings"]["ownerSubject"]!=ws["ownerSubject"] or intent["profileRef"]["sha256"]!=a["profileSHA256"]:
+    if intent["bindings"]["ownerID"]!=install or intent["bindings"]["namespace"]!="saw-"+ws["name"] or intent["bindings"]["ownerSubject"]!=ws["ownerSubject"] or intent["profileRef"]["sha256"]!=site.get("selectedDigest",a.get("profileSHA256")):
         raise PortalError("published intent does not belong to this workspace")
-    sub=publication("saw-portal-relay-subject").get("subject","")
+    subjects = {target["subjectMap"]:publication(target["subjectMap"]).get("subject", "")
+                for target in site.get("targets",{}).values() if target["ui"]}
+    fresh["subjects"] = subjects
+    sub=subjects.get("saw-portal-relay-subject","") if subjects else publication("saw-portal-relay-subject").get("subject","")
     if sub and (not re.fullmatch(r"[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}",sub) or sub==ws["ownerSubject"]):
         raise PortalError("invalid relay subject")
     relay={**a["relay"],"gatewayCA":bound["gatewayCA"],"subject":sub,"workspaceID":""}
@@ -1569,7 +1623,7 @@ def enrolled_site(site, ws, read):
     return fresh
 
 
-def generator_params(workspaces, defaults, read=None):
+def generator_params(workspaces, defaults, read=None, catalog=None):
     """One parameter set per workspace: `name`, and `values`, the saw-users
     chart values for that user alone (JSON, which is YAML)."""
     out = []
@@ -1588,6 +1642,10 @@ def generator_params(workspaces, defaults, read=None):
             ws = {**ws, "registration": reg, "installationID": installation_id(ws["name"], reg)}
         values = {**defaults, "users": [ws]}
         if ws.get("registration") and entry_deployment_mode(ws)=="container" and site.get("automaticEnrollment"):
+            if catalog and "approvedProfiles" in site["automaticEnrollment"]:
+                selected,=ws["profiles"]
+                site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected]),
+                      "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
             values["containerSites"]={ws["name"]:enrolled_site(site,ws,read)}
         out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
     return out
@@ -1716,7 +1774,7 @@ def serve():
                 return self._send(403, {"error": "forbidden"})
             try:
                 params = generator_params(owner_subjects.fill(list_workspaces(kube(), ns)), defaults,
-                                          lambda path:kube().call("GET",path,ok404=True))
+                                          lambda path:kube().call("GET",path,ok404=True),catalog)
             except PortalError as exc:
                 log(f"ERROR: {exc}")
                 return self._send(500, {"error": str(exc)})
