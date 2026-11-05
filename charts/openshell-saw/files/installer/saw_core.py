@@ -164,6 +164,7 @@ class Sandbox:
     providers: list = field(default_factory=list)
     model: str = ""
     harness_ref: dict = field(default_factory=dict)
+    ui: dict = field(default_factory=dict)
     # `env:` -- the workload's environment (`sandbox create --env`; changing
     # it recreates the sandbox). {NAME: {value, title?}}: literals only, so
     # env_values (below) is derived, never a resolved copy that could go
@@ -454,6 +455,7 @@ def parse_profiles(files, *, strict=False, document_check=None):
                         providers=list(s.get("providers") or []),
                         model=s.get("model", ""),
                         harness_ref=dict(s.get("harnessRef") or {}),
+                        ui=dict(s.get("ui") or {}),
                         env=s.get("env") if s.get("env") is not None else {},
                         inference=s.get("inference") if s.get("inference") is not None else {}))
             profile.workspaces.append(ws)

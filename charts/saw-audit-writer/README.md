@@ -26,7 +26,7 @@ Owner → HTTPS / OpenClaw chat → model tool call → shared SAW gate
                                                      └─ resolution → second audit record
 ```
 
-Only the writer mounts the history PVC. It exposes a single HTTPS POST. Each
+Only the writer mounts the history PVC. It accepts records by HTTPS POST; GET /v1/receipt-key returns only its Ed25519 public verification key over the OpenShift service certificate. No endpoint lists or reads records. Each
 UUID identifies one byte string. A retry returns a signature for the original
 record, and reuse with different bytes returns HTTP 409. SQLite commits before
 the writer signs. The writer's Ed25519 key persists with the database. The

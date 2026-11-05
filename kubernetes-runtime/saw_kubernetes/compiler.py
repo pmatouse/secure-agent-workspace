@@ -231,6 +231,9 @@ def compile_profile_files(files, config):
             command = ["sh", "-c", "sleep infinity"]
             if sandbox.harness_ref or sandbox.env or sandbox.model or sandbox.agent != "openclaw":
                 raise ContractError("harness/UI/inference/env capability is not yet ported to Kubernetes")
+            if sandbox.ui and (sandbox.type != "openclaw" or sandbox.ui != {"route": True}
+                               or not bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")):
+                raise ContractError("UI route capability requires the matching approved OpenClaw browser binding")
             if sandbox.type == "openclaw":
                 info = sandbox.inference
                 if (set(info) != {"providerRef", "protocol", "baseUrl", "model"}
@@ -349,5 +352,5 @@ def _check_document_capabilities(document, kind):
     # so the Kubernetes path cannot silently drop UI/harness requirements.
     if kind == "Sandboxes":
         for entry in document.get("spec", {}).get("sandboxes", []):
-            if entry.get("enabled", True) and set(entry) & {"ui", "harnessRequired"}:
+            if entry.get("enabled", True) and "harnessRequired" in entry:
                 raise ContractError("UI/harness capability is not yet ported to Kubernetes")

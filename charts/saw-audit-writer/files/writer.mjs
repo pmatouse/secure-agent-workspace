@@ -22,6 +22,7 @@ const lookup = db.prepare('SELECT body FROM records WHERE id=?');
 const tls = () => ({cert:fs.readFileSync('/tls/tls.crt'), key:fs.readFileSync('/tls/tls.key')});
 const server = https.createServer(tls(), async (req,res) => {
   const reply = (status,text='') => {res.writeHead(status);res.end(text);};
+  if (req.method === 'GET' && req.url === '/v1/receipt-key') return reply(200, pub);
   const match = /^\/v1\/records\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/.exec(req.url);
   if (!match || req.method !== 'POST') return reply(404);
   try {

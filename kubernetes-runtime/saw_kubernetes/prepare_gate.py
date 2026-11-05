@@ -50,7 +50,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("owner", "subject", "workspace", "sandbox"):
         parser.add_argument("--" + key, required=True)
-    parser.add_argument("--receipt-key")
+    receipt = parser.add_mutually_exclusive_group()
+    receipt.add_argument("--receipt-key")
+    receipt.add_argument("--writer-service")
+    parser.add_argument("--writer-namespace")
+    parser.add_argument("--writer-ca")
     args = parser.parse_args()
+    if args.writer_service:
+        from .receipt import receipt_key
+        args.receipt_key = receipt_key(args.writer_service, args.writer_namespace, args.writer_ca)
     os.umask(0o022)
     print(publish(Path("/volume"), shared.tool_gate_identity(args.owner, args.subject, args.workspace, args.sandbox), args.receipt_key))
