@@ -12,3 +12,4 @@ resources:
   - controller-inputs.yaml
   - controller.yaml
   - toolbox-intent.yaml
+  - openclaw-inputs.yaml

@@ -1,0 +1,40 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: saw-runtime-controller-603581c
+  namespace: saw-k8s-build
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/pmatouse/secure-agent-workspace.git
+      ref: 603581c7dc5713ba1c2ad9e5ecff614c05bd0f9b
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: kubernetes-runtime/Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: saw-runtime-controller:603581c7dc57
+  triggers:
+  - type: ConfigChange
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openclaw-workspace
+  namespace: saw-k8s-test
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  labels:
+    saw.redhat.com/runtime-owner: d8ac361b-9898-4b16-ac35-2d15f86db76b
+    openshell.ai/sandbox-attachable: 'true'
+    openshell.ai/sandbox-attachable-workspace: agent
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: ocs-external-storagecluster-ceph-rbd
+  resources:
+    requests:
+      storage: 2Gi
