@@ -76,6 +76,7 @@ def main():
     registration=reg()["vaultPrefix"].rsplit("/",1)[-1]
     if not re.fullmatch("[a-f0-9]{16}",registration):raise RuntimeError("invalid registration")
     archive="saw-history-"+registration
+    fixture_id=registration[:8]+secrets.token_hex(4)
     def runtime():
         return json.loads(get("cm","saw-runtime-status",ns)["data"]["status.json"])
     def check_generation(n):
@@ -93,7 +94,7 @@ def main():
         claim=base+"-history"
         uid=get("pvc",claim,archive)["metadata"]["uid"]
         writer=get("deploy",base+"-writer",archive)["spec"]["template"]["spec"]["containers"][0]["image"]
-        folder="/sandbox/workspace/portal-"+registration[:8]
+        folder="/sandbox/workspace/portal-"+fixture_id
         canary=secrets.token_hex(16)
         def agent(*args):
             return run("oc","-n",ns,"exec",pod,"-c","agent","--",*args)
@@ -121,7 +122,7 @@ process.exit(1);
 """,executable)
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,150}",version):raise RuntimeError("invalid UI build ID")
         origin=slot["browser"]["origin"]
-        prefix="agent:main:portal-"+registration[:8]+"-"
+        prefix="agent:main:portal-"+fixture_id+"-"
         def turn(name,prompt,*extra):
             return run(sys.executable,str(HERE/"openclaw_audit_chat.py"),"--origin",origin,"--issuer",a.issuer,
                 "--user",a.user,"--version",version,"--session",prefix+name,"--prompt",prompt,*extra,stdin=pw)
@@ -158,7 +159,7 @@ process.exit(1);
         assert json.loads(run("oc","-n",archive,"logs","job/"+inspect))==before
         return {"archiveUID":uid,"verified":before}
     archives={key:verify_archive(*data) for key,(_,data) in qualified.items()}
-    print(json.dumps({"registration":registration,"profile":a.profile,"tasks":tasks,"sandboxes":archives},indent=2))
+    print(json.dumps({"registration":registration,"profile":a.profile,"fixture":fixture_id,"tasks":tasks,"sandboxes":archives},indent=2))
 
 if __name__=="__main__":
     if not __debug__:raise SystemExit("test assertions must be enabled")
