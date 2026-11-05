@@ -44,6 +44,10 @@ def test_container_has_own_gateway_credential_audit_and_policy():
     es, = [r for r in resources if r["kind"]=="ExternalSecret"]
     assert es["metadata"]["namespace"] == "saw-ctl-"+REG
     assert es["spec"]["data"] == [{"secretKey":"api_key","remoteRef":{"key":user()["vaultPrefix"]+"/inference","property":"api_key"}}]
+    archived_ns, = [r for r in resources if r["kind"]=="Namespace" and r["metadata"]["name"]=="saw-history-"+REG]
+    archive_annotations=archived_ns["metadata"]["annotations"]
+    assert archive_annotations["argocd.argoproj.io/compare-options"]=="IgnoreExtraneous"
+    assert set(archive_annotations["argocd.argoproj.io/sync-options"].split(","))=={"Delete=false","Prune=false"}
     workloads = [r for a in resources if a["kind"]=="Application" for r in child(a)]
     assert not any(r["kind"]=="VirtualMachine" for r in workloads)
     net, = [r for r in workloads if r["kind"]=="AdminNetworkPolicy"]
