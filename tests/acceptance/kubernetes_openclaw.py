@@ -2,6 +2,7 @@
 """Exercise the stock OpenClaw gateway through an existing ordinary OIDC CLI login."""
 import argparse
 import json
+from pathlib import Path
 import secrets
 import subprocess
 import time
@@ -11,6 +12,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("gateway", "workspace", "sandbox", "model"):
         parser.add_argument("--" + key, required=True)
+    parser.add_argument("--provider", default="openai")
+    parser.add_argument("--verify-transcript", action="store_true",
+                        help="correlate the fresh reply with the provider response in OpenClaw's transcript")
+    parser.add_argument("--check-proxy-denial", action="store_true",
+                        help="require the workspace HTTP proxy to reject an unauthenticated CONNECT to denied.invalid")
     args = parser.parse_args()
     # OpenShell exec is a fresh process. Point the CLI at the same private
     # configuration that the stock gateway uses inside the workspace.
@@ -19,7 +25,8 @@ def main():
              "env", "HOME=/sandbox/workspace", "OPENCLAW_HOME=/sandbox/workspace",
              "OPENCLAW_CONFIG_PATH=/sandbox/workspace/.openclaw/openclaw.json",
              "TMPDIR=/sandbox/workspace/.openclaw/state", "SQLITE_TMPDIR=/sandbox/workspace/.openclaw/state"]
-    nonce = "SAW_" + secrets.token_hex(8)
+    nonce = secrets.token_hex(10)
+    session = "agent:main:portal-" + secrets.token_hex(8) + "-owner"
     def run(command, *, check=True):
         result = subprocess.run(scope + command, capture_output=True, text=True, timeout=160)
         if result.returncode and check:
@@ -33,17 +40,41 @@ def main():
             raise SystemExit("OpenClaw gateway did not become healthy")
         time.sleep(3)
     out = run(["openclaw", "gateway", "call", "agent", "--expect-final", "--timeout", "100000",
-               "--json", "--params", json.dumps({"agentId":"main", "sessionKey":"agent:main:saw-" + nonce,
+               "--json", "--params", json.dumps({"agentId":"main", "sessionKey":session,
                "message": "Reply with exactly " + nonce + ". Do not use tools.", "idempotencyKey":nonce})]).stdout
     data = json.loads(out[out.index("{"):])
     result = data.get("result", data)
     if not any(p.get("text", "").strip() == nonce for p in result.get("payloads", [])):
         raise SystemExit("Agent did not return the expected unique reply")
     meta = result.get("meta", {}).get("agentMeta", {})
-    if meta.get("model") != args.model or meta.get("provider") != "openai":
+    if meta.get("model") != args.model or meta.get("provider") != args.provider:
         raise SystemExit("Unexpected model or provider in the agent response")
-    print(json.dumps({"ownerGatewayHealth":True, "freshReplyMatched":True,
-                      "provider":meta["provider"], "model":meta["model"]}))
+    evidence = {"ownerGatewayHealth":True, "freshReplyMatched":True,
+                "provider":meta["provider"], "model":meta["model"]}
+    if args.verify_transcript:
+        source = Path(__file__).with_name("portal_model_evidence.cjs").read_text()
+        completion = json.loads(run(["node", "-e", source, nonce, session]).stdout)
+        model = completion.get("responseModel") or ""
+        if (completion.get("provider") != args.provider or completion.get("model") != args.model
+                or not completion.get("providerResponse")
+                or not (model == args.model or model.startswith(args.model + "-"))):
+            raise SystemExit("Transcript does not match the requested provider and model")
+        evidence["completion"] = completion
+    if args.check_proxy_denial:
+        probe = """
+const http = require('node:http');
+const proxy = new URL(process.env.HTTPS_PROXY || process.env.https_proxy);
+const host = 'denied.invalid:443';
+const req = http.request({hostname:proxy.hostname, port:proxy.port, method:'CONNECT',
+                          path:host, headers:{host}, timeout:10000});
+req.on('connect',(res,socket)=>{socket.destroy(); console.log(res.statusCode)});
+req.on('timeout',()=>req.destroy(Error('proxy timed out')));
+req.end();
+"""
+        if run(["node", "-e", probe]).stdout.strip() != "403":
+            raise SystemExit("Proxy did not deny the unapproved host")
+        evidence["unapprovedConnect"] = 403
+    print(json.dumps(evidence))
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ def main():
     p.add_argument("--user", required=True)
     p.add_argument("--profile",default="audited-openclaw")
     p.add_argument("--model",action="append",default=[],metavar="FIELD=MODEL")
+    p.add_argument("--endpoint", help="site-approved custom inference HTTPS v1 URL")
     p.add_argument("--key-file", type=Path)
     p.add_argument("--task")
     p.add_argument("--run")
@@ -40,6 +41,11 @@ def main():
         p.error("explicit HTTPS portal and Keycloak realm required")
     if a.action == "status" and not re.fullmatch(r"[0-9a-f-]{36}", a.task or ""):
         p.error("explicit task UUID required")
+    if a.action in ("create", "update") and a.profile == "custom-inference":
+        if not re.fullmatch(r"https://[a-z0-9.-]+(?::443)?(?:/[A-Za-z0-9_-]+)*/v1", a.endpoint or ""):
+            p.error("custom-inference requires its site-approved HTTPS v1 --endpoint")
+    elif a.endpoint:
+        p.error("--endpoint is only used to create or update custom-inference")
     class Redirect(r.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             origin = u.urlsplit(newurl)
@@ -108,6 +114,8 @@ def main():
         # The browser places a redacted value in form data to satisfy JSON
         # Schema. Only the separate secrets map carries the credential.
         data["values"].update(profile=a.profile,deploymentMode="container",inference__api_key="********")
+        if a.endpoint:
+            data["values"]["inference__url"] = a.endpoint
         for assignment in a.model:
             field,sep,value=assignment.partition("=")
             if not sep or not re.fullmatch(r"inference__[a-z_]*model",field) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",value):

@@ -190,3 +190,57 @@ The glmhg run used the packaged controller image
 `image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:f57b928684c48597de98a5f374d3464195b04c8c75dd9eaf3f385cea76cd44c2`.
 The approved streaming POST returned 200; the broker refused the second host
 with 403. [Cluster validation record](../tests/acceptance/custom-inference-container-2026-11-05.json)
+
+### Qualify a registered owner against a real model
+
+Use a disposable owner with no active workspace. Set `PORTAL` to the HTTPS
+Developer Hub origin, `ISSUER` to its Keycloak realm, and `ENDPOINT` and
+`MODEL` to the site-approved API base and a model served there. Keep the
+owner password and the provider key in separate private files.
+
+```sh
+owner_task() {
+  python3 tests/acceptance/rhdh_workspace.py "$@" \
+    --user "$OWNER" --origin "$PORTAL" --issuer "$ISSUER" < "$PASSWORD_FILE"
+}
+owner_task create --profile custom-inference --endpoint "$ENDPOINT" \
+  --model "inference__model=$MODEL" --key-file "$PROVIDER_KEY_FILE"
+owner_task status --task "$CREATE_TASK" --wait 1800
+```
+
+Use the returned task UUID for `CREATE_TASK`. Expect `completed`. The shipped
+custom profile starts OpenClaw in `default/notebook` with a loopback gateway.
+For a private gateway an operator can forward the Service to the test client:
+
+```sh
+oc -n "saw-$OWNER" port-forward --address 127.0.0.1 "svc/$OWNER-gateway" 17671:17670
+```
+
+In another terminal, use the gateway's public CA and the owner's OpenShell
+OIDC login. The operator supplies the tunnel; the gateway authorizes the owner
+for each sandbox command. Keep the tunnel open through the inference check.
+
+```sh
+gw="saw-$OWNER"
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}/openshell/gateways/$gw/mtls"
+mkdir -p "$cfg"
+install -m 0644 "$GATEWAY_CA_FILE" "$cfg/ca.crt"
+openshell gateway add https://localhost:17671 --name "$gw" \
+  --oidc-issuer "$ISSUER" --oidc-client-id openshell-cli
+openshell gateway login "$gw"
+python3 tests/acceptance/kubernetes_openclaw.py --gateway "$gw" \
+  --workspace default --sandbox notebook --provider custom-inference \
+  --model "$MODEL" --verify-transcript --check-proxy-denial
+```
+
+The probe calls the running OpenClaw gateway, compares the reply with a fresh
+random challenge and checks the matching assistant transcript for provider,
+requested model, response model and a provider response ID. It also requires
+HTTP 403 for a credential-free CONNECT to `denied.invalid:443`. For a disposable
+registration, delete it through RHDH and check that task's result.
+
+```sh
+owner_task delete
+owner_task status --task "$DELETE_TASK" --wait 1800
+openshell gateway remove "$gw"
+```
