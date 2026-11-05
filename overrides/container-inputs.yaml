@@ -1,0 +1,31 @@
+owner: sawk8sowner
+subject: 351ae03c-0f64-402d-807b-687d1901e3dc
+issuer: https://openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io/realms/openshell
+buildNamespace: saw-container-build
+governanceNamespace: saw-container-policy
+networkPriority: 51
+apiAddresses:
+- 172.231.0.1
+- 10.10.10.10
+- 10.10.10.11
+- 10.10.10.12
+apiPorts:
+- 443
+- 6443
+issuerAddresses:
+- 10.10.10.10
+- 10.10.10.11
+- 10.10.10.12
+- 10.10.10.30
+- 10.10.10.31
+- 10.10.10.101
+clusterCIDRs:
+- 10.232.0.0/14
+- 172.231.0.0/16
+gatewayStorage: ocs-external-storagecluster-ceph-rbd
+historyStorage: ocs-external-storagecluster-ceph-rbd-immediate
+exchangeStorage: ocs-external-storagecluster-cephfs
+controllerImage: image-registry.openshift-image-registry.svc:5000/saw-container-build/saw-runtime-controller@sha256:3cfde35f995cd8276926973e8b6cc44247b349d86a7935b02e309acb01239300
+notebookImage: image-registry.openshift-image-registry.svc:5000/saw-container-build/saw-openclaw-home@sha256:1d51568cfe839646f6b93f25fb4352327c366e61b335206ff93a7806eb8beb59
+keycloakNamespace: saw-keycloak
+keycloakAdminSecret: openshell-keycloak-initial-admin
