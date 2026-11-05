@@ -73,12 +73,20 @@ def test_templates_are_the_generated_form_with_the_provisioner(docs):
 
 
 @pytest.mark.ci_external
-def test_every_form_field_reaches_the_request(docs):
+@pytest.mark.parametrize("container", [False, True])
+def test_every_form_field_reaches_the_request(docs, container):
     """The form asks for what the catalog says each profile needs, and the
     request Secret carries each field under <secret>.<field>."""
     catalog = json.loads((CHART / "files" / "profile-catalog.json").read_text())["profiles"]
     create = yaml.safe_load(one(docs, "ConfigMap", "saw-rhdh-templates")["data"]["create-workspace.yaml"])
     string_data = create["spec"]["steps"][0]["input"]["body"]["stringData"]
+    if container:
+        site = ROOT/"examples/portal-container/glmhg.yaml"
+        with_containers = render("-f",str(site))
+        create=yaml.safe_load(one(with_containers,"ConfigMap","saw-rhdh-templates")["data"]["create-workspace.yaml"])
+        string_data=create["spec"]["steps"][0]["input"]["body"]["stringData"]
+    else:
+        catalog={k:v for k,v in catalog.items() if k!="audited-openclaw"}
     one_of = create["spec"]["parameters"][0]["dependencies"]["profile"]["oneOf"]
     assert sorted(o["properties"]["profile"]["const"] for o in one_of) == sorted(catalog)
     for profile, spec in catalog.items():
@@ -569,7 +577,9 @@ def test_tls_is_verified_everywhere_by_default(docs):
 @pytest.mark.ci_external
 def test_one_switch_turns_verification_off(docs):
     s = tls_settings(render("--set", "tls.insecureSkipVerify=true"))
-    assert s["node"]["NODE_TLS_REJECT_UNAUTHORIZED"] == "0" and s["patch"] is None
+    assert s["node"]["NODE_TLS_REJECT_UNAUTHORIZED"] == "0"
+    tpl = s["patch"]["spec"]["template"]
+    assert "spec" not in tpl and len(tpl["metadata"]["annotations"]["saw.redhat.com/portal-templates"]) == 64
     assert s["proxy"] == [False, False]
     assert s["kubernetes"]["skipTLSVerify"] is True and "caFile" not in s["kubernetes"]
     assert _envs(s["generator"]["containers"][0])["KEYCLOAK_SKIP_VERIFY"] == "true"
