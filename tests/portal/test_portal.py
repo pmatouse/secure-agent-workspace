@@ -1614,3 +1614,27 @@ def test_container_portal_register_update_delete(portal, world, monkeypatch):
     assert portal.removal_status(portal.kube(), "alice", "vp-gitops", entry)[0]
     assert portal.main(["finish-delete","alice"]) == 0
     assert not fake.vault and REGISTRY not in fake.objects
+
+@pytest.mark.parametrize("mode,ready", [("registered",True),("pending",False),("wrong-client",False),("foreign",False),("anonymous-chat",False)])
+def test_chat_readiness_requires_registered_owner_callback(portal, monkeypatch, mode, ready):
+    import io
+    from urllib.error import HTTPError
+    from urllib.parse import urlencode
+    origin, issuer = "https://chat.test", "https://id.test"
+    monkeypatch.setenv("KEYCLOAK_URL",issuer)
+    monkeypatch.setenv("KEYCLOAK_REALM","openshell")
+    class Response(io.BytesIO):
+        status = 200
+    class Opener:
+        def open(self, url, timeout):
+            if url==origin:
+                if mode=="anonymous-chat": return Response(b"chat")
+                params=urlencode(dict(client_id=("wrong" if mode=="wrong-client" else "openshell-dashboard"),redirect_uri=origin+"/oauth2/callback"))
+                host="https://other.test" if mode=="foreign" else issuer
+                raise HTTPError(url,302,"",{"Location":host+"/realms/openshell/protocol/openid-connect/auth?"+params},None)
+            assert url.startswith(issuer)
+            if mode=="pending": raise HTTPError(url,400,"Invalid redirect URI",{},None)
+            return Response(b'<form id="kc-form-login">')
+    monkeypatch.setattr(portal.urllib.request,"build_opener",lambda *args:Opener())
+    assert portal.owner_route_available(origin) is ready
+
