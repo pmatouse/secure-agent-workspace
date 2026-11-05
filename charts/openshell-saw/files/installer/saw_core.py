@@ -15,6 +15,7 @@ import base64
 import hashlib
 import json
 import re
+from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -745,6 +746,101 @@ def inference_protocol(spec, provider_type):
     return spec.get("protocol") or PROVIDER_PROTOCOLS.get(provider_type or "", "")
 
 
+SHELL_UNSAFE = set("\"'`$\\;|&<>(){}")
+
+def check_base_url(url):
+    """An http(s) base URL without credentials, query or fragment. The value
+    is not echoed in errors: a pasted URL may contain a token."""
+    try:
+        parts = urlsplit(url)
+        ok = (parts.scheme in ("http", "https") and parts.hostname
+              and parts.username is None and parts.password is None
+              and not parts.query and not parts.fragment
+              and not any(c.isspace() or c in SHELL_UNSAFE for c in url))
+        if ok:
+            parts.port  # raises ValueError on a bad port
+    except ValueError:
+        ok = False
+    if not ok:
+        raise ValueError("base URL must be http(s)://host[:port][/path] without credentials, "
+                         "query or fragment")
+    host = parts.hostname
+    if host in ("localhost", "127.0.0.1", "::1"):
+        raise ValueError("base URL must not be localhost: inside the sandbox that is the "
+                         "sandbox itself (use a cluster Service or Route host)")
+    return url.rstrip("/")
+
+
+def resolve_bom_input(src, read_value, what, forbidden=()):
+    """A typed input's value: the literal, or the Secret key it refers to
+    (secretKeyRef), else its default; "" when optional and absent."""
+    if not isinstance(src, dict):
+        return str(src)
+    sname, skey = secret_ref(src)
+    if (sname, skey) in forbidden:
+        raise InstallerError(f"{what}: secretKeyRef names a provider credential or refresh material; refusing to expose it")
+    value = read_value(sname, skey)
+    if value:
+        return value
+    if "default" in src:
+        return str(src["default"])
+    if src.get("required", "default" not in src):
+        raise InstallerError(f"{what} not found: Secret '{sname}' key '{skey}'. List the "
+                             "Secret in openshell-saw additionalProviderSecrets and make sure "
+                             "it exists.")
+    return ""
+
+
+def resolve_inference(ws, sb, read_value, validate_endpoint, forbidden=()):
+    """A sandbox's `inference:` resolved: providerRef, protocol, baseUrl
+    (validated, "" = the protocol's native API), model, timeoutSeconds."""
+    spec = sb.inference
+    where = f"sandbox '{sb.name}' in workspace '{ws.name}'"
+    provider = next((p for p in ws.providers if p.enabled and p.name == spec["providerRef"]), None)
+    out = {"providerRef": spec["providerRef"],
+           "protocol": inference_protocol(spec, provider.type if provider else "")}
+    out["model"] = resolve_bom_input(spec["model"], read_value, f"{where}: inference model", forbidden)
+    if not out["model"]:
+        raise InstallerError(f"{where}: inference model is empty")
+    url = resolve_bom_input(spec["baseUrl"], read_value, f"{where}: inference baseUrl", forbidden) \
+        if "baseUrl" in spec else ""
+    if url:
+        try:
+            url = check_base_url(url)
+        except ValueError as exc:
+            raise InstallerError(f"{where}: inference baseUrl: {exc}") from None
+    validate_endpoint(url, spec, provider, where)
+    out["baseUrl"] = url
+    timeout = resolve_bom_input(spec["timeoutSeconds"], read_value,
+                            f"{where}: inference timeoutSeconds", forbidden) if "timeoutSeconds" in spec else ""
+    if timeout and (not str(timeout).isdigit() or int(timeout) < 0):
+        raise InstallerError(f"{where}: inference timeoutSeconds must be a non-negative integer")
+    out["timeoutSeconds"] = int(timeout) if timeout else 0
+    if "models" in spec:
+        out["models"] = {}
+        for name, src in spec["models"].items():
+            attached = next((p for p in ws.providers if p.enabled and p.name == name
+                             and name in sb.providers), None)
+            if attached is None:
+                continue
+            if attached.base_url or attached.base_url_secret_key:
+                raise InstallerError(f"{where}: inference models '{name}' needs a native API")
+            model = resolve_bom_input(src, read_value, f"{where}: inference models '{name}'", forbidden)
+            if not model:
+                raise InstallerError(f"{where}: inference models '{name}' is empty")
+            try:
+                check_env_value(model)
+            except ValueError as exc:
+                raise InstallerError(f"{where}: inference models '{name}': {exc}") from None
+            out["models"][name] = model
+    for key in ("model", "baseUrl"):
+        try:
+            check_env_value(out[key])
+        except ValueError as exc:
+            raise InstallerError(f"{where}: inference {key}: {exc}") from None
+    return out
+
+
 def sandbox_inference_problems(sb, provider_types, declared_provider_types=None):
     """What is wrong with a sandbox's `inference:` block ([] when fine).
     `provider_types` maps the workspace's enabled provider names to their
@@ -832,7 +928,7 @@ __all__ = (
     'validate_profiles', 'ENV_NAME_RE', 'CREDENTIAL_NAME_RE', 'ENV_VALUE_LIMIT', 'SANDBOX_ENV_KEYS',
     'INPUT_KEYS', 'secret_ref', 'secret_ref_problems', 'INFERENCE_KEYS', 'INFERENCE_PROTOCOLS',
     'PROVIDER_PROTOCOLS', 'check_env_value', 'sandbox_env_problems', 'input_problems',
-    'inference_protocol', 'sandbox_inference_problems', 'harness_from_plan', 'profiles_from_plan',
+    'check_base_url', 'resolve_bom_input', 'resolve_inference', 'inference_protocol', 'sandbox_inference_problems', 'harness_from_plan', 'profiles_from_plan',
     'validate_profile_document', 'apply_workspace_sequence',
 )
 

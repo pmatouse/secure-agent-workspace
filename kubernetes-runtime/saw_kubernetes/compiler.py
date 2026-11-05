@@ -146,6 +146,23 @@ def compile_profile(profile_dir, config):
     return compile_profile_files(files, config)
 
 
+def _openai_inference(workspace, sandbox, config):
+    """Use the VM BOM resolver, with public model inputs from the approved binding."""
+    inputs = config.get("modelInputs", {})
+    def read_model(secret, key):
+        if secret != config.get("openAIProxySecret") or key == "api_key":
+            raise ContractError("model input is outside the public inference binding")
+        return inputs.get(secret + "." + key, "")
+    info = shared.resolve_inference(workspace, sandbox, read_model, lambda *_: None,
+                                    forbidden={(config.get("openAIProxySecret"), "api_key")})
+    if (sandbox.providers != ["openai"] or info["providerRef"] != "openai"
+            or info["protocol"] != "openai" or info["baseUrl"] != "https://api.openai.com/v1"
+            or info.get("models") or info["timeoutSeconds"]
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", info["model"])):
+        raise ContractError("OpenClaw requires an approved OpenAI inference profile")
+    return info
+
+
 def compile_profile_files(files, config):
     """Compile stock SAW ConfigMap data with administrator-approved bindings.
 
@@ -165,7 +182,7 @@ def compile_profile_files(files, config):
         raise ContractError("profile documents fail shared SAW schema or semantic validation") from None
     mapping(config, {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode",
                      "workloadRuntimeClass", "workloadRuntimeClassUID", "bindings",
-                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes"},
+                     "approvedCredentialFreeProviders", "gatewayVersion", "openAIProxySecret", "retiredSandboxes", "modelInputs"},
             {"ownerID", "namespace", "namespaceUID", "ownerSubject", "mode", "bindings",
              "approvedCredentialFreeProviders", "gatewayVersion"}, "administrator configuration")
     try:
@@ -231,18 +248,13 @@ def compile_profile_files(files, config):
             command = ["sh", "-c", "sleep infinity"]
             if sandbox.harness_ref or sandbox.env or sandbox.model or sandbox.agent != "openclaw":
                 raise ContractError("harness/UI/inference/env capability is not yet ported to Kubernetes")
-            if sandbox.ui and (sandbox.type != "openclaw" or sandbox.ui != {"route": True}
+            if sandbox.ui and (sandbox.type not in ("openclaw","nemoclaw") or sandbox.ui != {"route": True}
                                or not bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")):
                 raise ContractError("UI route capability requires the matching approved OpenClaw browser binding")
-            if sandbox.type == "openclaw":
-                info = sandbox.inference
-                if (set(info) != {"providerRef", "protocol", "baseUrl", "model"}
-                        or sandbox.providers != ["openai"] or info["providerRef"] != "openai"
-                        or info["protocol"] != "openai" or info["baseUrl"] != "https://api.openai.com/v1"
-                        or not isinstance(info["model"], str)
-                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", info["model"])
-                        or not any(p["type"] == "openai" and p.get("credentials") for p in providers)):
-                    raise ContractError("openclaw requires a bound OpenAI provider and literal approved inference settings")
+            if sandbox.type in ("openclaw", "nemoclaw"):
+                if not any(p["type"] == "openai" and p.get("credentials") for p in providers):
+                    raise ContractError("openclaw requires a bound OpenAI provider")
+                info = _openai_inference(workspace, sandbox, config)
                 script = Path(__file__).with_name("openclaw.sh").read_text()
                 browser = bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")
                 extra = ""
@@ -270,12 +282,12 @@ def compile_profile_files(files, config):
             if key not in bindings:
                 raise ContractError(f"{key} requires an administrator-approved retained workspace PVC")
             used_bindings.add(key)
-            if sandbox.type != "openclaw" and "browser" in bindings[key]:
+            if sandbox.type not in ("openclaw", "nemoclaw") and "browser" in bindings[key]:
                 raise ContractError("browser settings require an OpenClaw sandbox")
             driver, refs = _storage(bindings[key], ws_name)
             all_refs.extend(refs)
             if "toolGate" in bindings[key]:
-                if sandbox.type != "openclaw":
+                if sandbox.type not in ("openclaw", "nemoclaw"):
                     raise ContractError("toolGate requires an OpenClaw sandbox")
                 login = bindings[key]["toolGate"]["ownerLogin"]
                 if browser and login != browser["ownerLogin"]:
@@ -307,7 +319,7 @@ exec openclaw gateway""")
                 driver["pod"] = {"runtime_class_name": runtime}
             spec = {"template": {"image": sandbox.image, "driver_config": {"kubernetes": driver}},
                     "providers": sorted(references), "command": command, "tty": False}
-            if sandbox.type == "openclaw":
+            if sandbox.type in ("openclaw", "nemoclaw"):
                 # The boundary binary runs before the main command and inherits
                 # image TMPDIR. OpenShift assigns a distinct UID per namespace.
                 spec["template"]["environment"] = {"TMPDIR": "/tmp"}

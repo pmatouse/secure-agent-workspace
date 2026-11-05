@@ -1530,7 +1530,6 @@ def read_secret_value(base, key):
 
 # Characters a base URL never needs and a shell would interpret; the URL ends
 # up in an OpenClaw command line inside the sandbox.
-SHELL_UNSAFE = set("\"'`$\\;|&<>(){}")
 
 def same_sandbox(seen, recorded):
     """Is the running sandbox the one the record describes?
@@ -1571,46 +1570,16 @@ def env_flags(values):
 
 
 def resolve_input(src, secrets_dir, what, forbidden=()):
-    """A typed input's value: the literal, or the Secret key it refers to
-    (secretKeyRef), else its default; "" when optional and absent."""
-    if not isinstance(src, dict):
-        return str(src)
-    sname, skey = secret_ref(src)
-    if (sname, skey) in forbidden:
-        raise InstallerError(f"{what}: secretKeyRef names a provider credential or refresh material; refusing to expose it")
-    value = read_secret_value(Path(secrets_dir) / sname, skey)
-    if value:
-        return value
-    if "default" in src:
-        return str(src["default"])
-    if src.get("required", "default" not in src):
-        raise InstallerError(f"{what} not found: Secret '{sname}' key '{skey}'. List the "
-                             "Secret in openshell-saw additionalProviderSecrets and make sure "
-                             "it exists.")
-    return ""
+    return resolve_bom_input(src, lambda name, key: read_secret_value(Path(secrets_dir) / name, key),
+                             what, forbidden)
 
 
 def resolve_sandbox_inference(ws, sb, secrets_dir, mode="proxy", forbidden=()):
-    """A sandbox's `inference:` resolved: providerRef, protocol, baseUrl
-    (validated, "" = the protocol's native API), model, timeoutSeconds."""
-    spec = sb.inference
-    where = f"sandbox '{sb.name}' in workspace '{ws.name}'"
-    provider = next((p for p in ws.providers if p.enabled and p.name == spec["providerRef"]), None)
-    out = {"providerRef": spec["providerRef"],
-           "protocol": inference_protocol(spec, provider.type if provider else "")}
-    out["model"] = resolve_input(spec["model"], secrets_dir, f"{where}: inference model", forbidden)
-    if not out["model"]:
-        raise InstallerError(f"{where}: inference model is empty")
-    url = resolve_input(spec["baseUrl"], secrets_dir, f"{where}: inference baseUrl", forbidden) \
-        if "baseUrl" in spec else ""
-    if url:
-        try:
-            url = check_base_url(url)
-        except ValueError as exc:
-            raise InstallerError(f"{where}: inference baseUrl: {exc}") from None
-        if mode == "proxy" and provider and not provider.credential_free:
+    def validate_endpoint(url, spec, provider, where):
+        if mode != "proxy" or not provider or provider.credential_free:
+            return
+        if url:
             check_proxy_endpoint(url, f"{where}: inference baseUrl")
-    if mode == "proxy" and provider and not provider.credential_free:
         installer = Path(__file__).resolve().parent
         profile_type = "nvidia" if provider.type == "build" else provider.type
         shipped = (profile_type in provider_profiles(installer) or
@@ -1620,35 +1589,10 @@ def resolve_sandbox_inference(ws, sb, secrets_dir, mode="proxy", forbidden=()):
                                  "proxy host profile; inference baseUrl must use secretKeyRef "
                                  f"{{name: {provider.credential_secret}, key: url}} so the proxy "
                                  "can bind the credential to the Secret's url host")
-    out["baseUrl"] = url
-    timeout = resolve_input(spec["timeoutSeconds"], secrets_dir,
-                            f"{where}: inference timeoutSeconds", forbidden) if "timeoutSeconds" in spec else ""
-    if timeout and (not str(timeout).isdigit() or int(timeout) < 0):
-        raise InstallerError(f"{where}: inference timeoutSeconds must be a non-negative integer")
-    out["timeoutSeconds"] = int(timeout) if timeout else 0
-    if "models" in spec:
-        out["models"] = {}
-        for name, src in spec["models"].items():
-            attached = next((p for p in ws.providers if p.enabled and p.name == name
-                             and name in sb.providers), None)
-            if attached is None:
-                continue
-            if attached.base_url or attached.base_url_secret_key:
-                raise InstallerError(f"{where}: inference models '{name}' needs a native API")
-            model = resolve_input(src, secrets_dir, f"{where}: inference models '{name}'", forbidden)
-            if not model:
-                raise InstallerError(f"{where}: inference models '{name}' is empty")
-            try:
-                check_env_value(model)
-            except ValueError as exc:
-                raise InstallerError(f"{where}: inference models '{name}': {exc}") from None
-            out["models"][name] = model
-    for key in ("model", "baseUrl"):
-        try:
-            check_env_value(out[key])
-        except ValueError as exc:
-            raise InstallerError(f"{where}: inference {key}: {exc}") from None
-    return out
+
+    def read_value(name, key):
+        return read_secret_value(Path(secrets_dir) / name, key)
+    return resolve_inference(ws, sb, read_value, validate_endpoint, forbidden)
 
 
 def sandbox_protocol(sb, provider):
@@ -1683,29 +1627,6 @@ def sandbox_endpoint(sb, provider):
     if sb.inference_values:
         return sb.inference_values["baseUrl"]
     return provider.base_url if provider else ""
-
-
-def check_base_url(url):
-    """An http(s) base URL without credentials, query or fragment. The value
-    is not echoed in errors: a pasted URL may contain a token."""
-    try:
-        parts = urlsplit(url)
-        ok = (parts.scheme in ("http", "https") and parts.hostname
-              and parts.username is None and parts.password is None
-              and not parts.query and not parts.fragment
-              and not any(c.isspace() or c in SHELL_UNSAFE for c in url))
-        if ok:
-            parts.port  # raises ValueError on a bad port
-    except ValueError:
-        ok = False
-    if not ok:
-        raise ValueError("base URL must be http(s)://host[:port][/path] without credentials, "
-                         "query or fragment")
-    host = parts.hostname
-    if host in ("localhost", "127.0.0.1", "::1"):
-        raise ValueError("base URL must not be localhost: inside the sandbox that is the "
-                         "sandbox itself (use a cluster Service or Route host)")
-    return url.rstrip("/")
 
 
 # ---------------------------------------------------------------------------
