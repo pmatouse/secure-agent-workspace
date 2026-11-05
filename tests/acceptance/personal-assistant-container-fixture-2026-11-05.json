@@ -60,5 +60,23 @@
     "The stock gateway's GetProviderProfile RPC returned the expected environment slots, HTTPS port and enforced endpoints for all three public profiles. The hashes are SHA-256 over each live governance profile parsed as YAML and serialized as sorted compact JSON.",
     "Read-only observation of the stock audit writer found allowed calls to both reader tools. Upstream 401 responses were surfaced independently by the agent.",
     "The final Job used ephemeral storage. It did not exercise owner RHDH registration, durable PVCs, production OAuth refresh, external account access, real model inference or Kata placement."
-  ]
+  ],
+  "regressionChecks": {
+    "linuxSharedHarnessAndCharts": {
+      "passed": 479,
+      "skipped": 31,
+      "coverage": "VM bundle and mount tests, daily briefing, Kubernetes runtime and broker/portal Helm tests"
+    },
+    "linuxVmPackagingBomAndApply": {
+      "passed": 98
+    },
+    "linuxRecheckOnFrozenRuntimeSource": {
+      "passed": 38,
+      "coverage": "All unsuccessful checks from the broader macOS run repeated on Linux"
+    },
+    "profileCatalogAutomation": {
+      "passed": 16
+    },
+    "cleanup": "Removed Jobs, ConfigMaps and NetworkPolicies for all four fixture runs. The three existing VM instances were Running at the final cluster check."
+  }
 }
