@@ -129,3 +129,18 @@ def test_writer_key_binds_the_compiled_extension_and_tool_selection(source):
     binding["toolGate"]["receiptKey"] = "invalid"
     with pytest.raises(ContractError, match="Ed25519"):
         compile_profile(*source)
+
+
+@pytest.mark.parametrize("kind",["openclaw","nemoclaw"])
+def test_openai_model_uses_shared_bom_resolution(source,kind):
+    agent(source)
+    ref={"secretKeyRef":{"name":"inference","key":"custom_model"},"default":"gpt-4.1-mini"}
+    def configure(sb):
+        sb["type"]=kind
+        sb["inference"]["model"]=ref
+    sandbox(source,configure)
+    def model():
+        return compile_profile(*source)["workspaces"][0]["sandboxes"][0]["spec"]["command"][-1]
+    assert model()=="gpt-4.1-mini"
+    source[1]["modelInputs"]={"inference.custom_model":"gpt-4.1"}
+    assert model()=="gpt-4.1"

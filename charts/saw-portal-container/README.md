@@ -1,6 +1,15 @@
 # RHDH container workspaces
 
-An enrolled owner chooses **Container → Audited OpenClaw** in the existing RHDH create/update template and enters an inference key in its secret field. Delete uses the existing owned-workspace picker. An owner has one portal registration at a time. VM remains the default; an existing workspace cannot switch backends in place. This path uses ordinary Pods, not Kata or confidential VMs.
+An enrolled owner chooses **Container** in the existing RHDH create/update template, selects a site-approved BOM profile, and enters the provider credential. The existing owner picker handles deletion. The portal currently supports one registration per owner. VM is the default deployment.
+
+### How a profile reaches either runtime
+
+Both deployment methods render `charts/saw-bom` and read the same profile documents. Both use `saw_core` to parse and validate those documents, resolve typed inference inputs and defaults, and order workspace, provider and sandbox creation. The profile catalog lists the enabled workspaces, sandboxes and browser routes. The VM installer supplies its filesystem reader for inference inputs. The Kubernetes adapter supplies public model selections and attaches PVCs to stock OpenShell sandboxes.
+
+The site approves the rendered BOM digest in `automaticEnrollment.approvedProfiles`. RHDH derives one storage binding per enabled sandbox, and a scoped owner relay for each declared UI. An additional profile using these capabilities needs a digest approval and qualification. A new BOM capability belongs in the shared engine when both runtimes need it, with storage, placement and authorization supplied by the adapters.
+
+The glmhg data-science VM BOM enables `default/notebook` (OpenClaw) and `cuda-dev/cuda-sandbox` (NemoClaw running OpenClaw). It uses external OpenAI inference and disables the optional inline harness at this site. The two model selectors are public configuration. API keys stay in the registration's Vault path. The current update path can refresh provider credentials and reconcile the existing topology. Changing the selected model or profile currently requires a fresh registration.
+
 
 ```mermaid
 flowchart LR
@@ -40,7 +49,7 @@ flowchart LR
 
 **Acceptance:** [RHDH owner client](../../tests/acceptance/rhdh_workspace.py) submits the actual installed templates. A returned task ID is not a pass: wait for the Backstage task **and** Tekton PipelineRun. [Chat client](../../tests/acceptance/openclaw_audit_chat.py) signs in to the real HTTPS/WSS route, reads an unpredictable canary, and resolves tool approval requests as the owner. Also check the actual disposable files. [Archive verifier](../../tests/acceptance/portal_audit_evidence.cjs) checks the decision sequences and hashes the ordered records for comparison after deletion.
 
-**Live result (glmhg, 2026-11-05):** the owner’s create, update and delete tasks all completed in RHDH and succeeded in Tekton. Generation 2 retained the same sandbox and history PVC. Five expected tool-gate records matched byte-for-byte after foreground deletion and an independent read-only remount. The [validation record](../../tests/acceptance/portal-container-validation-2026-11-05.json) includes run IDs, digests and the two issues encountered during qualification.
+**Audited OpenClaw validation (glmhg, 2026-11-05):** the owner’s create, update and delete tasks all completed in RHDH and succeeded in Tekton. Generation 2 retained the same sandbox and history PVC. Five expected tool-gate records matched byte-for-byte after foreground deletion and an independent read-only remount. The [validation record](../../tests/acceptance/portal-container-validation-2026-11-05.json) includes run IDs, digests and the two issues encountered during qualification.
 
 ### Repeat the owner lifecycle
 

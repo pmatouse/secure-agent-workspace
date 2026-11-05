@@ -79,3 +79,22 @@ def test_automatic_enrollment_cannot_read_secrets_or_mount_history():
     files=ROOT/"charts/saw-portal-container/files"
     assert (files/"receipt.py").read_bytes()==(ROOT/"kubernetes-runtime/saw_kubernetes/receipt.py").read_bytes()
     assert (files/"portal_contract.py").read_text()==(ROOT/"kubernetes-runtime/saw_kubernetes/portal_contract.py").read_text().replace("from .boundary import","from saw_kubernetes.boundary import")
+
+
+def test_multiple_catalog_sandboxes_receive_distinct_storage_and_ui_namespaces():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("portal_topology",ROOT/"charts/openshell-rhdh/files/portal.py")
+    portal=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(portal)
+    catalog=json.loads((ROOT/"charts/saw-users/files/profile-catalog.json").read_text())["profiles"]
+    targets=portal.sandbox_targets(U,REG,catalog["data-science"])
+    assert set(targets)=={"default/notebook","cuda-dev/cuda-sandbox"}
+    site={**SITE,"targets":targets,"selectedDigest":"a"*64}
+    docs=render("saw-portal-container",U,"saw-"+U,dict(site=site,owner=U,registration=REG,installationID=user()["installationID"],ownerSubject=SITE["subject"],vaultPrefix=user()["vaultPrefix"],**{"global":GLOBAL}))
+    writers=[o for o in docs if o["kind"]=="Application" and o["spec"]["source"]["path"]=="charts/saw-audit-writer"]
+    assert len(writers)==2
+    assert {o["spec"]["source"]["helm"]["releaseName"] for o in writers}=={x["base"] for x in targets.values()}
+    assert {o["metadata"]["name"] for o in docs if o["kind"]=="Namespace" and o["metadata"]["name"].startswith("saw-ui-")}=={"saw-ui-"+x["relayID"] for x in targets.values()}
+    for writer in writers:
+        identity=writer["spec"]["source"]["helm"]["valuesObject"]["identity"]
+        assert identity["workspace"]+"/"+identity["sandbox"] in targets

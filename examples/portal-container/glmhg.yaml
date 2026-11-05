@@ -286,7 +286,7 @@ portal:
               workspace: agent
               sandbox: audited
       automaticEnrollment:
-        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:cb037ee4047bccf2971853646bf20e1b5bcf6d8213e77f78fdf555d502233044
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:14858cb994f291c07e0cb1eabf1fc6650675a418931343738b35ee6e2697f31d
         revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
         buildNamespace: saw-k8s-build
         profileSHA256: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
@@ -359,4 +359,7 @@ portal:
             ports:
             - protocol: TCP
               port: 443
-          revision: 89a5b1f25ab036a516dbac31ba11027da3c7c758
+          revision: 887bd2619a2915c51c0e11fc9d3cc1e21d6cf3ac
+        approvedProfiles:
+          audited-openclaw: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
+          data-science: 8a99985f86f9da4e8501fffb54437aa8eb91089d44ccea9988e7bd5fc66d8c2c
