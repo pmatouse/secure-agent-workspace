@@ -32,7 +32,9 @@ def main():
     p.add_argument('--runtime-namespace',required=True)
     p.add_argument('--gateway',required=True)
     p.add_argument('--model',default='gpt-4.1-mini-2025-04-14')
-    p.add_argument('--trust-only',action='store_true')
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument('--trust-only',action='store_true')
+    mode.add_argument('--denial-only',action='store_true',help='check unapproved host rejection without sending a provider request')
     args=p.parse_args()
     for name in [args.trusted_namespace,args.runtime_namespace,args.gateway]:
         if not re.fullmatch(r'[a-z0-9]([-a-z0-9]*[a-z0-9])?',name):
@@ -74,6 +76,8 @@ def main():
             except URLError as exc:
                 assert '403 Forbidden' in str(exc.reason)
             receipt['unapprovedHostDenied']=True
+            if args.denial_only:
+                print(json.dumps(receipt,sort_keys=True));return
             def request(marker):
                 return Request('https://api.openai.com/v1/chat/completions',
                     data=json.dumps({'model':args.model,'messages':[{'role':'user','content':'Reply with exactly SAW_PROXY_OK. Do not use tools.'}],

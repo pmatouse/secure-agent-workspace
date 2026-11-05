@@ -193,6 +193,12 @@ with 403. [Cluster validation record](../tests/acceptance/custom-inference-conta
 
 ### Qualify a registered owner against a real model
 
+One OpenShell gateway serves the sandboxes in an owner registration. Other
+registrations have separate gateways, TLS identities and credential proxies.
+The shared governance interceptor supplies provider profiles to those gateways.
+OpenClaw runs inside the notebook. Its model traffic crosses the dedicated
+credential proxy, which replaces the marker with the Vault-sourced credential.
+
 Use a disposable owner with no active workspace. Set `PORTAL` to the HTTPS
 Developer Hub origin, `ISSUER` to its Keycloak realm, and `ENDPOINT` and
 `MODEL` to the site-approved API base and a model served there. Keep the
@@ -230,17 +236,34 @@ openshell gateway add https://localhost:17671 --name "$gw" \
 openshell gateway login "$gw"
 python3 tests/acceptance/kubernetes_openclaw.py --gateway "$gw" \
   --workspace default --sandbox notebook --provider custom-inference \
-  --model "$MODEL" --verify-transcript --check-proxy-denial
+  --model "$MODEL" --verify-transcript
 ```
 
 The probe calls the running OpenClaw gateway, compares the reply with a fresh
 random challenge and checks the matching assistant transcript for provider,
-requested model, response model and a provider response ID. It also requires
-HTTP 403 for a credential-free CONNECT to `denied.invalid:443`. For a disposable
-registration, delete it through RHDH and check that task's result.
+requested model, response model and a provider response ID. Check the registered
+broker separately from the operator test client. The probe expects HTTP 403
+for an unapproved CONNECT over a loopback tunnel into the broker Service.
+Set `REGISTRATION` to the registration ID from the owner workspace status.
+
+```sh
+python3 tests/acceptance/kubernetes_proxy.py --gateway "$OWNER" \
+  --runtime-namespace "saw-$OWNER" --trusted-namespace "saw-ctl-$REGISTRATION" \
+  --denial-only
+```
+
+For a disposable registration, delete it through RHDH and check the resulting task.
 
 ```sh
 owner_task delete
 owner_task status --task "$DELETE_TASK" --wait 1800
 openshell gateway remove "$gw"
 ```
+
+On glmhg the fresh owner's gateway served `default/notebook` under
+`restricted-v2`. The proxy recorded `POST /v1/chat/completions` with
+`binding=inference status=200`. The assistant record for the nonce named
+`custom-inference/gpt-4.1-mini` and response model `gpt-4.1-mini-2025-04-14`.
+The owner status API returned `ready: true` and an empty links array for this
+headless BOM. Allow for OpenClaw cold start after controller readiness.
+[Registered owner validation record](../tests/acceptance/custom-inference-owner-2026-11-05.json)

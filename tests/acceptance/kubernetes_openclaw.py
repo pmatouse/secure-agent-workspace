@@ -15,8 +15,6 @@ def main():
     parser.add_argument("--provider", default="openai")
     parser.add_argument("--verify-transcript", action="store_true",
                         help="correlate the fresh reply with the provider response in OpenClaw's transcript")
-    parser.add_argument("--check-proxy-denial", action="store_true",
-                        help="require the workspace HTTP proxy to reject an unauthenticated CONNECT to denied.invalid")
     args = parser.parse_args()
     # OpenShell exec is a fresh process. Point the CLI at the same private
     # configuration that the stock gateway uses inside the workspace.
@@ -34,11 +32,11 @@ def main():
         return result
     # gateway call uses the running gateway; 'agent --local' could mask an
     # unreachable service by starting a second agent in the CLI process.
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 360
     while run(["openclaw", "gateway", "call", "health", "--timeout", "8000", "--json"], check=False).returncode:
         if time.monotonic() >= deadline:
             raise SystemExit("OpenClaw gateway did not become healthy")
-        time.sleep(3)
+        time.sleep(10)
     out = run(["openclaw", "gateway", "call", "agent", "--expect-final", "--timeout", "100000",
                "--json", "--params", json.dumps({"agentId":"main", "sessionKey":session,
                "message": "Reply with exactly " + nonce + ". Do not use tools.", "idempotencyKey":nonce})]).stdout
@@ -60,20 +58,6 @@ def main():
                 or not (model == args.model or model.startswith(args.model + "-"))):
             raise SystemExit("Transcript does not match the requested provider and model")
         evidence["completion"] = completion
-    if args.check_proxy_denial:
-        probe = """
-const http = require('node:http');
-const proxy = new URL(process.env.HTTPS_PROXY || process.env.https_proxy);
-const host = 'denied.invalid:443';
-const req = http.request({hostname:proxy.hostname, port:proxy.port, method:'CONNECT',
-                          path:host, headers:{host}, timeout:10000});
-req.on('connect',(res,socket)=>{socket.destroy(); console.log(res.statusCode)});
-req.on('timeout',()=>req.destroy(Error('proxy timed out')));
-req.end();
-"""
-        if run(["node", "-e", probe]).stdout.strip() != "403":
-            raise SystemExit("Proxy did not deny the unapproved host")
-        evidence["unapprovedConnect"] = 403
     print(json.dumps(evidence))
 
 

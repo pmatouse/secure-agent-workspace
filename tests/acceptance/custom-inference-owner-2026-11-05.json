@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-05",
+  "cluster": "glmhg",
+  "siteRevision": "30e2ec496e9b42fa393508ef9e76c0eb75b7d1a6",
+  "runtimeSource": "a4162dfe1529541fc23ed33f63a01e186b7793d6",
+  "owner": "sawk8sowner",
+  "registration": "938f556e0fce196d",
+  "backend": "container",
+  "bom": {
+    "profile": "custom-inference",
+    "sha256": "42a0f00d3ea99f9259194763583b7ce63fb1a1d26984362c0df021897138f261",
+    "target": "default/notebook",
+    "uiRoute": false
+  },
+  "rhdh": {
+    "create": "5b389122-c150-4a12-8213-7189ea194b82",
+    "createStatus": "completed",
+    "createPipeline": "saw-create-rfh46",
+    "createPipelineStatus": "Succeeded",
+    "delete": "2438720a-aeb7-40a7-8992-fe5735f497d0",
+    "deletePipeline": "saw-delete-z9qdq",
+    "deletePipelineStatus": "Succeeded",
+    "deletePipelineCompleted": "2026-11-05T20:52:46Z",
+    "deleteStatus": "completed"
+  },
+  "runtime": {
+    "gateway": "sawk8sowner-gateway",
+    "gatewayNamespace": "saw-sawk8sowner",
+    "gatewayPodUID": "befbc27f-e088-42ce-81a3-306719d184f6",
+    "notebookPodUID": "52780d18-4fc8-4507-b83f-18f4fe76a2c1",
+    "scc": "restricted-v2",
+    "phase": "GenericReady",
+    "observedGeneration": 1,
+    "inputRevision": "cbb1b04a862c8db5dcd78610977eb8aa96db3a7c5652a85ac781352196cfdf76",
+    "ownerStatus": {
+      "ready": true,
+      "links": []
+    }
+  },
+  "inference": {
+    "endpoint": "https://api.openai.com/v1",
+    "providerProfileSource": "interceptor/governance",
+    "secretSync": "SecretSynced",
+    "ownerOIDCSandboxExec": true,
+    "freshReplyMatched": true,
+    "provider": "custom-inference",
+    "model": "gpt-4.1-mini",
+    "responseModel": "gpt-4.1-mini-2025-04-14",
+    "transcriptProviderResponseIDPresent": true,
+    "proxyLog": "2026/11/05 20:43:19 method=POST host=api.openai.com path=\"/v1/chat/completions\" binding=inference status=200"
+  },
+  "denial": {
+    "transport": "operator loopback port-forward to the registration credential-proxy Service",
+    "unapprovedConnectStatus": 403,
+    "workloadCNIDenialTested": false
+  },
+  "scope": "Headless owner registration, real inference through the stock gateway and the dedicated broker. The first create submission was rejected before a task was created while RHDH served the previous form. The successful registration was kept for the entire test. The HTTP 403 probe was independent of the owner shell.",
+  "cleanup": {
+    "ownerRegistrationRemoved": true,
+    "runtimeNamespaceRemoved": true,
+    "trustedNamespaceRemoved": true,
+    "retainedAuditClaim": "saw-history-938f556e0fce196d/sawk8sowner-history",
+    "retainedAuditClaimUID": "09cfe480-23d3-44e7-96dc-ee81b70dacd1",
+    "separateDemoGatewayReady": true,
+    "baselineVMsRunning": 3
+  },
+  "regressions": {
+    "containerPortalCatalogAndChartTests": 194,
+    "linuxVMCustomInferenceTests": 37
+  }
+}

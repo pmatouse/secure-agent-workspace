@@ -30,8 +30,11 @@ proxy path, Google OAuth refresh, owner HTTPS chat and lifecycle in that run.
 The container backend also implements the shipped `custom-inference` BOM with
 a site-approved OpenAI-compatible HTTPS endpoint. The controlled OpenShift
 test exercises the actual client, broker credential injection, streaming reply,
-BOM timeout and cross-host denial. A fresh RHDH registration with a configured
-site governance profile and production model server remains a separate test.
+BOM timeout and cross-host denial. On glmhg, a fresh RHDH container registration
+also served a real OpenAI response through its dedicated stock OpenShell gateway.
+The ordinary owner used OpenShell sandbox exec to reach headless OpenClaw.
+The assistant transcript identifies the provider and dated response model.
+[Registered owner evidence](../tests/acceptance/custom-inference-owner-2026-11-05.json)
 [Configuration and acceptance instructions](custom-inference.md#container-deployment)
 
 ### Live baseline receipt (2026-11-04)
