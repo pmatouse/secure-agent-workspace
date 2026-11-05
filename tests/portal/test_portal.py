@@ -1638,3 +1638,28 @@ def test_chat_readiness_requires_registered_owner_callback(portal, monkeypatch, 
     monkeypatch.setattr(portal.urllib.request,"build_opener",lambda *args:Opener())
     assert portal.owner_route_available(origin) is ready
 
+
+def test_generator_publishes_only_immutable_owner_bound_data(portal):
+    reg="a"*16; owner="9aaea20f-245f-407a-a0c3-fbd894615b90"
+    sub="e05c1559-5009-4663-81fb-3c5facb5ced8"
+    ws=dict(name="ada",registration=reg,installationID=owner,ownerSubject=sub)
+    a=dict(image="pinned@sha256:abc",revision="fixed",buildNamespace="trust",profileSHA256="bom",
+           reference={"gateway":{}},relay={"issuer":"https://issuer","revision":"fixed"})
+    site={"automaticEnrollment":a}
+    intent=dict(bindings=dict(ownerID=owner,namespace="saw-ada",ownerSubject=sub),profileRef=dict(sha256="bom"))
+    body=dict(registration=reg,intent=intent,approved={"gateway":{}},gatewayCA="public")
+    meta={"labels":{"saw.redhat.com/runtime-owner":owner}}
+    cm=dict(immutable=True,metadata=meta,data={})
+    relay=dict(immutable=True,metadata=meta,data={"subject":"e5ed3695-4476-4b1f-8e5d-daf5f6ccfae3"})
+    def read(path):
+        assert path.startswith("/api/v1/namespaces/saw-ctl-"+reg+"/configmaps/")
+        cm["data"]={"binding.json":json.dumps(body)}
+        return relay if path.endswith("relay-subject") else cm
+    assert portal.enrolled_site(site,ws,read)["enrollment"]["relay"]["subject"]==relay["data"]["subject"]
+    body["revision"]="caller-controlled"
+    with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
+    del body["revision"]
+    cm["immutable"]=False
+    with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
+    cm["immutable"]=True;intent["bindings"]["ownerID"]="foreign"
+    with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)

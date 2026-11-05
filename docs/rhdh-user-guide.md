@@ -1,5 +1,8 @@
 # Self-service workspaces: user guide and manual test
 
+For an enrolled container workspace, select **Container** and **Audited OpenClaw** in the create/update form. Open the **Audited OpenClaw** catalog link when ready. The same delete template removes the workload and its credentials; audit history stays with the operator. See the [container walkthrough](../charts/saw-portal-container/README.md).
+
+
 Step by step: get the portal ready, open Red Hat Developer Hub (RHDH),
 request a workspace, open its sandbox, and check each step on the way. How
 the parts fit together is in [self-service-portal.md](self-service-portal.md).

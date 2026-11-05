@@ -1,4 +1,3 @@
-# Example site inventory; enables only the named test user when installed.
 portal:
   deploymentModes:
   - vm
@@ -272,7 +271,7 @@ portal:
             route:
               enabled: false
         audit:
-          revision: 263e00fc640c4f5acbe0dc61413090e38eeb0874
+          revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
           values:
             enabled: true
             trustedNamespace: '@ARCHIVE@'
@@ -286,3 +285,78 @@ portal:
               username: '@OWNER@'
               workspace: agent
               sandbox: audited
+      automaticEnrollment:
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:cb037ee4047bccf2971853646bf20e1b5bcf6d8213e77f78fdf555d502233044
+        revision: e5c7a69c0a701c0bfcec3944e0646469fd0788ff
+        buildNamespace: saw-k8s-build
+        profileSHA256: c75407cf2ead75e9fc6a43f1e1d0ae272e2f4cdf2045387fca9832005cc9d3eb
+        resources:
+          limits:
+            cpu: '2'
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        reference:
+          validation: d39420fead08d3208849bc26571d7110d5e3c2db95880db18bdda3ff992aaae5
+          binding: 8907af47370ca8debab0687f93fe04645891532122e584f6588691c8b3c0bd44
+          network: 7eaabdfa6aa0e3e387efa2708f9baed3f52ed9f65976144f96495aa98dc62ae4
+          deny: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+          gatewayNetwork: ce9b1141ff118beba824906c48e23f8604a4ab111fcfcf2508707e449979b80a
+          gateway: 966364a899282607a0aa6d5e63022857915afdcc1fcafe8e6e31c2b3ac192d60
+          gatewayService: 11f2046ef571e1f60921ec0f6a3974b1e7202a85bb6545076373433f6bbaaa69
+          gatewayConfig: 239f2029b1c6eb64c538b0645305aaf2d28bb0eff3cb223b47a5a991d30f082c
+          governance:
+            uid: e72b776d-501b-4712-9cfd-6fa417152669
+            sha256: 73497be5126e5de86a248a8417db321e5a4fdec24036875354d6ae412cf81464
+          governanceService:
+            uid: 57b1b15f-faea-40b5-baba-7a1febc31c57
+            sha256: ea86f6d4b7cf245aea3737a2da867e3b2903548e720704decfe5e822ec021d03
+          governancePolicy:
+            uid: 9ed4c1c3-c8a0-4b16-8799-4b958c6a5c83
+            sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+          governanceProfiles:
+            uid: 1b213f52-e115-434e-916b-cfa888b8aacd
+            sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+          proxy: 173b0e3c735449e49f1c0cdd82ce9138faeac7ad1504975154dab1ba08e705a4
+          proxyNetwork: 4e0c80d56b38edb56dff4935721b174528d32dcf72b95d84428dc3a27e1851d2
+          proxyPolicy: 994c67a07d21e9f8e81849ba56cee59a977885a3106313bb19346826b44e81d0
+          publicCA: equals independent trusted proxy public CA
+        relay:
+          keycloakNamespace: saw-keycloak
+          keycloakAdminSecret: openshell-keycloak-initial-admin
+          issuer: https://openshell-keycloak-ingress-saw-keycloak.apps.cluster-glmhg.dyn.redhatworkshops.io/realms/openshell
+          egress:
+          - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: openshift-dns
+              podSelector:
+                matchLabels:
+                  dns.operator.openshift.io/daemonset-dns: default
+            ports:
+            - protocol: UDP
+              port: 53
+            - protocol: UDP
+              port: 5353
+            - protocol: TCP
+              port: 53
+            - protocol: TCP
+              port: 5353
+          - to:
+            - ipBlock:
+                cidr: 10.10.10.10/32
+            - ipBlock:
+                cidr: 10.10.10.11/32
+            - ipBlock:
+                cidr: 10.10.10.12/32
+            - ipBlock:
+                cidr: 10.10.10.30/32
+            - ipBlock:
+                cidr: 10.10.10.31/32
+            - ipBlock:
+                cidr: 10.10.10.101/32
+            ports:
+            - protocol: TCP
+              port: 443
+          revision: 89a5b1f25ab036a516dbac31ba11027da3c7c758

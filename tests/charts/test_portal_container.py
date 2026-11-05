@@ -59,3 +59,19 @@ def test_container_rejects_another_registrations_keys():
     v = dict(owner=U,ownerSubject=SITE["subject"],registration=REG,vaultPrefix="secret/data/hub/saw-other/"+REG)
     with pytest.raises(AssertionError,match="vaultPrefix must match"):
         render("saw-portal-container",U,"saw-"+U,v)
+
+
+def test_automatic_enrollment_cannot_read_secrets_or_mount_history():
+    site=SITE
+    v=dict(owner=U,ownerSubject=site["subject"],registration=REG,installationID=user()["installationID"],vaultPrefix=user()["vaultPrefix"],site=site,**{"global":GLOBAL})
+    resources=render("saw-portal-container",U,"saw-"+U,v)
+    j,=[r for r in resources if r["kind"]=="Job"]
+    spec=j["spec"]["template"]["spec"]
+    assert not any("persistentVolumeClaim" in v for v in spec["volumes"])
+    assert [v["secret"]["items"] for v in spec["volumes"] if "secret" in v]==[[{"key":"ca.crt","path":"ca.crt"}]]
+    grants=[rule for r in resources if r["kind"] in ("Role","ClusterRole") and "enroll" in r["metadata"]["name"] for rule in r["rules"]]
+    assert all("secrets" not in x["resources"] and "*" not in x["verbs"] for x in grants)
+    assert [x["resourceNames"] for x in grants if "patch" in x["verbs"]]==[["saw-portal-enrollment"]]
+    files=ROOT/"charts/saw-portal-container/files"
+    assert (files/"receipt.py").read_bytes()==(ROOT/"kubernetes-runtime/saw_kubernetes/receipt.py").read_bytes()
+    assert (files/"portal_contract.py").read_text()==(ROOT/"kubernetes-runtime/saw_kubernetes/portal_contract.py").read_text().replace("from .boundary import","from saw_kubernetes.boundary import")

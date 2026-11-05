@@ -2,11 +2,13 @@
 
 Users create their own Secure Agent Workspace from Red Hat Developer Hub
 (RHDH). They pick a SAW-BOM profile, enter the keys that profile needs, and
-get namespace `saw-<user>` with a VM, the profile's OpenShell sandboxes, and
+get namespace `saw-<user>` with the workspace runtime, the profile's OpenShell sandboxes, and
 routes to the sandbox web UIs. Nothing goes into Git: the keys go to Vault,
 and the workspace is an entry in an in-cluster registry that Argo CD builds.
 
-The step-by-step walkthrough and manual test is in [rhdh-user-guide.md](rhdh-user-guide.md).
+VM is the default. Sites can also enroll owners for **Container → Audited OpenClaw** using the same create/update/delete templates, Vault paths and ApplicationSet. See the [container lifecycle and trust boundaries](../charts/saw-portal-container/README.md) for enrollment, tool approvals and audit retention.
+
+The VM walkthrough and manual test is in [rhdh-user-guide.md](rhdh-user-guide.md).
 
 This replaces the Helm-install flow of PR #33 (RHDH portal, by @pmatouse) with
 the pattern's current way of creating a workspace, the `saw-users` chart.
