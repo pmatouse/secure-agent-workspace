@@ -97,11 +97,15 @@ def main():
         def agent(*args):
             return run("oc","-n",ns,"exec",pod,"-c","agent","--",*args)
         agent("sh","-ec",'umask 077; mkdir "$1"; cd "$1"; printf %s "$2" >canary; touch allow-me deny-me',"fixture",folder,canary)
+        # The stock Control UI verifies buildId, even for two versions
+        # speaking the same wire protocol. Read only its public build metadata.
+        version=agent("sh","-ec", """node -e 'const fs=require("fs"),p=require("path");let d=p.dirname(fs.realpathSync(process.argv[1]));for(;;){for(const f of ["dist/build-info.json","openclaw/dist/build-info.json","node_modules/openclaw/dist/build-info.json"]){const file=p.join(d,f);if(fs.existsSync(file)){const id=JSON.parse(fs.readFileSync(file)).buildId;if(id){process.stdout.write(id);process.exit(0)}}}if(d===p.dirname(d))break;d=p.dirname(d)}process.exit(1)' "$(command -v openclaw)" """)
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,150}",version):raise RuntimeError("invalid UI build ID")
         origin=slot["browser"]["origin"]
         prefix="agent:main:portal-"+registration[:8]+"-"
         def turn(name,prompt,*extra):
             return run(sys.executable,str(HERE/"openclaw_audit_chat.py"),"--origin",origin,"--issuer",a.issuer,
-                "--user",a.user,"--version",a.openclaw_version,"--session",prefix+name,"--prompt",prompt,*extra,stdin=pw)
+                "--user",a.user,"--version",version,"--session",prefix+name,"--prompt",prompt,*extra,stdin=pw)
         print(turn("read","Use the read tool to read "+folder+"/canary and reply with the exact contents.","--contains",canary))
         for name,decision,file in (("deny","deny","deny-me"),("approve","allow-once","allow-me")):
             print(turn(name,"I confirm this disposable test. Invoke the exec tool now with exactly rm "+folder+"/"+file+" and let the tool approval dialog decide. If denied, stop.","--decision",decision,"--confirm-fixture-once"))

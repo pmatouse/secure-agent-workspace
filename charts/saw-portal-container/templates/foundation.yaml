@@ -42,3 +42,18 @@ spec:
   data:
     - secretKey: api_key
       remoteRef: {key: {{ printf "%s/inference" $prefix | quote }}, property: api_key}
+
+{{- $pull := (.Values.site | default dict).imagePull | default dict }}
+{{- if $pull }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: portal-image-{{ $id }}, namespace: {{ $pull.namespace }}}
+rules: [{apiGroups: [image.openshift.io], resources: [imagestreams/layers], resourceNames: {{ $pull.streams | toJson }}, verbs: [get]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: portal-image-{{ $id }}, namespace: {{ $pull.namespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: portal-image-{{ $id }}}
+subjects: [{kind: ServiceAccount, name: {{ $u }}-sandbox, namespace: {{ $runtime }}}]
+{{- end }}
