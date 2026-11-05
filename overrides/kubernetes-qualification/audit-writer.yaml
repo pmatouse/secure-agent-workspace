@@ -1,0 +1,64 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saw-audit-writer
+  namespace: vp-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+    targetRevision: 05efa95282cf7eb2440734a75ca02144e67c2581
+    path: charts/saw-audit-writer
+    helm:
+      releaseName: saw-audit-demo
+      valuesObject:
+        enabled: true
+        trustedNamespace: saw-k8s-trusted
+        runtimeNamespace: saw-k8s-test
+        ownerID: d8ac361b-9898-4b16-ac35-2d15f86db76b
+        storageClass: ocs-external-storagecluster-ceph-rbd-immediate
+        exchangeStorageClass: ocs-external-storagecluster-cephfs
+        image: ghcr.io/openclaw/openclaw@sha256:0a5ff5e682e62afa19149df126aa50063bf65ef885b5c94713ce32dc0eb12e15
+        identity:
+          subject: 478fdd1f-8db9-41e8-97ad-b563215c89e9
+          username: sawk8sowner
+          workspace: agent
+          sandbox: audited
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: saw-k8s-trusted
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  ignoreDifferences:
+  - group: ''
+    kind: ConfigMap
+    namespace: saw-k8s-test
+    name: saw-audit-demo-ca
+    jsonPointers:
+    - /data
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: saw-runtime-controller-05efa95
+  namespace: saw-k8s-build
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/pmatouse/secure-agent-workspace.git
+      ref: 05efa95282cf7eb2440734a75ca02144e67c2581
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: kubernetes-runtime/Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: saw-runtime-controller:05efa95282cf
+  triggers:
+  - type: ConfigChange
