@@ -140,7 +140,7 @@ class Chat:
                 return event.get("payload",{})
             self.events.append(event)
 
-    def turn(self, session, message, decision=None):
+    def turn(self, session, message, decision=None, confirm_fixture=False):
         run=str(uuid.uuid4()); self.events.clear()
         self.call("chat.send",{"sessionKey":session,"message":message,"idempotencyKey":run})
         deadline=time.monotonic()+185; resolved=False
@@ -155,6 +155,11 @@ class Chat:
                 resolved=True
             if kind=="chat" and payload.get("runId")==run and payload.get("state") in ("final","error","aborted"):
                 text=" ".join(c.get("text","") for c in (payload.get("message") or {}).get("content",[]) if isinstance(c,dict))
+                if (confirm_fixture and decision and not resolved and payload["state"]=="final" and
+                        any(question in text.lower() for question in ("confirm","are you sure","do you want me to"))):
+                    # A model asking a question is not the gate. Answer once, then
+                    # still require the real plugin event and owner resolution.
+                    return self.turn(session,"Yes, I confirm the disposable fixture operation from my previous request. Invoke the exec tool with that exact command now. Stop if the policy denies it.",decision)
                 if payload["state"]!="final" or (decision and not resolved):
                     raise RuntimeError("test chat ended without expected decision: "+str((payload["state"],resolved,text[:360])))
                 return text
@@ -167,6 +172,7 @@ def main():
         p.add_argument("--"+k,required=True)
     p.add_argument("--decision",choices=["deny","allow-once"])
     p.add_argument("--contains")
+    p.add_argument("--confirm-fixture-once", action="store_true")
     a=p.parse_args()
     if any(urlsplit(url).scheme != "https" or not urlsplit(url).hostname or urlsplit(url).username
            for url in (a.origin, a.issuer)):
@@ -175,7 +181,7 @@ def main():
     cookie=owner_cookie(a.origin,a.issuer,a.user,password)
     chat=Chat(a.origin,cookie,a.version)
     chat.sock.settimeout(150)
-    result=chat.turn(a.session,a.prompt,a.decision)
+    result=chat.turn(a.session,a.prompt,a.decision,a.confirm_fixture_once)
     if a.contains and a.contains not in result:raise RuntimeError("chat reply omitted expected result")
     print(json.dumps({"session":a.session,"chatFinal":True,"decision":a.decision,"matched":bool(a.contains)}))
 

@@ -80,7 +80,7 @@ def main():
             "--user",a.user,"--version",a.openclaw_version,"--session",prefix+name,"--prompt",prompt,*extra,stdin=pw)
     print(turn("read","Use the read tool to read "+folder+"/canary and reply with the exact contents.","--contains",canary))
     for name,decision,file in (("deny","deny","deny-me"),("approve","allow-once","allow-me")):
-        print(turn(name,"I confirm this disposable test. Invoke the exec tool now with exactly rm "+folder+"/"+file+" and let the tool approval dialog decide. If denied, stop.","--decision",decision))
+        print(turn(name,"I confirm this disposable test. Invoke the exec tool now with exactly rm "+folder+"/"+file+" and let the tool approval dialog decide. If denied, stop.","--decision",decision,"--confirm-fixture-once"))
     def files():
         agent("sh","-ec",'test -f "$1/deny-me" && test ! -e "$1/allow-me" && test "$(cat "$1/canary")" = "$2"',"verify",folder,canary)
     files()
