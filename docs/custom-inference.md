@@ -125,3 +125,80 @@ stated (`openai`): the installer cannot infer it for a profile of your own.
   custom endpoints.
 - NemoClaw sandboxes onboard their own provider settings; the profile only
   ships an OpenClaw sandbox.
+
+### Qualify a registered owner against a real model
+
+One OpenShell gateway serves the sandboxes in an owner registration. Other
+registrations have separate gateways, TLS identities and credential proxies.
+The shared governance interceptor supplies provider profiles to those gateways.
+OpenClaw runs inside the notebook. Its model traffic crosses the dedicated
+credential proxy, which replaces the marker with the Vault-sourced credential.
+
+Use a disposable owner with no active workspace. Set `PORTAL` to the HTTPS
+Developer Hub origin, `ISSUER` to its Keycloak realm, and `ENDPOINT` and
+`MODEL` to the site-approved API base and a model served there. Keep the
+owner password and the provider key in separate private files.
+
+```sh
+owner_task() {
+  python3 tests/acceptance/rhdh_workspace.py "$@" \
+    --user "$OWNER" --origin "$PORTAL" --issuer "$ISSUER" < "$PASSWORD_FILE"
+}
+owner_task create --profile custom-inference --endpoint "$ENDPOINT" \
+  --model "inference__model=$MODEL" --key-file "$PROVIDER_KEY_FILE"
+owner_task status --task "$CREATE_TASK" --wait 1800
+```
+
+Use the returned task UUID for `CREATE_TASK`. Expect `completed`. The shipped
+custom profile starts OpenClaw in `default/notebook` with a loopback gateway.
+For a private gateway an operator can forward the Service to the test client:
+
+```sh
+oc -n "saw-$OWNER" port-forward --address 127.0.0.1 "svc/$OWNER-gateway" 17671:17670
+```
+
+In another terminal, use the gateway's public CA and the owner's OpenShell
+OIDC login. The operator supplies the tunnel; the gateway authorizes the owner
+for each sandbox command. Keep the tunnel open through the inference check.
+
+```sh
+gw="saw-$OWNER"
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}/openshell/gateways/$gw/mtls"
+mkdir -p "$cfg"
+install -m 0644 "$GATEWAY_CA_FILE" "$cfg/ca.crt"
+openshell gateway add https://localhost:17671 --name "$gw" \
+  --oidc-issuer "$ISSUER" --oidc-client-id openshell-cli
+openshell gateway login "$gw"
+python3 tests/acceptance/kubernetes_openclaw.py --gateway "$gw" \
+  --workspace default --sandbox notebook --provider custom-inference \
+  --model "$MODEL" --verify-transcript
+```
+
+The probe calls the running OpenClaw gateway, compares the reply with a fresh
+random challenge and checks the matching assistant transcript for provider,
+requested model, response model and a provider response ID. Check the registered
+broker separately from the operator test client. The probe expects HTTP 403
+for an unapproved CONNECT over a loopback tunnel into the broker Service.
+Set `REGISTRATION` to the registration ID from the owner workspace status.
+
+```sh
+python3 tests/acceptance/kubernetes_proxy.py --gateway "$OWNER" \
+  --runtime-namespace "saw-$OWNER" --trusted-namespace "saw-ctl-$REGISTRATION" \
+  --denial-only
+```
+
+For a disposable registration, delete it through RHDH and check the resulting task.
+
+```sh
+owner_task delete
+owner_task status --task "$DELETE_TASK" --wait 1800
+openshell gateway remove "$gw"
+```
+
+On glmhg the fresh owner's gateway served `default/notebook` under
+`restricted-v2`. The proxy recorded `POST /v1/chat/completions` with
+`binding=inference status=200`. The assistant record for the nonce named
+`custom-inference/gpt-4.1-mini` and response model `gpt-4.1-mini-2025-04-14`.
+The owner status API returned `ready: true` and an empty links array for this
+headless BOM. Allow for OpenClaw cold start after controller readiness.
+[Registered owner validation record](../tests/acceptance/custom-inference-owner-2026-11-05.json)
