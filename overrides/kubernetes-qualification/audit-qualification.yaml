@@ -13,12 +13,12 @@ spec:
     path: charts/saw-tool-audit-init
     helm:
       valuesObject:
-        enabled: true
+        enabled: false
         image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:bdf89476240a8740c545706ced0fa5f818b9d5cdcf28928af812bb2dc7f00ec8
         auditClaim: saw-audit-qualification
   - repoURL: https://github.com/pmatouse/secure-agent-workspace.git
     targetRevision: site/glmhg-vm-baseline
-    path: overrides/audit-qualification
+    path: overrides/audit-qualification-retired
   destination:
     server: https://kubernetes.default.svc
     namespace: saw-runtime-smoke
@@ -26,3 +26,4 @@ spec:
     automated:
       prune: true
       selfHeal: true
+      allowEmpty: true
