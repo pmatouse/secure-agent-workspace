@@ -259,7 +259,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: saw-gate-check-f92b9a5ec696-a26bb0e0
+  name: saw-gate-check-f92b9a5ec696-49954f62
   namespace: saw-runtime-smoke
 immutable: true
 data:
@@ -275,10 +275,10 @@ data:
     \ 0o600});\nconst listed = JSON.parse(execFileSync(\"openclaw\", [\"plugins\"\
     , \"list\", \"--json\"], {encoding: \"utf8\"}));\nconst gate = listed.plugins.find(p\
     \ => p.id === \"saw-tool-gate\");\nassert.equal(gate?.enabled, true);\nassert.equal(gate?.status,\
-    \ \"loaded\");\nassert.equal(gate?.rootDir, \"/sandbox/.saw/trusted/plugin\");\n\
-    assert.throws(() => fs.openSync(POLICY_PATH, \"r+\"), {code: \"EROFS\"});\nconst\
-    \ ctx = {sessionKey: randomUUID()};\nfunction call(toolName, params = {}) {\n\
-    \  return handleBeforeToolCall({toolName, params}, ctx);\n}\nassert.equal(call(\"\
+    \ \"loaded\");\nassert.equal(gate?.rootDir, fs.realpathSync(\"/sandbox/.saw/trusted/plugin\"\
+    ));\nassert.throws(() => fs.openSync(POLICY_PATH, \"r+\"), {code: \"EROFS\"});\n\
+    const ctx = {sessionKey: randomUUID()};\nfunction call(toolName, params = {})\
+    \ {\n  return handleBeforeToolCall({toolName, params}, ctx);\n}\nassert.equal(call(\"\
     read\"), undefined);\nassert.equal(call(\"saw-denied-tool\").block, true);\nconst\
     \ held = call(\"exec\", {command: \"git push origin main\"});\nassert.equal(held.requireApproval.pluginId,\
     \ \"saw-tool-gate\");\nheld.requireApproval.onResolution(\"timeout\");\nconst\
@@ -293,12 +293,12 @@ data:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: saw-gate-check-f92b9a5ec696-a26bb0e0
+  name: saw-gate-check-f92b9a5ec696-49954f62
   namespace: saw-runtime-smoke
 spec:
   podSelector:
     matchLabels:
-      saw.redhat.com/tool-gate-check: saw-gate-check-f92b9a5ec696-a26bb0e0
+      saw.redhat.com/tool-gate-check: saw-gate-check-f92b9a5ec696-49954f62
   policyTypes:
   - Ingress
   - Egress
@@ -306,7 +306,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: saw-gate-check-f92b9a5ec696-a26bb0e0
+  name: saw-gate-check-f92b9a5ec696-49954f62
   namespace: saw-runtime-smoke
 spec:
   backoffLimit: 0
@@ -314,7 +314,7 @@ spec:
   template:
     metadata:
       labels:
-        saw.redhat.com/tool-gate-check: saw-gate-check-f92b9a5ec696-a26bb0e0
+        saw.redhat.com/tool-gate-check: saw-gate-check-f92b9a5ec696-49954f62
     spec:
       automountServiceAccountToken: false
       restartPolicy: Never
@@ -342,7 +342,7 @@ spec:
             path: tool-actions.yaml
       - name: check
         configMap:
-          name: saw-gate-check-f92b9a5ec696-a26bb0e0
+          name: saw-gate-check-f92b9a5ec696-49954f62
       - name: audit
         emptyDir: {}
       - name: home
