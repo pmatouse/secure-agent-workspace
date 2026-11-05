@@ -39,6 +39,30 @@ data:
           type: generic
           image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
           providers: []
+  profiles__input__agent__workspace.yaml: |
+    apiVersion: saw.redhat.com/v1alpha1
+    kind: Workspace
+    metadata: {name: agent}
+  profiles__input__agent__providers.yaml: |
+    apiVersion: saw.redhat.com/v1alpha1
+    kind: Providers
+    spec:
+      providers:
+        - {name: openai, type: openai, credentialSecret: inference, credentialSecretKey: api_key}
+  profiles__input__agent__sandbox.yaml: |
+    apiVersion: saw.redhat.com/v1alpha1
+    kind: Sandboxes
+    spec:
+      sandboxes:
+        - name: notebook
+          type: openclaw
+          image: quay.io/aipcc/base-images/agentic/openclaw@sha256:896d1526ee29b53167034ba65d1c758c8da777f441ed094e19f3bcf6d7445c61
+          providers: [openai]
+          inference:
+            providerRef: openai
+            protocol: openai
+            baseUrl: https://api.openai.com/v1
+            model: gpt-4.1-mini-2025-04-14
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

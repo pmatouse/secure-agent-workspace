@@ -13,7 +13,7 @@ spec:
       releaseName: saw-k8s-test
       valuesObject:
         enabled: true
-        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:e479b64190d96d91932036f068ff8c2e776f64d9570e8352f5a9e9c18729c472
+        image: image-registry.openshift-image-registry.svc:5000/saw-k8s-build/saw-runtime-controller@sha256:020ba000982107a75d2cdea63876a442297a4609434da6b767c17f9eeaa8b28c
         configuration:
           gateway: saw-k8s-test
           namespace: saw-k8s-test
@@ -78,6 +78,7 @@ spec:
         stateClaim: controller-ledger
         claimNames:
         - toolbox-workspace
+        - openclaw-workspace
         imageBuildNamespace: saw-k8s-build
         trustedEgress:
         - to:
