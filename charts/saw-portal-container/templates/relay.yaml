@@ -25,6 +25,7 @@ spec:
       releaseName: {{ printf "ui-%s" $reg }}
       valuesObject:
         enabled: true
+        publishSubject: {{ $site.automaticEnrollment | empty | not }}
         cleanupRegistration: {{ $reg | quote }}
         clientID: saw-portal-{{ $reg }}
         keycloakNamespace: {{ $r.keycloakNamespace | quote }}
@@ -51,7 +52,7 @@ spec:
     - {group: "", kind: Secret, name: relay-credentials, namespace: {{ $ui }}, jsonPointers: [/data]}
   syncPolicy:
     automated: {prune: true, selfHeal: true}
-    retry: {limit: 6}
+    retry: {limit: 6, refresh: true}
     syncOptions: [RespectIgnoreDifferences=true]
 {{- end }}
 {{- $site := .Values.site | default dict }}
