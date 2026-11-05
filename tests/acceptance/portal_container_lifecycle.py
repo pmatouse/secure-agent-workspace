@@ -171,8 +171,9 @@ process.exit(1);
                 assert selected["generation"]==2
                 # Correlate the exact fresh completion with the provider/model recorded by OpenClaw.
                 evidence_script=(HERE/"portal_model_evidence.cjs").read_text()
-                reply=json.loads(agent("node","-e",evidence_script,nonce))
-                assert reply=={"provider":"openai","model":selected["model"]}
+                reply=json.loads(agent("node","-e",evidence_script,nonce,prefix+stage))
+                assert reply["provider"]=="openai" and reply["model"]==selected["model"] and reply["providerResponse"]
+                assert reply["responseModel"]==selected["model"] or reply["responseModel"].startswith(selected["model"]+"-")
                 assert selected["model"] == dict(x.split("=",1) for x in a.update_model)[public_targets[key]["modelInput"].replace(".", "__")]
                 print(json.dumps({"slot":key,"stage":stage,"completion":reply,"podUID":puid}),flush=True)
         return check_update, (uid,claim,writer,source,prefix,before)
