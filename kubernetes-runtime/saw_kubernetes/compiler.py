@@ -78,7 +78,7 @@ def _storage(binding, workspace):
     volumes, mounts, refs = [volume], [mount], [reference]
     if "toolGate" in binding:
         gate = binding["toolGate"]
-        mapping(gate, {"trusted", "audit", "ownerLogin", "receiptKey"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
+        mapping(gate, {"trusted", "audit", "ownerLogin", "receiptKey", "modelSelector"}, {"trusted", "audit", "ownerLogin"}, "toolGate")
         name(gate["ownerLogin"], "toolGate ownerLogin", 63)
         for field, volume_name, path, readonly in [
             ("trusted", "saw-gate", "/sandbox/.saw/trusted", True),
@@ -300,6 +300,21 @@ def compile_profile_files(files, config):
                 except shared.InstallerError as exc:
                     raise ContractError(str(exc)) from exc
                 script = Path(__file__).with_name("tool_gate_preflight.js").read_text()
+                if bindings[key]["toolGate"].get("modelSelector") is True:
+                    if not receipt_key:
+                        raise ContractError("mutable model requires a trusted gate")
+                    # The shared model resolver validates the original choice.
+                    # The command is stable across an owner's later selections.
+                    command[-1] = "model-from-gate"
+                    command[2] = command[2].replace("const model = process.argv[2];", """
+const selection = JSON.parse(fs.readFileSync('/sandbox/.saw/trusted/model.json','utf8'));
+if (!Number.isSafeInteger(selection.generation) || selection.generation < 1 ||
+    typeof selection.model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(selection.model))
+  throw new Error('invalid published model');
+const model = selection.model;
+""")
+                    script = script.replace("for (const path of treeFiles(root).sort()) {",
+                        "for (const path of treeFiles(root).sort()) {\n  if (path === root + '/model.json') continue;")
                 if receipt_key:
                     # Keep the VM-style file preflight for previously published plans.
                     script = script[:script.index("if (!fs.lstatSync(audit)")] + """

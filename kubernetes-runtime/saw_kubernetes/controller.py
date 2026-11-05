@@ -255,7 +255,7 @@ class Controller:
             intent = json.loads(data["intent.json"])
         except ValueError:
             raise InputError("InvalidInputs") from None
-        if (not isinstance(intent, dict) or set(intent) != {
+        if (not isinstance(intent, dict) or set(intent) - {"restartGeneration"} != {
                 "schemaVersion", "generation", "desiredState", "profileRef", "bindings"}
                 or type(intent["schemaVersion"]) is not int or intent["schemaVersion"] != 1
                 or type(intent["generation"]) is not int
@@ -263,6 +263,9 @@ class Controller:
                 or not isinstance(intent["bindings"], dict)
                 or intent["bindings"].get("ownerID") != self.scope.owner_id
                 or intent["bindings"].get("namespace") != self.scope.namespace):
+            raise InputError("InvalidInputs")
+        restart = intent.get("restartGeneration",0)
+        if type(restart) is not int or not 0 <= restart <= intent["generation"]:
             raise InputError("InvalidInputs")
         reference = intent["profileRef"]
         if (not isinstance(reference, dict) or set(reference) not in ({"name", "uid", "sha256"}, {"name", "uid", "sha256", "planSHA256"})
@@ -343,7 +346,25 @@ class Controller:
             # already recorded sandbox. Input fencing above remains mandatory.
             state.update(inputUIDs=uids, intent={"generation": intent["generation"], "revision": revision})
             self.store.save(state)  # Fence identities and intent before any core mutation.
-            result = self.core_pass(plan, generation=intent["generation"], desired_state=intent["desiredState"])
+            restart = intent.get("restartGeneration",0)
+            # Reserve two monotonically ordered core passes per owner generation
+            # for registrations opted into model rollover. Owner status keeps
+            # the externally visible generation and revision.
+            core_generation = intent["generation"] * (2 if "restartGeneration" in intent else 1)
+            applied = state.get("restartGeneration",0)
+            if restart < applied:
+                raise InputError("StaleOrConflictingGeneration")
+            if restart > applied:
+                # A confirmed Stopped phase is the durable barrier. Persist it
+                # before starting so retries cannot repeatedly stop a fresh Pod.
+                result = self.core_pass(plan,generation=core_generation - 1,desired_state="Stopped")
+                if result.get("phase") == "Stopped":
+                    state["restartGeneration"] = restart
+                    self.store.save(state)
+                if intent["desiredState"] == "Running":
+                    result = {"phase":"Pending","retry_after_seconds":1}
+            else:
+                result = self.core_pass(plan, generation=core_generation, desired_state=intent["desiredState"])
             if not isinstance(result, dict) or result.get("phase") not in CORE_PHASES:
                 raise InputError("InvalidCoreStatus")
             status.update(phase=result["phase"], reason="CoreObserved")
