@@ -21,6 +21,8 @@ def main():
     p.add_argument("--governance-namespace", required=True)
     p.add_argument("--argo-namespace", default="vp-gitops")
     p.add_argument("--project", default="default")
+    p.add_argument("--controller-revision", default=CONTROLLER,
+                   help="reviewed full Git commit to build; select its resulting image digest in the site inputs")
     p.add_argument("--install-agent-sandbox", action="store_true", help="build phase only, on a cluster with no existing installation")
     p.add_argument("--governance-digest", help="serve phase only; actual sha256 digest of the completed governance build")
     a = p.parse_args()
@@ -29,6 +31,8 @@ def main():
         p.error("a public HTTPS fork URL is required")
     if any(not re.fullmatch(LABEL, n) for n in (a.build_namespace,a.governance_namespace,a.argo_namespace,a.project)):
         p.error("namespaces and project must be DNS labels")
+    if not re.fullmatch("[0-9a-f]{40}", a.controller_revision):
+        p.error("controller revision must be a full lowercase Git commit SHA")
     if a.phase == "serve" and (a.install_agent_sandbox or not re.fullmatch("sha256:[0-9a-f]{64}", a.governance_digest or "")):
         p.error("serve requires a reviewed governance image digest")
     if a.phase == "build" and a.governance_digest:
@@ -52,10 +56,10 @@ def main():
         stream = {"apiVersion":"image.openshift.io/v1","kind":"ImageStream",
                   "metadata":{"name":"saw-runtime-controller","namespace":build}}
         controller = {"apiVersion":"build.openshift.io/v1","kind":"BuildConfig",
-            "metadata":{"name":"saw-runtime-controller-" + CONTROLLER[:7],"namespace":build},
-            "spec":{"source":{"type":"Git","git":{"uri":a.repo,"ref":CONTROLLER}},
+            "metadata":{"name":"saw-runtime-controller-" + a.controller_revision[:7],"namespace":build},
+            "spec":{"source":{"type":"Git","git":{"uri":a.repo,"ref":a.controller_revision}},
                     "strategy":{"type":"Docker","dockerStrategy":{"dockerfilePath":"kubernetes-runtime/Containerfile"}},
-                    "output":{"to":{"kind":"ImageStreamTag","name":"saw-runtime-controller:"+CONTROLLER[:12]}},
+                    "output":{"to":{"kind":"ImageStreamTag","name":"saw-runtime-controller:"+a.controller_revision[:12]}},
                     "triggers":[{"type":"ConfigChange"}]}}
         policy = source("image-builder-charts/helm/governance-interceptor-image","fb158a7a0b4a1c4884bbe08d82dd7379d42f3421",
             {"source":{"git":{"uri":"https://github.com/NVIDIA/OpenShell.git","ref":"6648bd0c290efbc41ba131ee9831ee45cd431f94"}},

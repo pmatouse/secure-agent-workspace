@@ -235,7 +235,8 @@ stack:
 automaticEnrollment:
   image:
     $input: controllerImage
-  revision: a4162dfe1529541fc23ed33f63a01e186b7793d6
+  revision:
+    $input: controllerRevision
   buildNamespace:
     $input: buildNamespace
   profileSHA256:
@@ -276,21 +277,13 @@ automaticEnrollment:
     - $input: issuerRule
     revision: 661194fd49c75b4e7dd202d4d2ad5fa7b04934e3
   approvedProfiles:
-    custom-inference:
-      $input: bomDigest
+    $input: approvedProfiles
 profileImageOverrides:
-  custom-inference:
-    notebook:
-      $input: notebookImage
+  $input: profileImageOverrides
 imagePull:
   namespace:
     $input: buildNamespace
   streams:
   - saw-openclaw-home
 profileBoundaries:
-  custom-inference:
-    allowHosts:
-    - api.openai.com
-    inferenceBaseURL: https://api.openai.com/v1
-    reference:
-      $input: reference
+  $input: profileBoundaries
