@@ -411,7 +411,34 @@ containerSites:
           - protocol: TCP
             port: 6443
         revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
-      enabled: false
+      enabled: true
+      reference:
+        validation: bf68ff7722f46b6ff1f7fb5ca4fa51cfc32de664b406145ac7f2ce260257843e
+        binding: d5de359fc42307c2808e28224822a95b06c1fffa45cad7b9d2188c7c7035ffb9
+        network: 395cbde4a6a8412cfcf35c76dd361e04f90af920fc412228aa9a2dd6501a87d9
+        deny: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+        gatewayNetwork: b555b6d4d527640a906e45dba919db7690f730c40128a5d6cc6a715fa73e9914
+        gateway: 59576f747f6b076fd89cfef0836af312125ca61df93511a788e534ef133a2852
+        gatewayService: a5080884e498a0f6de1e3adb01576fe81b7c3d69cb4804be29dbd1d2be83c939
+        gatewayConfig: f00a6bfe5aca0ed105febbbeee150a5803c6e9689238db94df90b93e1a702a04
+        governance:
+          uid: 9ab4695a-865a-4993-a0d8-6a3d236c50e6
+          sha256: b30e27ab8e0530319e278b1a60f8b597432c96e48dbdb9a8cff9884d49c749aa
+        governanceService:
+          uid: 7bbbd7d5-ea9a-422b-b696-db450c459436
+          sha256: 31f7cb983349fb00a5e473511707147b592b60e8f469731b73037102c643330a
+        governancePolicy:
+          uid: c2a9a226-e47f-4c19-8b85-fc815f5b4dfa
+          sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+        governanceProfiles:
+          uid: d2232eee-b4d6-47bc-9200-45b441bae783
+          sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+        proxy: 325a98512d32645be8f0ad9d37f525cc2f0369071a64c09673f387e70a83ff8e
+        proxyNetwork: ed0aabf35611ad16612177eb108b3adccdb9838555dd02ead69febaf3d3c835e
+        proxyPolicy: 9d701feb1dc89824b8591cf92576543a01d213f0830743c899712a42e92c9c98
+        publicCA: equals independent trusted proxy public CA
+      approvedProfiles:
+        data-science: 72c968b07f0440892819158c7f27b4ff41518d629d5bdf7f6e6eae5ea5066ea3
     profileImageOverrides:
       data-science:
         notebook: image-registry.openshift-image-registry.svc:5000/saw-container-build/saw-openclaw-home@sha256:1d51568cfe839646f6b93f25fb4352327c366e61b335206ff93a7806eb8beb59
