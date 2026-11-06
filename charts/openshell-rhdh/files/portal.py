@@ -1461,8 +1461,14 @@ def handle(action, request_name):
             if cm is not None:
                 assert_mode_unchanged(read_entry(cm), mode)
             if mode == "container" and container_site(user):
-                if data.get("profile") not in container_profiles(container_site(user)) or os.environ.get("PRUNE_ON_REMOVE", "true") != "true":
-                    raise PortalError("container requires an approved profile and foreground cleanup")
+                approved = container_profiles(container_site(user))
+                if data.get("profile") not in approved:
+                    raise PortalError("selected profile is not approved for your container workspace; "
+                                      "approved profiles: " + (", ".join(sorted(approved)) or "none") +
+                                      ". Ask the site administrator to enable another profile")
+                if os.environ.get("PRUNE_ON_REMOVE", "true") != "true":
+                    raise PortalError("container provisioning requires foreground cleanup; "
+                                      "the site administrator must enable portal.pruneOnRemove")
             elif mode not in PROVISIONABLE_MODES:
                 raise PortalError(f"{mode} workspace provisioning is not available in this release")
             if mode != "container" and data.get("profile") == AUDITED_PROFILE:

@@ -1463,3 +1463,211 @@ def test_linked_container_catalog_entry_is_owned_and_links_only_to_the_site(port
     entry = next(d for d in docs if d["metadata"]["name"] == "linked-alice-agent-ui")
     assert entry["spec"]["owner"] == "user:default/alice"
     assert entry["metadata"]["links"] == [{"title":"OpenClaw UI","icon":"web","url":"https://alice-agent-ui.apps.example.com"}]
+
+
+def test_linked_runtime_tracks_owner_and_current_generation(portal):
+    ref = {"namespace":"runtime", "intent":"intent", "status":"status", "installationID":"instance",
+           "ownerSubject":"subject", "mode":"container"}
+    status = {"phase":"GenericReady", "observedGeneration":3}
+    intent = {"generation":3, "desiredState":"Running", "bindings":{
+        "namespace":"runtime", "ownerID":"instance", "ownerSubject":"subject", "mode":"container"}}
+    class Reader:
+        def call(self, method, path, ok404):
+            assert method == "GET" and ok404
+            assert path in ["/api/v1/namespaces/runtime/configmaps/" + n for n in ("intent","status")]
+            n = path.rsplit("/", 1)[1]
+            labels = {"saw.redhat.com/runtime-owner":"instance"}
+            if n == "status":
+                labels["saw.redhat.com/managed-by"] = "kubernetes-runtime-controller"
+            return {"metadata":{"labels":labels}, "data":{n+".json":json.dumps(intent if n=="intent" else status)}}
+    reader = Reader()
+    assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Running"
+    intent["generation"] += 1
+    assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Reconciling"
+    intent["bindings"]["ownerSubject"] = "someone-else"
+    assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Unknown"
+
+
+@pytest.mark.parametrize("fault,expected", [
+    ("profile", "approved profiles: audited-openclaw"),
+    ("cleanup", "enable portal.pruneOnRemove"),
+])
+def test_container_preflight_explains_profile_and_cleanup_failures(portal, world, monkeypatch, capsys, fault, expected):
+    fake, signer = world
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES", json.dumps({"alice": {
+        "subject": "478fdd1f-8db9-41e8-97ad-b563215c89e9"}}))
+    monkeypatch.setenv("PRUNE_ON_REMOVE", "false" if fault == "cleanup" else "true")
+    fake.request("saw-req-rejected", ds_request(signer, deploymentMode="container",
+        profile="data-science" if fault == "profile" else "audited-openclaw"))
+    assert portal.main(["create", "saw-req-rejected"]) != 0
+    captured = capsys.readouterr()
+    assert expected in captured.out + captured.err
+    assert not fake.vault and REGISTRY not in fake.objects
+
+
+def test_container_portal_register_update_delete(portal, world, monkeypatch):
+    fake, signer = world
+    subject = "478fdd1f-8db9-41e8-97ad-b563215c89e9"
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES", json.dumps({"alice":{"subject":subject}}))
+    for i in [1, 2]:
+        fake.request("saw-req-" + str(i), ds_request(signer, deploymentMode="container",
+                    profile="audited-openclaw", **{"inference.api_key":f"test-{i}"}))
+        assert portal.main(["create", "saw-req-" + str(i)]) == 0
+        entry = portal.read_entry(fake.objects[REGISTRY])
+        assert entry["intentGeneration"] == i and portal.entry_generation("alice", entry) == GEN[0]
+        assert fake.vault == {f"{KEYS}/inference":{"api_key":f"test-{i}", "provider":"openai"}}
+        assert portal.generator_params([{**entry,"ownerSubject":"other-subject"}], {}) == []
+        output = portal.generator_params([{**entry,"ownerSubject":subject}], {})[0]
+        user = json.loads(output["values"])["users"][0]
+        assert user["installationID"] == portal.installation_id("alice", GEN[0])
+        assert "test-" not in output["values"]
+    fake.request("saw-req-3", {"token":signer.token(), "action":"delete", "workspace":"component:default/saw-alice"})
+    assert portal.main(["delete","saw-req-3"]) == 0
+    ns = f"/api/v1/namespaces/saw-ctl-{GEN[0]}"
+    fake.objects[ns] = {"metadata":{"name":ns.split("/")[-1]}}
+    gone, detail = portal.removal_status(portal.kube(), "alice", "vp-gitops", entry)
+    assert not gone and ns.split("/")[-1] in detail
+    del fake.objects[ns]
+    assert portal.removal_status(portal.kube(), "alice", "vp-gitops", entry)[0]
+    assert portal.main(["finish-delete","alice"]) == 0
+    assert not fake.vault and REGISTRY not in fake.objects
+
+@pytest.mark.parametrize("mode,ready", [("registered",True),("pending",False),("wrong-client",False),("foreign",False),("anonymous-chat",False)])
+def test_chat_readiness_requires_registered_owner_callback(portal, monkeypatch, mode, ready):
+    import io
+    from urllib.error import HTTPError
+    from urllib.parse import urlencode
+    origin, issuer = "https://chat.test", "https://id.test"
+    monkeypatch.setenv("KEYCLOAK_URL",issuer)
+    monkeypatch.setenv("KEYCLOAK_REALM","openshell")
+    class Response(io.BytesIO):
+        status = 200
+    class Opener:
+        def open(self, url, timeout):
+            if url==origin:
+                if mode=="anonymous-chat": return Response(b"chat")
+                params=urlencode(dict(client_id=("wrong" if mode=="wrong-client" else "openshell-dashboard"),redirect_uri=origin+"/oauth2/callback"))
+                host="https://other.test" if mode=="foreign" else issuer
+                raise HTTPError(url,302,"",{"Location":host+"/realms/openshell/protocol/openid-connect/auth?"+params},None)
+            assert url.startswith(issuer)
+            if mode=="pending": raise HTTPError(url,400,"Invalid redirect URI",{},None)
+            return Response(b'<form id="kc-form-login">')
+    monkeypatch.setattr(portal.urllib.request,"build_opener",lambda *args:Opener())
+    assert portal.owner_route_available(origin) is ready
+
+
+def test_generator_publishes_only_immutable_owner_bound_data(portal):
+    reg="a"*16; owner="9aaea20f-245f-407a-a0c3-fbd894615b90"
+    sub="e05c1559-5009-4663-81fb-3c5facb5ced8"
+    ws=dict(name="ada",registration=reg,installationID=owner,ownerSubject=sub)
+    a=dict(image="pinned@sha256:abc",revision="fixed",buildNamespace="trust",profileSHA256="bom",
+           reference={"gateway":{}},relay={"issuer":"https://issuer","revision":"fixed"})
+    site={"automaticEnrollment":a}
+    intent=dict(bindings=dict(ownerID=owner,namespace="saw-ada",ownerSubject=sub),profileRef=dict(sha256="bom"))
+    body=dict(registration=reg,intent=intent,approved={"gateway":{}},gatewayCA="public")
+    meta={"labels":{"saw.redhat.com/runtime-owner":owner}}
+    cm=dict(immutable=True,metadata=meta,data={})
+    relay=dict(immutable=True,metadata=meta,data={"subject":"e5ed3695-4476-4b1f-8e5d-daf5f6ccfae3"})
+    def read(path):
+        assert path.startswith("/api/v1/namespaces/saw-ctl-"+reg+"/configmaps/")
+        cm["data"]={"binding.json":json.dumps(body)}
+        return relay if path.endswith("relay-subject") else cm
+    assert portal.enrolled_site(site,ws,read)["enrollment"]["relay"]["subject"]==relay["data"]["subject"]
+    body["revision"]="caller-controlled"
+    with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
+    del body["revision"]
+    cm["immutable"]=False
+    with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
+    cm["immutable"]=True;intent["bindings"]["ownerID"]="foreign"
+    with pytest.raises(portal.PortalError):portal.enrolled_site(site,ws,read)
+
+def test_model_input_cannot_publish_a_submitted_credential(portal):
+    profile={"workspaces":[{"name":"research","enabled":True,"sandboxes":[
+        {"name":"notebook","enabled":True,"modelInput":"provider.choice"}]}],
+        "secrets":{"provider":{"fields":[{"key":"choice","kind":"text"},{"key":"api_key","kind":"secret"}]}}}
+    inputs={"provider":{"api_key":"synthetic-private-value","choice":"model-x"}}
+    assert portal.public_model_inputs(profile, inputs)=={"provider.choice":"model-x"}
+    inputs["provider"]["choice"]=inputs["provider"]["api_key"]
+    with pytest.raises(portal.PortalError,match="invalid public model selector"):
+        portal.public_model_inputs(profile, inputs)
+
+
+def test_owner_state_change_is_generation_scoped_and_does_not_touch_vault(portal, world, monkeypatch):
+    fake, signer = world
+    site = {"subject": "478fdd1f-8db9-41e8-97ad-b563215c89e9", "modelLifecycle": True}
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES", json.dumps({"alice": site}))
+    fake.request("saw-req-1", ds_request(signer, deploymentMode="container", profile="audited-openclaw"))
+    assert portal.main(["create", "saw-req-1"]) == 0
+    entry = portal.read_entry(fake.objects[REGISTRY])
+    registration = portal.entry_generation("alice", entry)
+    vault_before = json.dumps(fake.vault, sort_keys=True)
+    def state(name, operation, generation, **extra):
+        fake.request(name, {"action": "create", "token": signer.token(), "runtimeAction": operation,
+                            "registration": registration, "expectedGeneration": "g-" + str(generation), **extra})
+        return portal.main(["create", name])
+    assert state("saw-req-2", "stop", 1, forUser="bob") != 0
+    assert state("saw-req-3", "stop", 1, registration="0"*16) != 0
+    assert state("saw-req-4", "stop", 1) == 0
+    assert portal.read_entry(fake.objects[REGISTRY])["desiredState"] == "Stopped"
+    assert state("saw-req-5", "start", 1) != 0
+    assert state("saw-req-6", "start", 2) == 0
+    assert portal.read_entry(fake.objects[REGISTRY]) == {**entry, "intentGeneration": 3}
+    assert json.dumps(fake.vault, sort_keys=True) == vault_before
+
+
+def test_custom_endpoint_is_approved_before_writing_vault(portal, world, monkeypatch):
+    fake, signer = world
+    url="https://models.fixture.test/v1"
+    boundary={"allowHosts":["models.fixture.test"],"inferenceBaseURL":url}
+    site={"subject":"478fdd1f-8db9-41e8-97ad-b563215c89e9","profileBoundaries":{"custom-inference":boundary},
+          "automaticEnrollment":{"approvedProfiles":{"custom-inference":"a"*64}}}
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES",'["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES",json.dumps({"alice":site}))
+    def submit(name,endpoint):
+        request = ds_request(signer,deploymentMode="container",profile="custom-inference",
+                             **{"inference.url":endpoint,"inference.model":"org/model","inference.api_key":"private-test-key"})
+        request.pop("web-search.api_key")
+        fake.request(name,request)
+        return portal.main(["create",name])
+    assert submit("saw-req-bad","https://elsewhere.example/v1") != 0
+    assert not fake.vault and REGISTRY not in fake.objects
+    assert submit("saw-req-good",url) == 0
+    entry=portal.read_entry(fake.objects[REGISTRY])
+    assert entry["customInferenceURL"]==url and entry["modelInputs"]=={"inference.model":"org/model"}
+    assert "private-test-key" not in json.dumps(entry)
+    assert entry["webSearch"] == {"enabled":False} and not any("web-search" in k for k in fake.vault)
+
+
+def test_headless_container_requires_current_runtime_and_healthy_argo(portal, monkeypatch):
+    import hashlib
+    reg="0123456789abcdef"
+    subject="478fdd1f-8db9-41e8-97ad-b563215c89e9"
+    monkeypatch.setenv("SAW_CONTAINER_SITES",json.dumps({"alice":{"subject":subject}}))
+    entry=portal.registry_entry("alice","custom-inference",reg,"container")
+    entry["intentGeneration"]=1
+    install=portal.installation_id("alice",reg)
+    digest=lambda value: hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    files={"fixture":"profile"}
+    intent={"generation":1,"desiredState":"Running","profileRef":{"name":"saw-bom-profiles","uid":"bom","sha256":digest(files)},
+            "bindings":{"ownerSubject":subject,"namespace":"saw-alice","mode":"container","ownerID":install}}
+    state={"phase":"GenericReady","observedGeneration":1,"inputRevision":digest({"intent":intent,"files":files})}
+    def cm(key,value):
+        return {"metadata":{"labels":{"saw.redhat.com/runtime-owner":install,"saw.redhat.com/managed-by":"kubernetes-runtime-controller"}},
+                "data":{key:json.dumps(value)}}
+    objects={"saw-alice":{"metadata":{"labels":{"openshell.pattern/owner":"alice"}},
+                          "status":{"sync":{"status":"Synced"},"health":{"status":"Healthy"}}},
+             "saw-runtime-intent":cm("intent.json",intent),"saw-runtime-status":cm("status.json",state),
+             "saw-bom-profiles":{"metadata":{"uid":"bom"},"data":files}}
+    class Reader:
+        def call(self,method,path,ok404):
+            return objects[path.rsplit("/",1)[1]]
+    profile=json.loads((ROOT/"charts/saw-users/files/profile-catalog.json").read_text())["profiles"]
+    def status():
+        return portal.container_status(Reader(),"alice",entry,"argo","example.test",
+                                       lambda _: pytest.fail("headless registration has no route"),profile)
+    assert status()["ready"] and not status()["links"]
+    objects["saw-runtime-status"]=cm("status.json",{**state,"observedGeneration":0})
+    assert not status()["ready"]
