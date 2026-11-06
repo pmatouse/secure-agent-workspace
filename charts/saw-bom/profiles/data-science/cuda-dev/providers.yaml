@@ -3,7 +3,7 @@ kind: Providers
 metadata: {}
 spec:
   providers:
-    - name: nvidia
-      type: nvidia
-      credentialSecret: inference
-      credentialSecretKey: api_key
+  - name: openai
+    type: openai
+    credentialSecret: inference
+    credentialSecretKey: api_key
