@@ -41,6 +41,28 @@ flowchart LR
 | Core reconciler | Observe before stock RPC mutations, retain object identities, reconcile membership/providers/generic sandboxes and explicit stop/start |
 | Site verification callbacks | Prove gateway/namespace identity, approved attachments, native admission/network enforcement and platform governance policy |
 
+The canonical profile implementation is
+[`saw_core.py`](../charts/openshell-saw/files/installer/saw_core.py). The VM
+`apply_bom.py` loads it from the repository during development; the deployed VM
+installer embeds those exact bytes inside `apply_bom.py`, covered by the
+existing signing manifest. The Kubernetes compiler loads the same source
+through its `core` module. Shared code covers parsing, validation, provider
+selection, model/endpoint precedence, inference input resolution, harness/tool
+policy and the workspace → providers → sandboxes readiness sequence. Each
+backend retains its own execution, credential access and storage operations.
+Container capability checks still reject unsupported BOM behavior before any
+OpenShell mutation.
+
+Data science therefore reuses the VM's two-sandbox BOM and public model inputs;
+it does not have a separate profile implementation. The site renderer selects
+the exact deployed BOM chart and derives the approval from its Helm output.
+RHDH presents only the reviewed container profiles and checks the owner's
+approval again on submission. See the [site installation and two-chat lifecycle
+recipe](container-site-replay.md#5-qualify-data-science-browser-chat-and-lifecycle).
+Shipping a shared source change requires rebuilding and selecting a new
+controller image digest; changing its Git revision input alone does not update
+an existing Pod.
+
 The frontend never writes either desired ConfigMap. It never deletes ConfigMaps,
 workloads or PVCs. A missing source is a blocked reconciliation, **not** a request
 to stop or remove an existing workload.

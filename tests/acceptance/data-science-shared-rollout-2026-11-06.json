@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "result": "passed",
+  "date": "2026-11-06",
+  "cluster": "glmhg",
+  "openshift": "4.22.20",
+  "owner": "sawdsowner",
+  "profile": "data-science",
+  "sourceRevision": "431ce749537117aab6cc2f0c8a43598c0e05123b",
+  "sharedCoreSHA256": "a5d63e63aae172c9a3e2e148ac66ecaa08038e539a889054f914e26ccd128ebe",
+  "controllerImage": "image-registry.openshift-image-registry.svc:5000/saw-container-build/saw-runtime-controller@sha256:943d9b2c7113374b05db3a4cc77f7205103bea94492535e6a9f9e0ebd54fbadd",
+  "siteRevision": "4cbe4308a5e4caf80a3768bd6911754a33bac8e3",
+  "bomSHA256": "41513342a8f6fbc2afdde9184df0520415b68669c20b6ff369e0ea002863cb34",
+  "initialModels": {
+    "default/notebook": "gpt-4.1-mini",
+    "cuda-dev/cuda-sandbox": "gpt-4.1-mini"
+  },
+  "updatedModels": {
+    "default/notebook": "gpt-4.1",
+    "cuda-dev/cuda-sandbox": "gpt-4o-mini"
+  },
+  "boundaryReview": {
+    "stagingRegistration": "31f22e379e43737d",
+    "createTask": "8827a6ce-3767-4f63-80a9-c09673e19a95",
+    "deleteTask": "224a18c7-50e1-47ba-8bd7-3753495e09c8",
+    "differencesFromExistingOwner": [
+      "owner and registration identifiers",
+      "AdminNetworkPolicy priority51 to52",
+      "inference credential binding type custom-inference to openai; only api.openai.com allowed",
+      "matching proxy policy checksum"
+    ],
+    "stagingCreatedAgents": false,
+    "governanceUIDsAndHashesUnchanged": true
+  },
+  "preservedOwner": {
+    "owner": "sawk8sowner",
+    "registration": "77c19106aea3bffd",
+    "workloadPodUID": "92cedcb9-5024-4a78-92af-d42550df8b3a"
+  },
+  "modelUpdateEvidence": [
+    {
+      "slot": "cuda-dev/cuda-sandbox",
+      "model": "gpt-4o-mini",
+      "responseModel": "gpt-4o-mini-2024-07-18",
+      "podUID": "23eeff3f-fcab-4ed3-ac02-7cfbf024068a"
+    },
+    {
+      "slot": "default/notebook",
+      "model": "gpt-4.1",
+      "responseModel": "gpt-4.1-2025-04-14",
+      "podUID": "a1fc4a00-fe1d-46bf-9599-e4f18f1d3514"
+    }
+  ],
+  "agentSecurity": {
+    "scc": "restricted-v2",
+    "runAsNonRoot": true,
+    "allowPrivilegeEscalation": false,
+    "dropCapabilities": [
+      "ALL"
+    ],
+    "runtimeClass": null,
+    "localGPUAllocated": false
+  },
+  "firstAttempt": {
+    "registration": "ff492fbd7e694cfa",
+    "createTask": "d388fd2c-4097-40e1-b6e0-72f15101aaaa",
+    "updateTask": "4709e036-6653-426c-be0f-d8b0a8a7168f",
+    "stopTask": "97bc1b33-5cfd-4308-9162-ca89296c375d",
+    "startTask": "fc45342f-3b2c-4cb3-9da6-a2b5e11cd39d",
+    "cleanupTask": "d04ed083-b0ed-471d-bebc-b2c1b526fd43",
+    "result": "acceptance assertion failed: expected immutable complete audit log despite later denied tool attempt",
+    "extraAudit": {
+      "slot": "cuda-dev/cuda-sandbox",
+      "turn": "after-update",
+      "tool": "exec",
+      "decision": "deny"
+    },
+    "passed": [
+      "RHDH create and both browser tool cases",
+      "RHDH model update; fresh replies from both selected models",
+      "RHDH stop and start"
+    ],
+    "afterStartValidationCompleted": false
+  },
+  "finalCreateTask": "fce1de2b-6096-432d-8bef-dacadcbd71f2",
+  "acceptanceSources": {
+    "lifecycleAndAuditRevision": "6d458bc25759793d10a4430fc05a03032b36d5fd",
+    "rhdhClientRevision": "431ce749537117aab6cc2f0c8a43598c0e05123b",
+    "sha256": {
+      "portal_container_lifecycle.py": "5e1009ddcc4d081c8c519f295f61f7fa279fee8c098a72aa4c9bb171ec5eab5d",
+      "portal_audit_evidence.cjs": "63d5c4a0fe722ff40abcac0ef8a2bc5033a52615531247c203a22ab8a3371a1c",
+      "rhdh_workspace.py": "8c0623d8ba141dfd4898cea51b6dc50323e7dd9013e4530ad4c77cbf47bcf9cf"
+    }
+  },
+  "registration": "39edb76eed4cd124",
+  "fixtureAuditSHA256": {
+    "cuda-dev/cuda-sandbox": "5380f30b5f7a552e62ef5150aee0c293e0ae2f225aa6a7279a73578b33da1333",
+    "default/notebook": "062193d6dface2395c235b8232cfef06e93a8e7a717f228fade5d54c0f38bf34"
+  },
+  "recordedAt": "2026-11-06T10:19:18.604228+00:00",
+  "lifecycle": {
+    "registration": "39edb76eed4cd124",
+    "profile": "data-science",
+    "fixture": "39edb76ef450182f",
+    "tasks": {
+      "create": "fce1de2b-6096-432d-8bef-dacadcbd71f2",
+      "update": "23a92a28-52d0-4234-babe-460396e19116",
+      "stop": "c16793a0-c0f2-470c-9fc7-f5d654211787",
+      "start": "a17455f8-e10e-4c76-99f4-65fb9d860db8",
+      "delete": "0c9d9296-69dc-4841-a44a-8201091c3d22"
+    },
+    "sandboxes": {
+      "cuda-dev/cuda-sandbox": {
+        "archiveUID": "4eb9c7d4-be57-4c3c-acb9-78d513a90cc9",
+        "verified": {
+          "records": 5,
+          "sha256": "5380f30b5f7a552e62ef5150aee0c293e0ae2f225aa6a7279a73578b33da1333",
+          "byTurn": {
+            "read": [
+              {
+                "tool": "read",
+                "decision": "allow"
+              }
+            ],
+            "deny": [
+              {
+                "tool": "exec",
+                "decision": "approval_required"
+              },
+              {
+                "tool": "exec",
+                "decision": "rejected"
+              }
+            ],
+            "approve": [
+              {
+                "tool": "exec",
+                "decision": "approval_required"
+              },
+              {
+                "tool": "exec",
+                "decision": "approved"
+              }
+            ]
+          }
+        }
+      },
+      "default/notebook": {
+        "archiveUID": "c18474bf-6a83-4656-a8de-a77d5db72829",
+        "verified": {
+          "records": 5,
+          "sha256": "062193d6dface2395c235b8232cfef06e93a8e7a717f228fade5d54c0f38bf34",
+          "byTurn": {
+            "read": [
+              {
+                "tool": "read",
+                "decision": "allow"
+              }
+            ],
+            "deny": [
+              {
+                "tool": "exec",
+                "decision": "approval_required"
+              },
+              {
+                "tool": "exec",
+                "decision": "rejected"
+              }
+            ],
+            "approve": [
+              {
+                "tool": "exec",
+                "decision": "approval_required"
+              },
+              {
+                "tool": "exec",
+                "decision": "approved"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "checks": {
+    "freshRegistration": true,
+    "manualWorkloadFixes": false,
+    "ownerAuthenticatedRHDHOperations": true,
+    "realHTTPSWebSocketChatBothSandboxes": true,
+    "toolApprovalAndDenialBothSandboxes": true,
+    "modelUpdateResponsesVerified": true,
+    "retainedWorkspaceFiles": true,
+    "retainedPVCUIDs": true,
+    "retainedOpenShellIDs": true,
+    "freshPodsAfterUpdateAndRestart": true,
+    "stoppedHasNoWorkloadPods": true,
+    "registryAndRuntimeControlUINamespacesDeleted": true,
+    "fixtureAuditExactSequenceIDBodyPreserved": true,
+    "auditVerifiedByFreshReadOnlyJobsAfterDelete": true
+  }
+}

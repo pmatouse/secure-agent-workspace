@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-06T10:16:05.087708+00:00",
+  "siteRevision": "4cbe4308a5e4caf80a3768bd6911754a33bac8e3",
+  "acceptanceHelperRevision": "b77886184dd47695d44f7eca50f0914542ff16a6",
+  "freshVM": {
+    "owner": "sawvmcanary",
+    "namespace": "saw-sawvmcanary",
+    "vmUID": "852a1fc9-e9fe-41f3-9427-e96b7fe85049",
+    "vmiUID": "7ebcdff3-db33-4ef5-ae62-ca2f94c03f00",
+    "phase": "Running",
+    "runStrategy": "Always",
+    "rootPVC": {
+      "name": "sawvmcanary-root",
+      "uid": "33c1d25c-0201-4d91-b783-3915f5e50dd8",
+      "phase": "Bound"
+    },
+    "installer": {
+      "installPhase": "Done",
+      "applyPhase": "Done",
+      "bom": "openshell-0-1-2-rhaiv-6",
+      "bundleSignature": "unsigned",
+      "renderedInstallerSHA256": "7faa1543bfb07f62df033627b0097319f7f0cd817666175abb0d2ea05d889a86",
+      "embeddedCoreSHA256": "a5d63e63aae172c9a3e2e148ac66ecaa08038e539a889054f914e26ccd128ebe",
+      "bootID": "1805f0fd-ae66-4937-b553-8c2b8fc9a5f4"
+    },
+    "rhdhCreate": {
+      "task": "c748f4aa-f92d-42ab-9e3f-fd5ca44b82a8",
+      "status": "completed"
+    },
+    "manualGuestFixes": false,
+    "manualRestarts": 0
+  },
+  "browserChecks": [
+    {
+      "workspace": "default",
+      "sandbox": "notebook",
+      "origin": "https://sawvmcanary-default-notebook-ui.apps.cluster-glmhg.dyn.redhatworkshops.io",
+      "uiBuildId": "2026.9.6-release-eb377ac59e6c-2026-09-23T16-33-12.144Z",
+      "configuredModel": "openai/gpt-4.1-mini",
+      "browserChat": {
+        "session": "agent:main:shared-vm-76c19ce6feed",
+        "chatFinal": true,
+        "decision": null,
+        "matched": true
+      },
+      "providerInference": "passed",
+      "undeclaredEgress": "blocked"
+    },
+    {
+      "workspace": "cuda-dev",
+      "sandbox": "cuda-sandbox",
+      "origin": "https://sawvmcanary-cuda-dev-cuda-sandbox-ui.apps.cluster-glmhg.dyn.redhatworkshops.io",
+      "uiBuildId": "2026.9.2-release-3928bad9badf-2026-09-05T15-22-41.651Z",
+      "configuredModel": "openai/gpt-4.1-mini",
+      "browserChat": {
+        "session": "agent:main:shared-vm-cuda-bbf24a798e",
+        "chatFinal": true,
+        "decision": null,
+        "matched": true
+      },
+      "providerInference": "passed",
+      "undeclaredEgress": "blocked"
+    }
+  ],
+  "authenticationObservation": "Initial concurrent CUDA-route Keycloak login did not return to the chat origin; a sequential fresh login and actual chat passed with unchanged workload configuration. No cause is asserted.",
+  "initialUpgradeCanary": {
+    "owner": "sawvmother",
+    "namespace": "saw-sawvmother",
+    "vmUID": "0f25d5cb-eb3c-422e-85eb-239ce534b07b",
+    "vmiUID": "53d18770-5507-4568-a88c-69d3aadbaaca",
+    "phase": "Running",
+    "runStrategy": "Always",
+    "rootPVC": {
+      "name": "sawvmother-root",
+      "uid": "8d8b3ace-f096-41b6-9e4c-d1f9147ecc63",
+      "phase": "Bound"
+    },
+    "restartCountDuringQualification": 1,
+    "oldVmiUID": "50f7e4f4-109d-4ef0-a39b-eed5b34e05ba",
+    "coreMatched": true,
+    "error": "Podman 5.8.1 notebook startup timed out; deletion failed because its PID did not exit, followed by malformed container state JSON containing NUL. Stock apply failed and retried automatically.",
+    "failedContainerID": "f1c7255dd7c3ea152819275b41ea746ba14eb28477f44805b1a36c278c3ed531",
+    "guestDBEdits": false,
+    "recoveryFunctionsUnchangedBySharedRefactor": [
+      "create_sandbox",
+      "delete_sandbox_and_wait",
+      "wait_sandbox",
+      "sandbox_state",
+      "begin_migration"
+    ]
+  },
+  "protectedBaseline": {
+    "owner": "sawvmowner",
+    "namespace": "saw-sawvmowner",
+    "vmUID": "7e4c4abf-1aa6-4073-bc77-c32149874441",
+    "vmiUID": "db299bed-3365-474d-8377-ec594c04691e",
+    "phase": "Running",
+    "runStrategy": "Always",
+    "rootPVC": {
+      "name": "sawvmowner-root",
+      "uid": "020e28d3-c017-4161-a0b6-c830e8b9651d",
+      "phase": "Bound"
+    }
+  },
+  "retirement": {
+    "state": "halted-retained",
+    "gitRevision": "b76ca628e27ca5ae072a3b80432dac069e215533",
+    "observedAt": "2026-11-06T10:24:18.599778+00:00",
+    "owner": "sawvmother",
+    "namespace": "saw-sawvmother",
+    "runStrategy": "Halted",
+    "printableStatus": "Stopped",
+    "vmiCount": 0,
+    "remainingArgoApplications": 0,
+    "retainedRootPVC": {
+      "name": "sawvmother-root",
+      "uid": "8d8b3ace-f096-41b6-9e4c-d1f9147ecc63",
+      "phase": "Bound"
+    },
+    "retainedSecretNames": [
+      "secret/builder-dockercfg-qdwfg",
+      "secret/default-dockercfg-n8mkd",
+      "secret/deployer-dockercfg-zpw54",
+      "secret/inference",
+      "secret/inference-meta",
+      "secret/openshell-aap-ssh",
+      "secret/openshell-ssh-pubkey",
+      "secret/pipeline-dockercfg-d79lp",
+      "secret/saw-credential-proxy-ca",
+      "secret/saw-ingress-ca",
+      "secret/sawvmother-cloudinit",
+      "secret/sawvmother-credential-proxy-dockercfg-6ll4n",
+      "secret/sawvmother-ssh-pubkey"
+    ],
+    "retainedResources": [
+      "root PVC",
+      "namespace",
+      "credentials",
+      "diagnostic VM object"
+    ],
+    "method": "Removed static user entry with pruneOnRemove=false; after child Argo Applications disappeared, ran supported virtctl stop. No database edits, force deletions, or guest repairs.",
+    "runningVMsVerified": {
+      "sawvmowner": {
+        "vmiUID": "db299bed-3365-474d-8377-ec594c04691e",
+        "phase": "Running"
+      },
+      "sawvmcanary": {
+        "vmiUID": "7ebcdff3-db33-4ef5-ae62-ca2f94c03f00",
+        "phase": "Running"
+      }
+    }
+  },
+  "localValidation": {
+    "siteSharedParserPackaging": {
+      "passed": 51,
+      "skipped": 1,
+      "skipReason": "Linux-only real verifier test on macOS"
+    },
+    "devGenericRegression": {
+      "passed": 115,
+      "failed": 2,
+      "failureReasons": [
+        "macOS does not provide the required shred command",
+        "macOS OpenSSL x509 extension tooling differs from the Linux test requirement"
+      ]
+    },
+    "existingSiteFixtureMismatch": "Reproduced unchanged on the previous site HEAD: its shipped profile BOM selects OpenAI while the stock apply-profile fixture supplies an NVIDIA Build credential. This is not a full-suite pass."
+  }
+}

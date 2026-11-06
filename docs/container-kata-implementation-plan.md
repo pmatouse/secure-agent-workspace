@@ -49,6 +49,24 @@ RHDP storage/login infrastructure were retained.
 [Clean reinstall receipt](../tests/acceptance/container-clean-install-glmhg-2026-11-05.json)
 [Site inputs, commands and acceptance gates](container-site-replay.md)
 
+### Shared-code data-science rollout (2026-11-06)
+
+The clean reinstalled site now offers the approved container `data-science`
+profile with two owner-authenticated browser chats. A fresh RHDH registration
+passed create, both tool approval/denial tests, independent model changes,
+stop/start with retained files and identities, and deletion. New read-only
+Jobs recovered identical fixture audit records from both retained archives.
+The headless owner's existing Pod was unchanged.
+[Container receipt](../tests/acceptance/data-science-shared-rollout-2026-11-06.json)
+
+The controller and deployed VM installer use identical canonical shared-core
+bytes. A fresh VM passed installation, both browser chats, provider inference
+and undeclared-egress denial. An older upgrade canary encountered corrupt
+Podman state; its root is retained for diagnosis. Fresh-install success is not
+a qualification of repairing that state. No OpenShell driver change or new VM
+lifecycle operation was introduced.
+[VM receipt](../tests/acceptance/vm-shared-core-2026-11-06.json)
+
 ### Live baseline receipt (2026-11-04)
 
 Latest qualification checkpoint (earlier paragraphs below preserve the rollout
@@ -901,7 +919,7 @@ boundary against a user who can mutate these objects.
 **Design requirement: implement SAW feature semantics once.** Keep the controller,
 but make it a thin execution frontend around a shared SAW engine. The VM
 `apply_bom.py` entry point calls the same canonical `saw_core.py` as the
-Kubernetes compiler/reconciler. Implemented offline: profile dataclasses, parsing,
+Kubernetes compiler/reconciler. Implemented and qualified on both paths: profile dataclasses, parsing,
 shared semantic validation, credential-reference helpers and the workspace →
 providers → sandboxes readiness sequence. Strict parsing and backend capability
 checks reject fields that Kubernetes cannot yet implement. Existing VM parsing

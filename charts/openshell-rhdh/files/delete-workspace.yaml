@@ -119,5 +119,5 @@ spec:
   output:
     text:
     - {title: Workspace deleted, content: 'Pipeline run **${{ steps.run.output.body.metadata.name }}**
-        deleted workspace ${{ parameters.workspace | parseEntityRef | pick(''name'') }}: its VM, namespace
+        deleted workspace ${{ parameters.workspace | parseEntityRef | pick(''name'') }}: its runtime, namespace
         and keys are gone.'}
