@@ -5,11 +5,6 @@ users:
     values:
       networkPolicy:
         enabled: true
-  - name: sawvmother
-    profiles: [data-science]
-    values:
-      networkPolicy:
-        enabled: true
 defaults:
   openshellSaw:
     containerRuntime: podman
