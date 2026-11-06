@@ -41,6 +41,8 @@ def test_container_has_own_gateway_credential_audit_and_policy():
     apps = [a for a in top if a["kind"]=="Application"]
     assert {a["spec"]["source"]["path"] for a in apps} == {"charts/saw-bom","charts/saw-portal-container"}
     resources = [r for a in apps for r in child(a)]
+    assert all(isinstance(r["spec"]["source"]["targetRevision"], str)
+               for r in resources if r["kind"] == "Application")
     es, = [r for r in resources if r["kind"]=="ExternalSecret" and r["metadata"]["name"]=="inference"]
     assert es["metadata"]["namespace"] == "saw-ctl-"+REG
     assert es["spec"]["data"] == [{"secretKey":"api_key","remoteRef":{"key":user()["vaultPrefix"]+"/inference","property":"api_key"}}]

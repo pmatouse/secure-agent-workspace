@@ -107,7 +107,7 @@ spec:
   destination: {server: 'https://kubernetes.default.svc', namespace: {{ index $c 1 }}}
   source:
     repoURL: {{ $g.repoURL | quote }}
-    targetRevision: {{ $item.revision }}
+    targetRevision: {{ $item.revision | quote }}
     path: charts/{{ index $c 0 }}
     helm:
       releaseName: {{ $release }}

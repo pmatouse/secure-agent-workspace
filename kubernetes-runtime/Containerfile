@@ -1,10 +1,10 @@
-FROM registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5 AS generate
+FROM registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c AS generate
 USER 0
 WORKDIR /build
 COPY kubernetes-runtime/build-sdk.py kubernetes-runtime/sdk-lock.json /build/
 RUN pip install --no-cache-dir grpcio-tools==1.80.0 grpcio==1.80.0 protobuf==6.33.5 && python3 build-sdk.py
 
-FROM registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+FROM registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c
 USER 0
 RUN pip install --no-cache-dir grpcio==1.80.0 protobuf==6.33.5 PyYAML==6.0.3
 RUN command -v openssl && command -v shred && command -v stat

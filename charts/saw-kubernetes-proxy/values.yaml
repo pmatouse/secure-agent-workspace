@@ -9,7 +9,7 @@ policyConfigMap: ""
 policyDigest: ""
 credentialSecretNames: []
 image: ghcr.io/validatedpatterns-sandbox/saw-credential-proxy@sha256:73f271de2eb6166315603fbb72c800b939a14770a69c86debaabbd29a46a0f93
-helperImage: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+helperImage: registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c
 network:
   # Standard NetworkPolicy egress rules. Bootstrap needs only API access.
   bootstrapEgress: []

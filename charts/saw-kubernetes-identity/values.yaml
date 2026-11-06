@@ -5,4 +5,4 @@ targetNamespace: ""
 gateway: ""
 serverSans: []
 gatewayImage: quay.io/opendatahub/odh-openshell-gateway@sha256:7bd1357f8b4c293ea6527dee2035e26dcca02fb9a87fb1521a0cd9255ec7d9fc
-helperImage: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+helperImage: registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c
