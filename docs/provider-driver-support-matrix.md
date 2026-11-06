@@ -70,9 +70,12 @@ initial inference pass:
   enrollment success.
 
 Credential-marker and destination denials passed in isolated live checks.
-They do not qualify direct network-egress isolation or foreign-owner browser
-access, which require their own checks. Keep detailed failures and immutable
-revision evidence in the separate qualification record.
+Separate direct-connect probes from both application Pods timed out to two
+currently resolved OpenAI IPv4 addresses on TCP/443, while mediated inference
+succeeded before and after; the stock deny-all network policies remained in
+place. This bounds the network result to the tested destinations and transport.
+Foreign-owner browser access still needs its own check. Keep detailed failures
+and immutable revision evidence in the separate qualification record.
 
 The container compiler currently selects one inference provider per sandbox;
 additional simultaneous `inference.models` chat choices remain unsupported and
