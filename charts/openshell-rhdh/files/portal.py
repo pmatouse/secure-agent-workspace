@@ -893,7 +893,7 @@ class OwnerSubjects:
     Without Keycloak settings (RBAC off) entries stay as they are."""
 
     def __init__(self, ttl=60):
-        self.ttl, self.ids, self.tried = ttl, {}, {}
+        self.ttl, self.ids, self.tried, self.failed = ttl, {}, {}, set()
 
     def fill(self, workspaces):
         url = os.environ.get("KEYCLOAK_URL", "")
@@ -913,10 +913,17 @@ class OwnerSubjects:
                 for name in missing:
                     self.ids.pop(name, None)
                 self.ids.update(found)
+                self.failed.difference_update(missing)
             except (PortalError, OSError, ValueError, KeyError) as exc:
-                log(f"WARN: Keycloak ids not read ({exc}); {', '.join(missing)} not members yet")
+                log(f"WARN: Keycloak owner lookup failed ({exc}); projection held")
                 for name in missing:
                     self.ids.pop(name, None)
+                self.failed.update(missing)
+        # An unavailable identity service is not an empty or disabled owner.
+        # Hold the entire VM/container projection, including during the retry
+        # backoff, rather than silently omitting entries or clearing membership.
+        if any(not w.get("ownerSubject") and w["name"] in self.failed for w in workspaces):
+            raise PortalError("Keycloak owner lookup unavailable; workspace projection held")
         return [{**w, "ownerSubject": self.ids[w["name"]]}
                 if not w.get("ownerSubject") and w["name"] in self.ids else w for w in workspaces]
 
