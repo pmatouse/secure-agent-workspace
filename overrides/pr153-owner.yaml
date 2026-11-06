@@ -344,7 +344,32 @@ portal:
               port: 443
           - *id001
           revision: c7eab78419e94a96a3e23d64e51d776a028ce841
-        enabled: false
+        reference:
+          validation: 6fd950e205d7b18108695042a3c2287b16909ff8cda059955e1b27e5f6d55da4
+          binding: 6f8c98af328883d2a8c2872ecab9a7272f581e0ff35e3b9df368ef669904cff4
+          network: 849ba89b99c9b6d3c77fa7d136716da2cae75b7b7cbab2e25692c44f82c15af4
+          deny: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+          gatewayNetwork: 0f663e9ab7c13d6c461c84195e23bf07adda55b2bd9a134f86b7772be14b412f
+          gateway: 099c48af8ff3b5c76929521b0ceaa9334d034b238ce5dd53f90975c6f51df405
+          gatewayService: 93010fe2dcf582c02de9eba40bc10249fa80ed93feb57d902eaca3bc53e8c139
+          gatewayConfig: b92522741883f3b4873e3f2df769cd7a2c1be72e65aa69236633c1dbeaabe0b0
+          governance:
+            uid: 9ab4695a-865a-4993-a0d8-6a3d236c50e6
+            sha256: b30e27ab8e0530319e278b1a60f8b597432c96e48dbdb9a8cff9884d49c749aa
+          governanceService:
+            uid: 7bbbd7d5-ea9a-422b-b696-db450c459436
+            sha256: 31f7cb983349fb00a5e473511707147b592b60e8f469731b73037102c643330a
+          governancePolicy:
+            uid: c2a9a226-e47f-4c19-8b85-fc815f5b4dfa
+            sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+          governanceProfiles:
+            uid: d2232eee-b4d6-47bc-9200-45b441bae783
+            sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+          proxy: 4d49792efcfef758690b805d9c6c03f67c2d9ae1019b24b5c0459f9df2f087e0
+          proxyNetwork: 00973255a1f849f15c1c531f7e4942f1892c0f867f9da7dd0c4d8942a1d7bce2
+          proxyPolicy: 9d701feb1dc89824b8591cf92576543a01d213f0830743c899712a42e92c9c98
+          publicCA: equals independent trusted proxy public CA
+        enabled: true
         approvedProfiles:
           data-science: 87baf2f3cbbc8c08f892cbd2e63f34440132fa2fabded0834b5069ec7762ea67
       profileImageOverrides:
