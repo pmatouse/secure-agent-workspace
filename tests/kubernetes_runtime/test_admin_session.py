@@ -1,5 +1,6 @@
 """Per-operation identity, public trust updates and cleanup under failure."""
 import base64
+from contextlib import contextmanager
 import copy
 import json
 import os
@@ -91,6 +92,96 @@ def test_shared_identity_roles_permissions_and_private_cleanup(ca, tmp_path):
         assert os.stat(tls/"client/tls.key").st_mode & 0o777 == 0o600
         assert os.stat(tls.parent).st_mode & 0o777 == 0o700
     assert not tls.exists() and not list(runtime.rglob("*.key"))
+
+
+def test_starting_job_waits_for_its_own_running_phase_before_issuing_or_publishing(ca, tmp_path, monkeypatch):
+    api = Api(ca)
+    runtime = tmp_path/"runtime"
+    runtime.mkdir()
+    api.pods["bind-job"]["status"]["phase"] = "Pending"
+    trust = api.trust(ca, "bind-job")
+    elapsed = [0]
+    def sleep(seconds):
+        assert not published(api) and api.writes == 0
+        assert not list(runtime.rglob("*.key")) and not list(runtime.glob("saw-admin.*"))
+        elapsed[0] += seconds
+        if elapsed[0] >= 1:
+            api.pods["bind-job"]["status"]["phase"] = "Running"
+    wait = trust.wait_for_holder
+    monkeypatch.setattr(trust, "wait_for_holder", lambda: wait(sleep=sleep, monotonic=lambda: elapsed[0]))
+    identity = sessions.admin.identity
+    monkeypatch.setattr(sessions.admin, "identity", lambda ca, runtime:
+                        identity(ca, runtime, require_tmpfs=False, erase=lambda p: p.unlink()))
+    monkeypatch.setattr(sessions.admin, "require_memory", lambda _: None)
+    calls = []
+    class Gateway:
+        def __init__(self, *args, **kwargs): pass
+        def call(self, method, body):
+            assert published(api) and trust.live({"pod": trust.pod, "uid": trust.pod_uid})
+            calls.append(method)
+        def close(self): pass
+    with sessions.GatewaySessions(trust, "https://gateway:17670", runtime, gateway_factory=Gateway).open():
+        assert elapsed[0] == 1 and calls == ["GetGatewayInfo"]
+        assert len(published(api)) == 1
+    assert not published(api) and not list(runtime.rglob("*.key"))
+
+
+@pytest.mark.parametrize("state", ["missing", "replacement", "deleting", "Succeeded", "Failed", "Unknown", "unset"])
+def test_startup_wait_fails_closed_for_nonstarting_identity(ca, tmp_path, monkeypatch, state):
+    api = Api(ca)
+    pod = api.pods["bind-job"]
+    if state == "missing": del api.pods["bind-job"]
+    elif state == "replacement": pod["metadata"]["uid"] = str(uuid.uuid4())
+    elif state == "deleting": pod["metadata"]["deletionTimestamp"] = "now"
+    elif state == "unset": pod["status"] = {}
+    else: pod["status"]["phase"] = state
+    monkeypatch.setattr(sessions.admin, "require_memory", lambda _: None)
+    def identity(*args, **kwargs): pytest.fail("issued private identity before holder readiness")
+    monkeypatch.setattr(sessions.admin, "identity", identity)
+    with pytest.raises(ContractError, match="administrator session holder"):
+        with sessions.GatewaySessions(api.trust(ca, "bind-job"), "https://gateway:17670", tmp_path).open():
+            pytest.fail("unavailable holder was admitted")
+    assert not published(api) and api.writes == 0
+
+
+def test_startup_wait_timeout_is_bounded_and_does_not_publish(ca):
+    api = Api(ca)
+    api.pods["bind-job"]["status"]["phase"] = "Pending"
+    elapsed = [0]
+    with pytest.raises(ContractError, match="before the deadline"):
+        api.trust(ca, "bind-job").wait_for_holder(timeout=2,
+            sleep=lambda seconds: elapsed.__setitem__(0, elapsed[0]+seconds), monotonic=lambda: elapsed[0])
+    assert elapsed[0] == 2 and api.writes == 0 and not published(api)
+
+
+@pytest.mark.parametrize("code", [0, 403, 503])
+def test_startup_wait_does_not_retry_api_errors_or_publish(ca, code):
+    api = Api(ca)
+    trust = api.trust(ca, "bind-job")
+    def unavailable(*args, **kwargs): raise ApiError(code)
+    trust.request = unavailable
+    def no_sleep(_): pytest.fail("retried API error as a Pending Pod")
+    with pytest.raises(ApiError) as error:
+        trust.wait_for_holder(sleep=no_sleep)
+    assert error.value.code == code and api.writes == 0
+
+
+def test_publication_rechecks_uid_after_successful_startup_wait(ca, tmp_path, monkeypatch):
+    api = Api(ca)
+    runtime = tmp_path/"runtime"
+    runtime.mkdir()
+    monkeypatch.setattr(sessions.admin, "require_memory", lambda _: None)
+    original = sessions.admin.identity
+    @contextmanager
+    def identity(base, runtime):
+        with original(base, runtime, require_tmpfs=False, erase=lambda p: p.unlink()) as value:
+            api.pods["bind-job"]["metadata"]["uid"] = str(uuid.uuid4())
+            yield value
+    monkeypatch.setattr(sessions.admin, "identity", identity)
+    with pytest.raises(ContractError, match="holder unavailable"):
+        with sessions.GatewaySessions(api.trust(ca, "bind-job"), "https://gateway:17670", runtime).open():
+            pytest.fail("replacement holder was admitted")
+    assert not published(api) and api.writes == 0 and not list(runtime.rglob("*.key"))
 
 
 def test_concurrent_sessions_preserve_trust_with_compare_and_swap(ca, tmp_path):

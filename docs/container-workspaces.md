@@ -165,6 +165,7 @@ sequenceDiagram
   participant Shared as Shared admin-session code
   participant API as Kubernetes API
   participant Gateway as Stock gateway
+  Client->>API: Wait for this exact Pod UID to become Running
   Client->>Shared: Create temporary identity in tmpfs
   Shared-->>Client: Client key/certificate + public session CA
   Client->>API: CAS update named client-ca Secret: add public CA
@@ -181,6 +182,11 @@ compare-and-swap. Each entry is bound to its originating Pod UID and certificate
 expiry. A per-Pod file lock serializes operations. After a container restart in
 the same Pod, the next operation withdraws that Pod's abandoned entries and
 removes its old private files from `emptyDir` before issuing a new identity.
+At startup, the process can precede kubelet's published `Running` phase. The
+adapter waits up to 30 seconds while its exact Pod UID is `Pending`, then issues
+the identity only after observing `Running`. Missing, replaced, deleting or
+terminal Pods and API failures stop the operation. Publication still rechecks
+the holder; this wait does not authorize trust for a Pending Pod.
 Private-file cleanup also runs when trust recovery cannot reach the API.
 Updates prune expired sessions and sessions whose Pod has exited or been
 replaced. If cleanup loses API access, the next successful trust update removes
