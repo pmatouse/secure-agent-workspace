@@ -126,6 +126,7 @@ clusterGroup:
       extraValueFiles:
         - /overrides/saw-users.yaml
         - /overrides/container-owner.yaml
+        - /overrides/data-science-owner.yaml
     governance-policy:
       name: governance-policy
       namespace: openshell-agents
