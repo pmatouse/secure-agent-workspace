@@ -36,7 +36,7 @@ automountServiceAccountToken: false
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata: {name: {{ printf "portal-gate-%s" $reg }}, namespace: {{ $e.buildNamespace }}}
-rules: [{apiGroups: [image.openshift.io], resources: [imagestreams/layers], resourceNames: [saw-runtime-controller], verbs: [get]}]
+rules: [{apiGroups: [image.openshift.io], resources: [imagestreams/layers], resourceNames: [{{ base (index (splitList "@" $e.image) 0) | quote }}], verbs: [get]}]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -61,7 +61,7 @@ subjects: [{kind: ServiceAccount, name: saw-gate-preparation, namespace: {{ $ns 
 {{- /* Job PodSpecs are immutable. A new artifact or bundle gets a new Job,
 while an unchanged sync keeps the completed publication. */ -}}
 {{- $publicationSpec := dict "image" $e.image "owner" $u "subject" $b.ownerSubject "target" $target "gate" $gate "model" $model "generation" $publication -}}
-{{- $job = printf "%s-%s" $job ($publicationSpec | toJson | sha256sum | trunc 10) -}}
+{{- $job = printf "%s-%s" $job ($publicationSpec | toJson | sha256sum | trunc 10) }}
 ---
 apiVersion: batch/v1
 kind: Job

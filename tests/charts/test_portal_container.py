@@ -238,3 +238,31 @@ def test_foundation_can_be_reviewed_without_placeholder_approval_or_workload():
     assert any(o["metadata"]["name"] == "saw-portal-enrollment" for o in docs)
     assert any(o["kind"] == "RoleBinding" and o["metadata"]["name"] == "portal-binding-reader" for o in docs)
     assert any(o.get("spec", {}).get("source", {}).get("path") == "charts/openshell-saw-kubernetes" for o in docs)
+
+
+@pytest.mark.parametrize("stream", ["saw-kubernetes-runtime", "custom-runtime"])
+def test_runtime_pull_grants_follow_the_configured_image(stream):
+    from copy import deepcopy
+    site = deepcopy(SITE)
+    image = "image-registry.example.test/builds/" + stream + "@sha256:" + "b" * 64
+    site["automaticEnrollment"]["image"] = image
+    site["enrollment"] = dict(
+        registration=REG, image=image, buildNamespace="builds", revision="1" * 40,
+        approved={}, intent={"profileRef": {"name": "saw-bom-profiles"}, "bindings": {
+            "ownerID": user()["installationID"], "ownerSubject": SITE["subject"],
+            "namespace": "saw-" + U, "namespaceUID": "fixture-uid", "mode": "container",
+            "bindings": {"default/notebook": {
+                "workspace": {"claimName": "workspace-" + U},
+                "toolGate": {"trusted": {"claimName": "saw-gate-" + U},
+                             "audit": {"claimName": "saw-audit-" + U},
+                             "ownerLogin": U, "receiptKey": "fixture-public-key"},
+                "browser": {"ownerLogin": U, "origin": "https://alice-default-notebook-ui.apps.cluster.example.com"}}}}})
+    resources = render("saw-portal-container", U, "saw-" + U, dict(
+        site=site, owner=U, ownerSubject=SITE["subject"], registration=REG,
+        installationID=user()["installationID"], intentGeneration=1,
+        vaultPrefix=user()["vaultPrefix"], **{"global": GLOBAL}))
+    grants = [rule for obj in resources if obj["kind"] == "Role"
+              for rule in obj["rules"] if "imagestreams/layers" in rule["resources"]
+              and obj["metadata"]["name"] in {"enroll-" + REG + "-pull", "portal-gate-" + REG}]
+    assert len(grants) == 2
+    assert all(rule["resourceNames"] == [stream] and rule["verbs"] == ["get"] for rule in grants)

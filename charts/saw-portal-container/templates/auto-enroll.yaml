@@ -65,7 +65,7 @@ subjects: [{kind: ServiceAccount, name: {{ $name }}, namespace: {{ $t }}}]
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata: {name: {{ $name }}-pull, namespace: {{ $a.buildNamespace }}}
-rules: [{apiGroups: [image.openshift.io], resources: [imagestreams/layers], resourceNames: [saw-runtime-controller], verbs: [get]}]
+rules: [{apiGroups: [image.openshift.io], resources: [imagestreams/layers], resourceNames: [{{ base (index (splitList "@" $a.image) 0) | quote }}], verbs: [get]}]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
