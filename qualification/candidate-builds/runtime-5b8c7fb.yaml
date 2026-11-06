@@ -1,0 +1,29 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: runtime-5b8c7fb
+  namespace: saw-pr153-build
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/pmatouse/secure-agent-workspace.git
+      ref: 5b8c7fb0592ba1a4e5ee3a75723bf356edebb4bd
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: kubernetes-runtime/Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: saw-kubernetes-runtime:5b8c7fb0592b
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 3Gi
+  triggers:
+  - type: ConfigChange
+  successfulBuildsHistoryLimit: 1
+  failedBuildsHistoryLimit: 1
