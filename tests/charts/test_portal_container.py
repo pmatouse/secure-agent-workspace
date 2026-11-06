@@ -190,6 +190,7 @@ def test_static_projection_owns_no_workload_and_generates_same_composition():
     appset, = [o for o in docs if o["kind"] == "ApplicationSet"]
     deployment, = [o for o in docs if o["kind"] == "Deployment"]
     assert appset["spec"]["template"]["spec"]["source"]["path"] == "charts/saw-users"
+    assert appset["spec"]["template"]["spec"]["source"]["targetRevision"] == "{{ .revision }}"
     assert appset["spec"]["template"]["spec"]["source"]["helm"]["values"] == "{{ .workspaceValues }}"
     configuration, = [o for o in docs if "workspaces.json" in o.get("data", {})]
     cfg = json.loads(configuration["data"]["workspaces.json"])

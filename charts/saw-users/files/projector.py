@@ -97,7 +97,8 @@ def parameters(config, catalog, read):
         except (workspace.WorkspaceError, KeyError, TypeError, ValueError):
             raise ProjectionError("workspace configuration or enrollment is invalid") from None
         # `values` is reserved by the ApplicationSet plugin protocol.
-        result.append({"name": name, "workspaceValues": json.dumps(values, sort_keys=True)})
+        result.append({"name": name, "revision": values.get("global", {}).get("targetRevision", ""),
+                       "workspaceValues": json.dumps(values, sort_keys=True)})
     return result
 
 

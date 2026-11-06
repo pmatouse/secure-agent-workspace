@@ -1561,7 +1561,8 @@ def generator_params(workspaces, defaults, read=None, catalog=None):
                                                   observed if read else None)
         except _workspace.WorkspaceError as exc:
             raise PortalError(str(exc)) from exc
-        out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
+        out.append({"name": ws["name"], "revision": values.get("global", {}).get("targetRevision", ""),
+                    "values": json.dumps(values, sort_keys=True)})
     return out
 
 

@@ -14,6 +14,12 @@ watches, not in whatever namespace this chart happens to be released into.
 {{- if not .Values.global.targetRevision -}}
 {{- fail "global.targetRevision is required" -}}
 {{- end -}}
+{{- $revisions := .Values.workspaceRevisions -}}
+{{- if not (kindIs "map" $revisions) -}}{{- fail "workspaceRevisions requires owner names and full Git commit SHAs" -}}{{- end -}}
+{{- range $name, $revision := $revisions -}}
+{{- if or (not (regexMatch "^[a-z0-9]([-a-z0-9]{0,17}[a-z0-9])?$" $name)) (not (kindIs "string" $revision)) (not (regexMatch "^[a-f0-9]{40}$" (toString $revision))) -}}
+{{- fail "workspaceRevisions requires owner names and full Git commit SHAs" -}}
+{{- end -}}{{- end -}}
 {{- $seen := dict -}}
 {{- range .Values.users | default list -}}
 {{- $name := .name | default "" | toString -}}
@@ -404,7 +410,7 @@ spec:
     namespace: {{ printf "saw-%s" $user.name }}
   source:
     repoURL: {{ $root.Values.global.repoURL | quote }}
-    targetRevision: {{ $root.Values.global.targetRevision | quote }}
+    targetRevision: {{ index $root.Values.workspaceRevisions $user.name | default $root.Values.global.targetRevision | quote }}
     path: {{ .path }}
     helm:
       releaseName: {{ .release }}

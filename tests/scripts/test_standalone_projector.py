@@ -52,6 +52,19 @@ def test_standalone_uses_exact_portal_projection_without_mutating_inputs(project
     assert set(expected["containerSites"]["alice"]["targets"]) == {"default/notebook", "cuda-dev/cuda-sandbox"}
 
 
+def test_standalone_uses_same_selected_revision_for_application_and_children(projector):
+    cfg = config()
+    cfg["global"] = {"repoURL": "https://example.com/repo.git", "targetRevision": "main"}
+    cfg["workspaceRevisions"] = {"alice": "a"*40}
+    params, = projector.parameters(cfg, catalog(), lambda _: {})
+    values = json.loads(params["workspaceValues"])
+    assert params["revision"] == values["global"]["targetRevision"] == "a"*40
+    assert values["global"]["repoURL"] == cfg["global"]["repoURL"]
+    cfg["workspaceRevisions"] = {}
+    params, = projector.parameters(cfg, catalog(), lambda _: {})
+    assert params["revision"] == "main"
+
+
 @pytest.mark.parametrize("fault", ["missing-site", "duplicate", "unapproved", "wrong-mode", "broken-publication"])
 def test_projection_failure_never_returns_an_empty_desired_set(projector, fault):
     cfg = config()

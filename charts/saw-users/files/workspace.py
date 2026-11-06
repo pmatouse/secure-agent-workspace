@@ -131,7 +131,17 @@ def project_workspace(workspace, defaults, site, catalog, read=None):
     if mode not in {"vm", "container"}:
         raise WorkspaceError("unsupported workspace deployment mode")
     ws["values"]["deployment"] = {"mode": mode}
-    values = {**defaults, "users": [ws]}
+    # This map belongs to the operator's installation configuration, never the
+    # registration or an owner request. Pin only code in the configured repository.
+    revisions = defaults.get("workspaceRevisions", {})
+    if not isinstance(revisions, dict) or any(
+            not isinstance(name, str) or not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,17}[a-z0-9])?", name)
+            or not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision)
+            for name, revision in revisions.items()):
+        raise WorkspaceError("workspaceRevisions requires owner names and full Git commit SHAs")
+    values = {**{k:v for k,v in defaults.items() if k != "workspaceRevisions"}, "users": [ws]}
+    if ws.get("name") in revisions:
+        values["global"] = {**defaults.get("global", {}), "targetRevision": revisions[ws["name"]]}
     if mode != "container" or not site:
         return values
     if not site or ws.get("ownerSubject") != site.get("subject"):
