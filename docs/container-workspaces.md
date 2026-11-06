@@ -69,6 +69,18 @@ that namespace. Gateway and supervisor have different service accounts and
 network permissions from the application. Each workspace has its own gateway;
 governance, Keycloak, Vault, Argo and agent-sandbox are shared platform services.
 
+Provider creation is restart-safe: the ledger records a pending payload digest
+and original generation before `CreateProvider`. After a lost response, the
+reconciler reuses the request ID and accepts the stock gateway's durable receipt
+only for the unchanged resource revision. It never infers credential ownership
+from a redacted read. See [recovery and qualification](provider-driver-qualification.md).
+
+The briefing harness mounts two subdirectories from existing approved PVCs:
+the digest-named harness on the read-only gate PVC at `/sandbox/harness`, and
+`briefing` on the writable workspace PVC at `/sandbox/briefing`. Governance
+admits only these exact aliases in addition to the base mounts; it does not
+allow arbitrary additional mounts, subpaths or volume sources.
+
 ## Configuration and policy distribution
 
 There are two different BOMs: the **installer BOM** pins VM runtime components;

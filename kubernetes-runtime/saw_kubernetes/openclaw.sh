@@ -14,7 +14,7 @@ const config = {
   gateway: {mode: 'local', bind: 'loopback', port: 18789,
             auth: {mode: 'token', token: crypto.randomBytes(32).toString('hex')}},
   models: {providers: {@SAW_PROVIDER_KEY@: {baseUrl: @SAW_BASE_URL@,
-    @SAW_TIMEOUT@api: 'openai-completions', apiKey: '${@SAW_KEY_ENV@}',
+    @SAW_TIMEOUT@api: '@SAW_API@', apiKey: '${@SAW_KEY_ENV@}',
     models: [{id: model, name: model}]}}},
   agents: {defaults: {model: {primary: '@SAW_PROVIDER_ID@/' + model},
     workspace: '/sandbox/workspace/project'}},

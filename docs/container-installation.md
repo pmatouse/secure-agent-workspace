@@ -146,6 +146,13 @@ additional enabled provider inputs in the same registration prefix. RHDH uses
 the existing request-to-Vault pipeline; standalone operators use their normal
 Vault provisioning. Neither the Make helper nor projector loads raw keys.
 
+Native OpenAI, Anthropic and NVIDIA inference use the same provider profiles as
+VMs. Anthropic uses its Messages protocol; NVIDIA model selectors preserve the
+vendor/model slash. Select the provider in the approved BOM, then reapprove its
+destination and profile inputs through the normal enrollment path. See
+[provider qualification](provider-driver-qualification.md) for the BOM shape,
+probe commands and current live-test limits.
+
 ## Standalone installation and first-site approval
 
 Save the complete public configuration as `container-users.yaml`, then:

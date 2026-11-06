@@ -10,10 +10,10 @@ import yaml
 from .core import shared
 
 PROFILES = Path(shared.__file__).resolve().parents[1] / "provider-profiles"
-SUPPORTED = {"openai", "nvidia", "slack", "gmail"}
+SUPPORTED = {"openai", "anthropic", "nvidia", "slack", "gmail"}
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=5)
 def document(kind):
     if kind not in SUPPORTED:
         raise ValueError("unsupported governed provider")

@@ -335,9 +335,25 @@ class Reconciler:
     def _apply_provider(self, ws, provider, plan, state, generation, pending):
         scope = {"workspace_scope": {"workspace": ws["name"]}}
         pname = provider["metadata"]["name"]
+        reference = f"{ws['name']}/{pname}"
         existing = self._get("GetProvider", {**scope, "name": pname}, "provider")
-        if existing is None:
-            reply = self._mutate("CreateProvider", {**scope, "provider": provider}, plan, generation)
+        # Persist intent before the RPC: a committed create can outlive the
+        # connection (or this process). The pinned gateway durably replays the
+        # same caller/request ID/payload and checks the recorded object revision.
+        # A subsequent GetProvider, even with our labels, is not a create receipt.
+        creations = state.setdefault("pendingProxyProviders", {})
+        intent = creations.get(reference)
+        if intent is not None and (not isinstance(intent, dict)
+                or intent.get("request") != digest(provider)
+                or type(intent.get("generation")) is not int or intent["generation"] < 1):
+            raise ContractError("pending provider creation changed; explicit recovery is required")
+        if existing is None or intent is not None:
+            if provider.get("credentials") and intent is None:
+                intent = {"request": digest(provider), "generation": generation}
+                creations[reference] = intent
+                self.store.save(state)
+            reply = self._mutate("CreateProvider", {**scope, "provider": provider}, plan,
+                                 intent["generation"] if intent else generation)
             if provider.get("credentials") and reply:
                 created = reply.get("provider", {})
                 self._identity("provider", ws["name"], pname, created, plan, state)
@@ -345,11 +361,15 @@ class Reconciler:
                 version = meta.get("resource_version")
                 if not version:
                     raise ContractError("missing provider revision")
-                state.setdefault("proxyProviderRevisions", {})[f"{ws['name']}/{pname}"] = {
+                state.setdefault("proxyProviderRevisions", {})[reference] = {
                     "version": version, "request": digest(provider)}
+                creations.pop(reference, None)
                 self.store.save(state)
-            pending.append(f"provider/{ws['name']}/{pname}")
-            return False
+            elif existing is not None:
+                raise ContractError("provider creation receipt unavailable; explicit recovery is required")
+            if existing is None:
+                pending.append(f"provider/{reference}")
+                return False
         self._identity("provider", ws["name"], pname, existing, plan, state)
         expected_credentials = {}
         if provider.get("credentials"):

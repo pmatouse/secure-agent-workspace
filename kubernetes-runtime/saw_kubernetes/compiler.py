@@ -157,6 +157,7 @@ def _openclaw_startup(kind, info):
             .replace("@SAW_PROVIDER_KEY@", json.dumps(kind) if custom else kind)
             .replace("@SAW_BASE_URL@", json.dumps(endpoint) if custom else repr(endpoint))
             .replace("@SAW_TIMEOUT@", f"timeoutSeconds: {timeout}, " if timeout else "")
+            .replace("@SAW_API@", "anthropic-messages" if info["protocol"] == "anthropic" else "openai-completions")
             .replace("@SAW_KEY_ENV@", slot["env_vars"][0])
             .replace("@SAW_PROVIDER_ID@", kind))
 
@@ -166,10 +167,12 @@ def _compatible_inference(workspace, sandbox, config):
     provider = shared.select_inference_provider(
         workspace.providers, sandbox.providers,
         inference_ref=(sandbox.inference or {}).get("providerRef"))
-    if provider is None or provider.type not in {"openai", "nvidia", "custom-inference"}:
+    if provider is None or provider.type not in {"openai", "anthropic", "nvidia", "custom-inference"}:
         raise ContractError("agent requires a supported bound inference provider")
     custom = provider.type == "custom-inference"
-    endpoint = config.get("customInferenceURL") if custom else shared.NATIVE_BASE_URLS[provider.type]
+    protocol = "openai" if custom else shared.PROVIDER_PROTOCOLS[provider.type]
+    endpoint = (config.get("customInferenceURL") if custom else
+                shared.NATIVE_BASE_URLS.get(provider.type) or shared.PROTOCOL_NATIVE_BASE_URLS[protocol])
     if custom:
         try:
             governed.custom_host(endpoint)
@@ -197,7 +200,7 @@ def _compatible_inference(workspace, sandbox, config):
     except shared.InstallerError as exc:
         raise ContractError("invalid sandbox inference inputs") from exc
     if (provider.name not in sandbox.providers or info["baseUrl"] not in ("", endpoint)
-            or info["protocol"] != "openai" or info.get("models")
+            or info["protocol"] != protocol or info.get("models")
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,180}", info["model"])):
         raise ContractError("inference inputs differ from the approved endpoint or supported protocol")
     info["baseUrl"] = endpoint
@@ -353,7 +356,7 @@ if (!Number.isSafeInteger(selection.generation) || selection.generation < 1 ||
   throw new Error('invalid published model');
 const model = selection.model;
 """)
-                    if custom:
+                    if kind in {"custom-inference", "nvidia"}:
                         command[2] = command[2].replace("[A-Za-z0-9._-]{0,99}", r"[A-Za-z0-9._\/-]{0,99}")
                     script = script.replace("for (const path of treeFiles(root).sort()) {",
                         "for (const path of treeFiles(root).sort()) {\n  if (path === root + '/model.json') continue;")

@@ -6,13 +6,46 @@ from saw_kubernetes.reconcile import Reconciler
 from .test_runtime import FakeGateway, mutate, sandbox, source
 
 
-def agent(source):
-    source[1]["proxyBindings"] = [{"type":"openai", "secret":"inference", "key":"api_key", "refresh":False}]
+def agent(source, kind="openai", model="gpt-4.1-mini-2025-04-14"):
+    from saw_kubernetes.core import shared
+    protocol = "openai" if kind == "custom-inference" else shared.PROVIDER_PROTOCOLS[kind]
+    endpoint = ("https://models.example.test/v1" if kind == "custom-inference" else
+                shared.NATIVE_BASE_URLS.get(kind) or shared.PROTOCOL_NATIVE_BASE_URLS[protocol])
+    if kind == "custom-inference":
+        source[1]["customInferenceURL"] = endpoint
+    source[1]["proxyBindings"] = [{"type":kind, "secret":"inference", "key":"api_key", "refresh":False}]
     mutate(source, "providers.yaml", lambda d: d["spec"]["providers"].append(
-        {"name": "openai", "type": "openai", "credentialSecret": "inference"}))
-    sandbox(source, lambda s: s.update(type="openclaw", providers=["openai"], inference={
-        "providerRef": "openai", "protocol": "openai", "baseUrl": "https://api.openai.com/v1",
-        "model": "gpt-4.1-mini-2025-04-14"}))
+        {"name": kind, "type": kind, "credentialSecret": "inference"}))
+    sandbox(source, lambda s: s.update(type="openclaw", providers=[kind], inference={
+        "providerRef": kind, "protocol": protocol, "baseUrl": endpoint, "model": model}))
+
+
+@pytest.mark.parametrize("kind,model", [
+    ("openai", "gpt-4.1-mini"), ("anthropic", "claude-sonnet-4-6"),
+    ("nvidia", "nvidia/nemotron-3.5-lightning-30b-a3b"), ("custom-inference", "org/model"),
+])
+def test_mutable_model_compiles_and_startup_accepts_published_selection(source, kind, model):
+    import base64
+    import shutil
+    import subprocess
+    agent(source, kind, model)
+    binding = source[1]["bindings"]["default/toolbox"]
+    key = base64.b64encode(bytes.fromhex("302a300506032b6570032100") + bytes(range(32))).decode()
+    binding["toolGate"] = {"ownerLogin":"alice", "receiptKey":key, "modelSelector":True,
+        "trusted":{"claimName":"saw-gate-test","uid":"gate-uid","readOnly":True},
+        "audit":{"claimName":"saw-audit-test","uid":"audit-uid","readOnly":False}}
+    command = compile_profile(*source)["workspaces"][0]["sandboxes"][0]["spec"]["command"]
+    assert command[-1] == "model-from-gate"
+    # Execute the actual startup selection, including the provider's model syntax.
+    selection = command[2][command[2].index("const selection"):command[2].index("const config")]
+    if not shutil.which("node"):
+        pytest.skip("node is required to execute the compiled startup validation")
+    for value, valid in [(model, True), ("$(id)", False), ("../escape", False)]:
+        js = "const fs={readFileSync:()=>" + json.dumps(json.dumps({"generation":1,"model":value})) + "};\n"
+        result = subprocess.run(["node", "-e", js + selection + "console.log(model);"], capture_output=True, text=True)
+        assert (result.returncode == 0) == valid, result.stderr
+        if valid:
+            assert result.stdout.strip() == model
 
 
 def test_openclaw_pinned_proxy_contract(source):
