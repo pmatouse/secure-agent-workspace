@@ -56,14 +56,22 @@ These checks do not replace RHDH lifecycle or final clean-install qualification.
 Current qualification also exposed failures that remain distinct from the
 initial inference pass:
 
-- A model update reached Ready and preserved storage, but a stock notebook
-  OpenClaw release migrated the requested model to another model. Direct API
-  inference used the requested model; the chat transcript did not. Model-update
-  parity requires both paths to agree with the approved input.
+- An earlier model update reached Ready and preserved storage, but stock
+  OpenClaw restored/migrated the notebook's model configuration. The integration
+  now publishes managed configuration through the native batch command and uses
+  an explicit managed provider ID. Fresh standalone and RHDH sandboxes passed
+  actual API inference and owner chat with matching requested/response models;
+  both RHDH browser UIs also passed. Model-update and restart parity still require
+  the same checks after lifecycle transitions.
 - The stock CLI's browser-forward process briefly closes its listener when
   its OIDC token expires. New-request recovery and established WebSocket
   reconnection must be tested separately; a successful readiness check does
   not establish uninterrupted chat.
+- Initial deployment of the shared transport exposed a Python import collision
+  with the adjacent OIDC helper. Isolated mode fixes that startup failure, with
+  a subprocess regression reproducing the old failure. GitOps recovery and
+  subsequent inference/chat passed; a clean replay of the final revision remains
+  required and must be recorded separately from recovery.
 - An identity-service upgrade rejected the existing service-account admin API
   tokens and blocked RHDH enrollment. The shared bootstrap now assigns the
   supported built-in Admin API scope; live reads recovered for all three
