@@ -122,11 +122,15 @@ clusterGroup:
     openshell-rhdh:
       name: openshell-rhdh
       namespace: rhdh
+      # Multi-source: keep site values here; pin only the portal chart code.
+      repoURL: https://github.com/pmatouse/secure-agent-workspace.git
+      chartVersion: c7eab78419e94a96a3e23d64e51d776a028ce841
       path: charts/openshell-rhdh
       extraValueFiles:
         - /overrides/saw-users.yaml
         - /overrides/container-owner.yaml
         - /overrides/data-science-owner.yaml
+        - /overrides/pr153-owner.yaml
     governance-policy:
       name: governance-policy
       namespace: openshell-agents
