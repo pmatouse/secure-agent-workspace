@@ -15,6 +15,10 @@ installationID: ""
 trustedNamespace: ""
 subject: ""
 host: ""
+# Explicit DNS, OIDC issuer and Kubernetes API Service/backend destinations and
+# ports. The membership Job needs API access for temporary public trust and Pod
+# identity checks; reuse the controller's approved bootstrap API egress rules.
+# These rules also apply to the browser relay, which has no Kubernetes API token.
 egress: []
 sdkImage: ""
 pythonImage: registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c

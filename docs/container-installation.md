@@ -81,7 +81,7 @@ field. Start from the component charts' values and schemas:
 | `stack.audit` | Pinned revision and [audit values](../charts/saw-audit-writer/values.yaml): history/exchange storage classes, image and owner identity. Targets derive from the BOM. |
 | `governanceNamespace`, `providerAllowHosts` | Shared governance location and permitted provider destinations. |
 | `automaticEnrollment` | `enabled`, pinned helper image/revision, build namespace, resource limits, approved profile digests and reviewed boundary reference. |
-| `automaticEnrollment.relay` | Pinned relay chart revision, issuer, Keycloak namespace/admin Secret **name**, and explicit egress. See [relay values](../charts/saw-workspace-relay/values.yaml). |
+| `automaticEnrollment.relay` | Pinned relay chart revision, issuer, Keycloak namespace/admin Secret **name**, and explicit DNS, OIDC and Kubernetes API egress. See [relay values](../charts/saw-workspace-relay/values.yaml). |
 | `profileImageOverrides`, `profileBoundaries` | Optional per-profile pinned image overrides and explicit provider/boundary approval. Changing the profile requires its own approval. |
 | `imagePull` | Optional namespace and ImageStream names for access to an OpenShift internal registry. |
 
@@ -90,6 +90,22 @@ Component `values` accept the composition placeholders `@OWNER@`, `@SUBJECT@`,
 The composition substitutes these as data; it does not evaluate user input as
 Helm templates. Do not author `targets`, `enrollment`, `providerPolicy` or relay
 subjects manually; the common projector and trusted bootstrap derive them.
+
+`automaticEnrollment.relay.egress` must permit the cluster's Kubernetes API
+Service/backends and their ports, using the same approved destinations as the
+controller's bootstrap egress, as well as DNS and the OIDC issuer. The relay
+membership Job reads Pod identities and updates the named public client-trust
+Secret before connecting to OpenShell. DNS/OIDC access alone cannot complete
+that Job. The browser relay has no Kubernetes token or trust-write RBAC. Changing
+the relay inputs creates a new input-hashed binding Job through GitOps.
+
+Public trust publication is asynchronous: the Kubernetes Secret volume must
+refresh, then the stock gateway must reload it. Initial TLS failures, including
+`BadSignature` while an older temporary CA is still mounted, can occur during
+this interval. Keep the configured bounded authenticated readiness wait; do not
+disable certificate verification. Confirm a subsequent successful operation and
+fresh controller progress. Persistent errors or an exhausted wait are failures,
+not evidence of a harmless delay.
 
 Static registration shape, to merge with the complete operator site values:
 
