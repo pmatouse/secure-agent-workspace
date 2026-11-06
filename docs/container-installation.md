@@ -135,6 +135,10 @@ This shows the input contract, not a runnable site with omitted fields. Generate
 unique registration/installation IDs and keep them stable for the installation.
 Never reuse an old registration to adopt retained storage or credentials.
 
+For an internal-registry runtime image, `automaticEnrollment.buildNamespace`
+identifies its build namespace. The enrollment and preparation pull grants are
+restricted to the image stream named by the configured digest-pinned image.
+
 The selected BOM determines provider Secret names and fields. For example, with
 the default NVIDIA-backed `data-science` profile, store its key in
 `secret/data/hub/saw-alice/<registration>/inference` as `api_key`. Configure any
