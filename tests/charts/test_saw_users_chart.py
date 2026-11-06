@@ -69,6 +69,24 @@ def helm_values(application):
     return yaml.safe_load(application["spec"]["source"]["helm"]["values"])
 
 
+def test_static_owner_revision_pin_selects_all_children_and_preserves_sibling(tmp_path):
+    docs = docs_from(render_file(tmp_path, [ALICE, {"name": "bob"}],
+                                {"workspaceRevisions": {"alice": "a"*40}}))
+    for application in by_kind(docs, "Application"):
+        owner = application["metadata"]["labels"]["openshell.pattern/owner"]
+        source = application["spec"]["source"]
+        assert source["targetRevision"] == ("a"*40 if owner == "alice" else "main")
+        assert source["repoURL"] == "https://example.com/secure-agent-workspace.git"
+
+
+@pytest.mark.parametrize("pins", [[], {"alice": "branch"}, {"../alice": "a"*40},
+                                {"alice": {"repoURL": "https://other.example/repo"}}])
+def test_static_revision_pins_fail_before_rendering_partial_workloads(tmp_path, pins):
+    result = render_file(tmp_path, [ALICE], {"workspaceRevisions": pins})
+    assert result.returncode != 0
+    assert "workspaceRevisions requires" in result.stderr
+
+
 @pytest.mark.ci_external
 @pytest.mark.parametrize("override", [None, "quay.io/example/proxy@sha256:" + "1" * 64])
 def test_user_inherits_published_proxy_image_or_default_override(tmp_path, override):

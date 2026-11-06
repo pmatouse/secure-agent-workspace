@@ -81,3 +81,29 @@ def test_foundation_requires_no_synthetic_approval_hash():
     site["automaticEnrollment"]["enabled"] = True
     with pytest.raises(workspace.WorkspaceError):
         workspace.project_workspace(owner, {}, site, CATALOG, lambda _: {})
+
+
+@pytest.mark.parametrize("mode", ["vm", "container"])
+def test_operator_revision_pin_is_shared_and_does_not_change_repository(mode):
+    owner, site = inputs()
+    owner["values"]["deployment"]["mode"] = mode
+    # Registration fields are not an authority to select source code.
+    owner["workspaceRevisions"] = {"alice": "c"*40}
+    owner["values"]["global"] = {"targetRevision": "tenant-branch", "repoURL": "https://foreign.example/repo"}
+    defaults = {"global": {"repoURL": "https://approved.example/repo", "targetRevision": "site-main"},
+                "workspaceRevisions": {"alice": "a"*40, "bob": "b"*40}}
+    before = copy.deepcopy((owner, defaults, site))
+    result = workspace.project_workspace(owner, defaults, site, CATALOG)
+    assert result["global"] == {"repoURL": defaults["global"]["repoURL"], "targetRevision": "a"*40}
+    assert "workspaceRevisions" not in result
+    assert (owner, defaults, site) == before
+    del defaults["workspaceRevisions"]["alice"]
+    assert workspace.project_workspace(owner, defaults, site, CATALOG)["global"] == defaults["global"]
+
+
+@pytest.mark.parametrize("pins", [None, [], {"alice": "main"}, {"alice": "a"*39},
+    {"alice": "A"*40}, {"alice": {"repoURL": "https://foreign.example/repo", "revision": "a"*40}},
+    {"../alice": "a"*40}, {"alice": 123}])
+def test_revision_pin_requires_operator_mapping_of_owner_to_full_commit(pins):
+    with pytest.raises(workspace.WorkspaceError, match="workspaceRevisions"):
+        workspace.project_workspace({"name": "alice"}, {"workspaceRevisions": pins}, {}, CATALOG)

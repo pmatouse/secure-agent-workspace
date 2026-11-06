@@ -67,7 +67,7 @@ spec:
         namespace: {{ .Values.portal.namespace }}
       source:
         repoURL: {{ .Values.global.repoURL | quote }}
-        targetRevision: {{ .Values.global.targetRevision | quote }}
+        targetRevision: '{{ "{{" }} .revision {{ "}}" }}'
         path: charts/saw-users
         helm:
           releaseName: 'portal-ws-{{ "{{" }} .name {{ "}}" }}'

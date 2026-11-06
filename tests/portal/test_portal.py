@@ -236,6 +236,19 @@ def test_generator_params_are_one_user_saw_users_values(portal):
         {**ws, "values": {"deployment": {"mode": "vm"}}}]}
 
 
+def test_operator_pin_selects_application_and_child_source_without_changing_other_owners(portal):
+    defaults = {"global": {"repoURL": "https://example.com/repo.git", "targetRevision": "legacy"},
+                "workspaceRevisions": {"alice": "a"*40}}
+    users = [{"name": name, "profiles": ["data-science"], "workspaceRevisions": {name: "b"*40}}
+             for name in ("alice", "bob")]
+    params = portal.generator_params(users, defaults)
+    assert [p["revision"] for p in params] == ["a"*40, "legacy"]
+    for p in params:
+        values = json.loads(p["values"])
+        assert values["global"] == {"repoURL": defaults["global"]["repoURL"], "targetRevision": p["revision"]}
+        assert "workspaceRevisions" not in values
+
+
 def entity_docs(text):
     return [json.loads(part) for part in text.split("\n---\n")]
 

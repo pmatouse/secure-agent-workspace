@@ -46,6 +46,12 @@ Additional requirements:
 - `oc`, Helm 3 and `uv` on the installation machine. Provider credentials stay
   in Vault; local files and Git contain references and public configuration.
 
+If the cluster uses a private CA, configure client trust with a combined bundle
+containing the normal system roots **and** the independently verified cluster CA.
+For example, set `SSL_CERT_FILE` to that combined file for Python/`uv` commands.
+A cluster-only bundle removes public trust and can break dependency downloads;
+do not disable certificate verification to work around this.
+
 For a platform that does not already own Agent Sandbox, its manual installation
 is:
 
@@ -296,6 +302,31 @@ The Delete form and state actions use the backend recorded in the registration.
 Enabling the selector without a matching approved site does not permit creation.
 
 ## Updates and current limitations
+
+Code rollout can be pinned per owner without changing their registration. The
+operator sets `workspaceRevisions` in `saw-users` values (static/Make), or the same
+map under `sawUsers.workspaceRevisions` in the RHDH chart:
+
+```yaml
+sawUsers: # RHDH values; omit this outer key for static/Make values
+  workspaceRevisions:
+    existing-owner: <full-existing-commit-sha>
+    candidate-owner: <full-reviewed-candidate-sha>
+```
+
+Each pin must be a full lowercase Git commit SHA in the configured
+`global.repoURL`. Unlisted owners continue using `global.targetRevision`. The
+shared projector selects the revision for both the owner Application and its
+children, for VM and container registrations. Direct static VM Applications
+honor the same map. Forms and registration records cannot set these pins or
+select a different repository. A recreated registration uses the operator's
+current pin for that owner.
+
+Pin existing owners before upgrading shared portal code when their child charts
+must stay unchanged. The portal's chart revision and its generated workload
+revisions are separate: retain the site's `global.targetRevision` fallback and
+use the map to move only reviewed owners. A source pin does not approve a new
+BOM, image, boundary or storage identity; those retain their normal checks.
 
 Update public `modelInputs`, increment `intentGeneration` and
 `restartGeneration`, then reapply through the same entry point. Keep

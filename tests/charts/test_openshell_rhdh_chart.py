@@ -149,6 +149,7 @@ def test_the_applicationset_renders_saw_users_per_workspace(docs):
     assert aset["spec"]["syncPolicy"] == {"applicationsSync": "create-update",
                                           "preserveResourcesOnDeletion": True}
     assert template["spec"]["source"]["path"] == "charts/saw-users"
+    assert template["spec"]["source"]["targetRevision"] == "{{ .revision }}"
     assert template["spec"]["source"]["helm"]["values"] == "{{ .values }}"
     plugin = one(docs, "ConfigMap", "saw-portal-generator")
     token = one(docs, "Secret", "saw-portal-generator")
