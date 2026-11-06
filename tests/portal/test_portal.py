@@ -1481,4 +1481,3 @@ def test_container_preflight_explains_profile_and_cleanup_failures(portal, world
     captured = capsys.readouterr()
     assert expected in captured.out + captured.err
     assert not fake.vault and REGISTRY not in fake.objects
-

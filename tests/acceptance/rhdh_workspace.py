@@ -22,6 +22,21 @@ class LoginForm(HTMLParser):
             self.action = fields.get("action")
 
 
+def offered_profiles(step, mode):
+    """Read both legacy forms and deployment-specific profile choices."""
+    modes = step.get("properties", {}).get("deploymentMode", {}).get("enum", ["vm"])
+    if mode not in modes:
+        return []
+    branches = step.get("dependencies", {}).get("deploymentMode", {}).get("oneOf")
+    if branches is None:
+        return step.get("properties", {}).get("profile", {}).get("enum", [])
+    for branch in branches:
+        properties = branch.get("properties", {})
+        if mode in properties.get("deploymentMode", {}).get("enum", []):
+            return properties.get("profile", {}).get("enum", [])
+    return []
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("action", choices=("inspect", "create", "update", "delete", "status", "start", "stop", "workspace-status", "logs"))
@@ -102,14 +117,16 @@ def main():
     template = ("delete" if a.action == "delete" else "create") + "-saw-workspace"
     entity = api("/api/catalog/entities/by-name/template/default/"+template)
     if a.action == "inspect":
-        fields = entity["spec"]["parameters"][-1]["properties"]
-        print(json.dumps({"user":a.user,"template":template,"deploymentModes":fields.get("deploymentMode", {"enum":["vm"]})["enum"],"profiles":fields["profile"]["enum"]})); return
+        step = entity["spec"]["parameters"][-1]
+        modes = step["properties"].get("deploymentMode", {"enum":["vm"]})["enum"]
+        print(json.dumps({"user":a.user,"template":template,"deploymentModes":modes,
+                          "profiles":offered_profiles(step,"container"),
+                          "profilesByDeployment":{mode:offered_profiles(step,mode) for mode in modes}})); return
     data = {"templateRef":"template:default/"+template, "values":{},"secrets":{}}
     if a.action == "delete":
         data["values"].update(workspace="component:default/saw-"+a.user, confirm=True)
     else:
-        props = entity["spec"]["parameters"][-1]["properties"]
-        if "container" not in props.get("deploymentMode", {}).get("enum", []) or a.profile not in props["profile"]["enum"]:
+        if a.profile not in offered_profiles(entity["spec"]["parameters"][-1], "container"):
             raise RuntimeError("installed owner template does not offer the requested container profile")
         # The browser places a redacted value in form data to satisfy JSON
         # Schema. Only the separate secrets map carries the credential.

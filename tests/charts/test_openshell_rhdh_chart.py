@@ -765,4 +765,3 @@ def test_container_choice_requires_known_reviewed_profile(automatic, expected):
     else:
         assert "container" not in fields
         assert "container" not in step["properties"]["deploymentMode"]["enum"]
-
