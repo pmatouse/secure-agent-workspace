@@ -1,7 +1,7 @@
 {{- range .Values.portal.linkedWorkspaces }}
 {{- if .runtime }}
 {{- $r := .runtime }}
-{{- if not (has $r.mode (list "container" "kata")) }}{{ fail "linked runtime must be container or kata" }}{{ end }}
+{{- if ne $r.mode "container" }}{{ fail "linked runtime must be container" }}{{ end }}
 {{- range $key := list "namespace" "intent" "status" }}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$" (required $key (index $r $key))) }}{{ fail "invalid linked runtime reference" }}{{ end }}
 {{- end }}

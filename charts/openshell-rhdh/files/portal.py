@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Self-service workspaces for the Secure Agent Workspace pattern.
 
-Standard library only; one file:
+Standard library only; packaged with the shared workspace projector:
 
   portal.py create REQUEST        pipeline saw-workspace-create, task register
   portal.py wait-<stage> USER [S] its later tasks: wait for apps, vm, running,
@@ -80,6 +80,48 @@ RESERVED_SUFFIXES = ("-bom", "-secrets")
 
 class PortalError(Exception):
     """A request that must be refused; the message is shown in the PipelineRun."""
+
+
+# Packaged from charts/saw-users/files/workspace.py by make catalog.
+import importlib.util as _importlib
+from pathlib import Path as _Path
+_workspace_spec = _importlib.spec_from_file_location("saw_workspace", _Path(__file__).with_name("workspace.py"))
+_workspace = _importlib.module_from_spec(_workspace_spec)
+_workspace_spec.loader.exec_module(_workspace)
+
+
+def _project(function, *args, **kwargs):
+    try:
+        return function(*args, **kwargs)
+    except _workspace.WorkspaceError as exc:
+        raise PortalError(str(exc)) from exc
+
+
+def enabled_catalog_sandboxes(profile):
+    return _workspace.enabled_catalog_sandboxes(profile)
+
+
+def sandbox_targets(user, registration, profile, *, model_lifecycle=False):
+    return _workspace.sandbox_targets(user, registration, profile, model_lifecycle=model_lifecycle)
+
+
+def public_model_inputs(profile, secrets):
+    return _project(_workspace.public_model_inputs, profile, secrets)
+
+
+def approved_endpoint(profile, secrets, boundary):
+    return _project(_workspace.approved_endpoint, profile, secrets, boundary)
+
+
+def enrolled_site(site, workspace, read):
+    def observed(path):
+        try:
+            return read(path)
+        except HttpError as exc:
+            if exc.code == 403:  # first sync, before the named reader grant exists
+                return {}
+            raise
+    return _project(_workspace.enrolled_site, site, workspace, observed if read else None)
 
 
 class NotARequest(PortalError):
@@ -310,13 +352,10 @@ def check_user(user):
 
 
 # Request policy is operator-owned, never taken from a form or registry entry.
-DEPLOYMENT_MODES = ("vm", "container", "kata")
+DEPLOYMENT_MODES = ("vm", "container")
 # A renderable foundation is not a qualified provisioning/readiness adapter.
 # Expand only when runtime lifecycle, BOM and readiness are implemented.
 PROVISIONABLE_MODES = ("vm",)
-
-
-AUDITED_PROFILE = "audited-openclaw"
 
 
 def container_site(user):
@@ -329,77 +368,9 @@ def container_site(user):
     return site
 
 
-def container_url(user, domain):
-    return f"https://{user}-agent-audited-ui.apps.{domain}"
-
-
 def container_profiles(site):
     automatic = site.get("automaticEnrollment", {})
-    return automatic.get("approvedProfiles", {AUDITED_PROFILE: automatic.get("profileSHA256", "")})
-
-
-def enabled_catalog_sandboxes(profile):
-    for workspace in profile.get("workspaces", []):
-        if workspace.get("enabled"):
-            for sandbox in workspace.get("sandboxes", []):
-                if sandbox.get("enabled"):
-                    yield workspace["name"], sandbox
-
-
-def sandbox_targets(user, registration, profile, *, model_lifecycle=False):
-    """Expand the shared BOM catalog into isolated Kubernetes attachments."""
-    enabled = list(enabled_catalog_sandboxes(profile))
-    targets = {}
-    for workspace, sb in enabled:
-        key = workspace + "/" + sb["name"]
-        suffix = hashlib.sha256((registration+"/"+key).encode()).hexdigest()[:16]
-        single = len(enabled)==1
-        targets[key] = dict(workspace=workspace, sandbox=sb["name"], ui=bool(sb.get("uiRoute")),
-                            base=user if single else user+"-"+suffix[:8],
-                            relayID=registration if single else suffix,
-                            subjectMap="saw-portal-relay-subject" if single else "saw-portal-relay-"+suffix)
-        if model_lifecycle and sb.get("modelInput"):
-            targets[key]["modelInput"] = sb["modelInput"]
-    return targets
-
-
-def public_model_inputs(profile, secrets):
-    """Only catalog-declared, noncredential model selectors can enter public intent."""
-    values = {}
-    confidential = {secrets.get(name, {}).get(field["key"])
-                    for name, entry in profile.get("secrets", {}).items()
-                    for field in entry["fields"] if field["kind"] == "secret"}
-    custom_models = {sb.get("modelInput") for _, sb in enabled_catalog_sandboxes(profile) if sb.get("endpointInput")}
-    for key in {sb["modelInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("modelInput")}:
-        secret, field = key.split(".",1)
-        allowed = any(f["key"] == field and f["kind"] == "text" for f in profile["secrets"][secret]["fields"])
-        value = secrets.get(secret,{}).get(field)
-        spelling = r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}" if key in custom_models else r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}"
-        if not allowed or value and (value in confidential or not re.fullmatch(spelling, value)):
-            raise PortalError("invalid public model selector")
-        if value:
-            values[key]=value
-    return values
-
-
-def approved_endpoint(profile, secrets, boundary):
-    refs = {sb["endpointInput"] for _, sb in enabled_catalog_sandboxes(profile) if sb.get("endpointInput")}
-    if not refs:
-        return None
-    endpoint = boundary.get("inferenceBaseURL", "")
-    if not isinstance(endpoint, str) or not re.fullmatch(
-            r"https://[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::443)?(?:/[A-Za-z0-9_-]+)*/v1", endpoint):
-        raise PortalError("site has no approved custom inference endpoint")
-    if boundary.get("allowHosts") != [urllib.parse.urlsplit(endpoint).hostname]:
-        raise PortalError("custom inference requires a dedicated broker host")
-    for ref in refs:
-        secret, key = ref.split(".", 1)
-        fields = profile["secrets"][secret]["fields"]
-        if not any(f["key"] == key and f["kind"] == "url" for f in fields):
-            raise PortalError("endpoint input must be public URL metadata")
-        if secrets.get(secret, {}).get(key, "").rstrip("/") != endpoint:
-            raise PortalError("endpoint differs from the site-approved custom inference URL")
-    return endpoint
+    return automatic.get("approvedProfiles", {})
 
 
 def registered_links(entry, catalog, domain):
@@ -411,88 +382,17 @@ def registered_links(entry, catalog, domain):
 
 
 def container_status(k8s, user, entry, argo_ns, domain, ping, catalog=None):
-    # Reuse the VM pipeline's wire stage IDs so old RHDH tasks can finish.
-    # Only observations and their user-facing names differ.
-    ns = f"saw-{user}"
     reg = entry_generation(user, entry)
-    rev = entry.get("intentGeneration")
-    gen = isinstance(rev, int) and not isinstance(rev, bool) and rev > 0
-    app = k8s.call("GET", f"/apis/argoproj.io/v1alpha1/namespaces/{argo_ns}/applications/saw-{user}", ok404=True) or {}
-    meta = app.get("metadata", {})
-    app_ok = meta.get("labels", {}).get("openshell.pattern/owner") == user and not meta.get("deletionTimestamp")
-    app_status = app.get("status", {})
-    def read(name, field):
+    normalized = {**entry, "name": user, "registration": reg,
+                  "installationID": installation_id(user, reg) if reg else ""}
+    def read(path):
         try:
-            cm = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/{name}", ok404=True) or {}
+            return k8s.call("GET", path, ok404=True)
         except HttpError as exc:
-            if exc.code == 403:  # Argo has not yet installed the named observer Role.
+            if exc.code == 403:
                 return {}
             raise
-        meta = cm.get("metadata", {})
-        labels = meta.get("labels", {})
-        if (meta.get("deletionTimestamp") or not reg
-                or labels.get("saw.redhat.com/runtime-owner") != installation_id(user, reg)
-                or field == "status.json" and labels.get("saw.redhat.com/managed-by") != "kubernetes-runtime-controller"):
-            return {}
-        try:
-            value = json.loads(cm.get("data", {}).get(field, "{}"))
-            return value if isinstance(value, dict) else {}
-        except (ValueError, TypeError):
-            return {}
-    intent = read("saw-runtime-intent", "intent.json") if app_ok else {}
-    site = container_site(user)
-    bound = bool(reg and site and gen and intent.get("generation") == rev
-                 and intent.get("bindings", {}).get("ownerSubject") == site["subject"]
-                 and intent.get("bindings", {}).get("namespace") == ns
-                 and intent.get("bindings", {}).get("mode") == "container"
-                 and intent.get("bindings", {}).get("ownerID") == installation_id(user, reg))
-    desired = entry.get("desiredState", "Running")
-    bound = bound and intent.get("desiredState") == desired
-    st = read("saw-runtime-status", "status.json") if bound else {}
-    profile = (k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/saw-bom-profiles", ok404=True) or {}) if bound else {}
-    files = profile.get("data", {})
-    def digest(value):
-        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    ref = intent.get("profileRef", {})
-    current = (bound and not profile.get("metadata", {}).get("deletionTimestamp")
-               and ref.get("name") == "saw-bom-profiles" and bool(ref.get("uid"))
-               and ref["uid"] == profile.get("metadata", {}).get("uid") and ref.get("sha256") == digest(files)
-               and type(st.get("observedGeneration")) is int and st["observedGeneration"] == rev
-               and st.get("inputRevision") == digest({"intent": intent, "files": files}))
-    running = current and st.get("phase") == "GenericReady" and intent.get("desiredState") == "Running"
-    links = registered_links(entry,catalog,domain) if catalog else [("Audited OpenClaw",container_url(user,domain))]
-    profiles = entry.get("profiles", [])
-    declared = [sb for p in profiles for _, sb in enabled_catalog_sandboxes(catalog[p])] if (
-        catalog and all(p in catalog for p in profiles)) else []
-    headless = bool(declared) and all(sb.get("uiRoute") is False for sb in declared)
-    ready = bool(running and (headless or (links and domain)) and app_status.get("sync", {}).get("status") == "Synced"
-                 and app_status.get("health", {}).get("status") == "Healthy" and all(ping(url) for _,url in links))
-    observations = [(True, "Registration recorded"), (app_ok, "Argo application for this owner"),
-                    (bound, "Intent for this registration and update"),
-                    (running, "Profile sandboxes running"), (ready, "Workspace ready" if headless else "Owner chat routes available")]
-    stopped = bool(current and desired == "Stopped" and st.get("phase") == "Stopped")
-    if desired == "Stopped":
-        observations[-2:] = [(stopped, "OpenShell sandboxes stopped"), (stopped, "Storage retained")]
-    phase = "none"
-    steps = []
-    waiting = False
-    for (stage, _), (done, title) in zip(STAGES, observations):
-        state = "waiting" if waiting else "done" if done else "active"
-        if state == "done":
-            phase = stage
-        else:
-            waiting = True
-        steps.append(dict(id=stage, title=title, detail=title, state=state))
-    failed = bool(current and st.get("phase") == "Blocked" or app_ok and app_status.get("operationState", {}).get("phase") in ("Error", "Failed"))
-    message = "Container reconciliation failed" if failed else next((s["title"] for s in steps if s["state"] == "active"), "Workspace ready")
-    if stopped and not failed:
-        message = "Workspace stopped"
-        phase = "stopped"
-    return dict(user=user, deploymentMode="container", phase="failed" if failed else phase, title=message,
-                registration=reg, generation=rev, observedGeneration=st.get("observedGeneration"),
-                desiredState=desired, modelInputs=entry.get("modelInputs", {}),
-                message=message, text=message, ready=ready and not failed, failed=failed, steps=steps,
-                links=[dict(title=title,url=url) for title,url in links] if ready and not failed else [])
+    return _workspace.container_status(read, normalized, container_site(user), argo_ns, domain, ping, catalog)
 
 
 def installation_id(user, registration):
@@ -510,15 +410,13 @@ def deployment_modes():
     if (not isinstance(modes, list) or not modes or "vm" not in modes
             or any(not isinstance(m, str) or m not in DEPLOYMENT_MODES for m in modes)
             or len(set(modes)) != len(modes)):
-        raise PortalError("SAW_DEPLOYMENT_MODES must contain vm and unique supported modes: vm, container, kata")
+        raise PortalError("SAW_DEPLOYMENT_MODES must contain vm and unique supported modes: vm, container")
     return tuple(modes)
 
 
 def validate_deployment_mode(mode):
-    if mode == "confidential":
-        raise PortalError("confidential workspace deployment is reserved and is not implemented")
     if not isinstance(mode, str) or mode not in DEPLOYMENT_MODES:
-        raise PortalError("deploymentMode must be one of vm, container, kata")
+        raise PortalError("deploymentMode must be one of vm, container")
     return mode
 
 
@@ -772,13 +670,7 @@ def ui_links(user, profiles, catalog, domain):
 
 
 def sandbox_ui_links(user, profiles, catalog, domain):
-    out = []
-    for profile in profiles:
-        for workspace, sb in enabled_catalog_sandboxes(catalog.get(profile, {})):
-            if sb.get("uiRoute"):
-                out.append((f"{sb['name']} UI ({workspace})",
-                            f"https://{user}-{workspace}-{sb['name']}-ui.apps.{domain}"))
-    return out
+    return _workspace.sandbox_ui_links(user, profiles, catalog, domain)
 
 
 # Groups for RHDH RBAC, so a user sees only the action that applies to them:
@@ -1075,39 +967,14 @@ def ping_url(url, timeout=3):
 
 
 def owner_route_available(url, timeout=3):
-    """Require an anonymous challenge AND a registered callback at the trusted issuer."""
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *args):
             return None
-    client = urllib.request.build_opener(NoRedirect())
-    origin = url.rstrip("/")
     issuer = os.environ.get("KEYCLOAK_URL", "").rstrip("/")
-    auth = issuer + "/realms/" + os.environ.get("KEYCLOAK_REALM", "openshell") + "/protocol/openid-connect/auth"
-    if not issuer.startswith("https://") or not origin.startswith("https://"):
+    if not issuer:
         return False
-    location = origin
-    for hop in range(3):
-        try:
-            with client.open(location, timeout=timeout) as res:
-                return (location.split("?")[0] == auth and res.status == 200
-                        and b'id="kc-form-login"' in res.read(256 * 1024))
-        except urllib.error.HTTPError as exc:
-            with exc:
-                target = urllib.parse.urljoin(location, exc.headers.get("Location", ""))
-                if exc.code not in (302, 303, 307):
-                    return False
-            parts = urllib.parse.urlsplit(target)
-            if hop == 0 and target.split("?")[0] == origin + "/oauth2/start":
-                location = target
-                continue
-            params = urllib.parse.parse_qs(parts.query)
-            if (target.split("?")[0] != auth or params.get("client_id") != ["openshell-dashboard"]
-                    or params.get("redirect_uri") != [origin + "/oauth2/callback"]):
-                return False
-            location = target
-        except (OSError, ValueError):
-            return False
-    return False
+    issuer += "/realms/" + os.environ.get("KEYCLOAK_REALM", "openshell")
+    return _workspace.owner_route_available(url, issuer, urllib.request.build_opener(NoRedirect()), timeout)
 
 
 def app_summary(app):
@@ -1471,8 +1338,6 @@ def handle(action, request_name):
                                       "the site administrator must enable portal.pruneOnRemove")
             elif mode not in PROVISIONABLE_MODES:
                 raise PortalError(f"{mode} workspace provisioning is not available in this release")
-            if mode != "container" and data.get("profile") == AUDITED_PROFILE:
-                raise PortalError("audited-openclaw requires container deployment")
             profile, secrets = parse_request(data, catalog)
             if mode == "container":
                 if cm and read_entry(cm)["profiles"] != [profile]:
@@ -1671,91 +1536,33 @@ def cleanup(max_age=REQUEST_MAX_AGE):
 
 # -- ApplicationSet plugin generator --------------------------------------------
 
-def enrolled_site(site, ws, read):
-    """Only the trusted bootstrap publishes bindings; images, code and endpoints always come from Git."""
-    a = site.get("automaticEnrollment")
-    if not a or not read:
-        return site
-    reg, install = ws["registration"], ws["installationID"]
-    ns = "saw-ctl-" + reg
-    def publication(name):
-        try:
-            obj = read(f"/api/v1/namespaces/{ns}/configmaps/{name}")
-        except HttpError as exc:
-            if exc.code == 403:  # before the initial reader Role exists
-                return {}
-            raise
-        if not obj or not obj.get("data"):
-            return {}
-        meta=obj["metadata"]
-        if obj.get("immutable") is not True or meta.get("deletionTimestamp") or meta.get("labels",{}).get("saw.redhat.com/runtime-owner")!=install:
-            raise PortalError("invalid registration publication")
-        return obj["data"]
-    fresh = {k:v for k,v in site.items() if k!="enrollment"}
-    data=publication("saw-portal-enrollment")
-    if not data:
-        return fresh
-    bound=json.loads(data["binding.json"])
-    if set(bound)!={"registration","intent","approved","gatewayCA"} or bound["registration"]!=reg or set(bound["approved"])!=set(a["reference"]):
-        raise PortalError("invalid published enrollment")
-    intent=bound["intent"]
-    if intent["bindings"]["ownerID"]!=install or intent["bindings"]["namespace"]!="saw-"+ws["name"] or intent["bindings"]["ownerSubject"]!=ws["ownerSubject"] or intent["profileRef"]["sha256"]!=site.get("selectedDigest",a.get("profileSHA256")):
-        raise PortalError("published intent does not belong to this workspace")
-    subjects = {target["subjectMap"]:publication(target["subjectMap"]).get("subject", "")
-                for target in site.get("targets",{}).values() if target["ui"]}
-    fresh["subjects"] = subjects
-    sub=subjects.get("saw-portal-relay-subject","") if site.get("targets") else publication("saw-portal-relay-subject").get("subject","")
-    if sub and (not re.fullmatch(r"[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}",sub) or sub==ws["ownerSubject"]):
-        raise PortalError("invalid relay subject")
-    relay={**a["relay"],"gatewayCA":bound["gatewayCA"],"subject":sub,"workspaceID":""}
-    fresh["enrollment"]={**{k:a[k] for k in ("revision","image","buildNamespace")},"registration":reg,"intent":intent,"approved":bound["approved"],"relay":relay}
-    return fresh
-
 
 def generator_params(workspaces, defaults, read=None, catalog=None):
-    """One parameter set per workspace: `name`, and `values`, the saw-users
-    chart values for that user alone (JSON, which is YAML)."""
+    """Adapt authenticated registry entries to the common workspace projector."""
     out = []
-    for ws in workspaces:
-        site = {}
-        # Freeze legacy VM intent instead of inheriting a new backend default.
-        ws = {**ws, "values": {**ws.get("values", {}),
-                               "deployment": {"mode": entry_deployment_mode(ws)}}}
-        if entry_deployment_mode(ws) == "container" and container_site(ws["name"]):
-            site = container_site(ws["name"])
+    for entry in workspaces:
+        ws = {**entry, "values": {**entry.get("values", {}),
+                                  "deployment": {"mode": entry_deployment_mode(entry)}}}
+        site = container_site(ws["name"]) if entry_deployment_mode(ws) == "container" else {}
+        if site:
             if not ws.get("ownerSubject") or ws["ownerSubject"] != site["subject"]:
-                # Leave this entry pending; a temporarily unresolved subject
-                # must not stall other owners or give a replacement access.
                 continue
             reg = entry_generation(ws["name"], ws)
-            ws = {**ws, "registration": reg, "installationID": installation_id(ws["name"], reg)}
-        values = {**defaults, "users": [ws]}
-        if ws.get("registration") and entry_deployment_mode(ws)=="container" and site.get("automaticEnrollment"):
-            if catalog and "approvedProfiles" in site["automaticEnrollment"]:
-                selected,=ws["profiles"]
-                image_overrides=site.get("profileImageOverrides",{}).get(selected,{})
-                if image_overrides:
-                    # Use the existing saw-bom imageOverrides API. The owner
-                    # never supplies an image or its pull authorization.
-                    ws["imageOverrides"]=image_overrides
-                managed = ws.get("lifecycleVersion") == 1
-                site={**site,"targets":sandbox_targets(ws["name"],ws["registration"],catalog[selected], model_lifecycle=managed),
-                      "selectedDigest":container_profiles(site)[selected],"modelInputs":ws.get("modelInputs",{})}
-                boundary = site.get("profileBoundaries", {}).get(selected)
-                if boundary:
-                    site = {**site, "providerAllowHosts": boundary["allowHosts"],
-                            "automaticEnrollment": {**site["automaticEnrollment"], "reference": boundary["reference"]}}
-                if ws.get("customInferenceURL"):
-                    if not boundary or boundary.get("inferenceBaseURL") != ws["customInferenceURL"]:
-                        # Keep a site change for one owner from interrupting other registrations.
-                        continue
-                    site["customInferenceURL"] = ws["customInferenceURL"]
-                if managed:
-                    site.update(lifecycleVersion=1, modelInputs=ws["initialModelInputs"],
-                                requestedModels=ws.get("modelInputs", {}), desiredState=ws["desiredState"],
-                                restartGeneration=ws["restartGeneration"])
-            values["containerSites"]={ws["name"]:enrolled_site(site,ws,read)}
-        out.append({"name": ws["name"], "values": json.dumps(values, sort_keys=True)})
+            ws.update(registration=reg, installationID=installation_id(ws["name"], reg))
+        def observed(path):
+            try:
+                return read(path)
+            except HttpError as exc:
+                if exc.code == 403:  # named reader grant is not installed yet
+                    return {}
+                raise
+        try:
+            values = _workspace.project_workspace(ws, defaults, site, catalog or {},
+                                                  observed if read else None)
+        except _workspace.WorkspaceError as exc:
+            raise PortalError(str(exc)) from exc
+        out.append({"name": ws["name"], "revision": values.get("global", {}).get("targetRevision", ""),
+                    "values": json.dumps(values, sort_keys=True)})
     return out
 
 

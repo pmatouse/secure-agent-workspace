@@ -160,8 +160,8 @@ from the release is enough and keeps renders stable.
 {{- if not (kindIs "string" $mode) -}}
 {{- fail "portal.deploymentModes must contain only strings" -}}
 {{- end -}}
-{{- if not (has $mode (list "vm" "container" "kata")) -}}
-{{- fail "portal.deploymentModes supports vm, container, kata; confidential is not implemented" -}}
+{{- if not (has $mode (list "vm" "container")) -}}
+{{- fail "portal.deploymentModes supports vm and container" -}}
 {{- end -}}
 {{- if hasKey $seen $mode -}}{{- fail "portal.deploymentModes must not contain duplicates" -}}{{- end -}}
 {{- $_ := set $seen $mode true -}}
@@ -183,7 +183,7 @@ The server still verifies the authenticated owner's exact profile approval. */ -
 {{- range $site := $root.Values.portal.containerSites | default dict -}}
 {{- if and (kindIs "map" $site) (regexMatch "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$" (toString ($site.subject | default ""))) -}}
 {{- $automatic := $site.automaticEnrollment | default dict -}}
-{{- $profiles := dict "audited-openclaw" ($automatic.profileSHA256 | default "") -}}
+{{- $profiles := dict -}}
 {{- if hasKey $automatic "approvedProfiles" -}}{{- $profiles = $automatic.approvedProfiles -}}{{- end -}}
 {{- range $id, $digest := $profiles -}}
 {{- if regexMatch "^[0-9a-f]{64}$" (toString $digest) -}}{{- $_ := set $approved $id true -}}{{- end -}}
@@ -199,18 +199,7 @@ The server still verifies the authenticated owner's exact profile approval. */ -
 {{- end -}}
 {{- if not $containerIDs -}}{{- $modes = without $modes "container" -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enum" $modes -}}
-{{- /* Hide the pilot profile on VM-only installations. The backend also checks it. */ -}}
-{{- if or (not (has "container" $modes)) (not $root.Values.portal.containerSites) -}}
-{{- $ids := list -}}{{- $names := list -}}
-{{- range $i, $id := $step.properties.profile.enum -}}
-{{- if ne $id "audited-openclaw" -}}{{- $ids = append $ids $id -}}{{- $names = append $names (index $step.properties.profile.enumNames $i) -}}{{- end -}}
-{{- end -}}
-{{- $_ := set $step.properties.profile "enum" $ids -}}{{- $_ := set $step.properties.profile "enumNames" $names -}}
-{{- $cases := list -}}
-{{- range $case := $step.dependencies.profile.oneOf -}}{{- if ne $case.properties.profile.const "audited-openclaw" -}}{{- $cases = append $cases $case -}}{{- end -}}{{- end -}}
-{{- $_ := set $step.dependencies.profile "oneOf" $cases -}}
-{{- end -}}
-{{- $labels := dict "vm" "Virtual machine" "container" "Container" "kata" "Kata (not yet available)" -}}
+{{- $labels := dict "vm" "Virtual machine" "container" "Container" -}}
 {{- $names := list -}}
 {{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}
@@ -220,9 +209,7 @@ dependency and its credential fields shared by all deployment branches. */ -}}
 {{- $profileField := deepCopy $step.properties.profile -}}
 {{- $vmIDs := list -}}{{- $vmNames := list -}}
 {{- range $i, $id := $profileField.enum -}}
-{{- if ne $id "audited-openclaw" -}}
 {{- $vmIDs = append $vmIDs $id -}}{{- $vmNames = append $vmNames (index $profileField.enumNames $i) -}}
-{{- end -}}
 {{- end -}}
 {{- $branches := list -}}
 {{- range $mode := $modes -}}
