@@ -96,6 +96,10 @@ sandboxes. Do not substitute a direct request from the bastion for this check.
 Use `openshell sandbox exec` for this probe: administrative `oc exec` into the
 application container does not establish the OpenShell execution session or its
 provider placeholder environment, so it does not test the owner's inference path.
+Before a model-update test, run the same probe with the proposed model ID and
+credential binding. Visibility in the provider's model catalog does not establish
+that an inference request will succeed. Record a rejected model separately from
+controller convergence and storage persistence.
 
 Then exercise RHDH/OpenClaw:
 
