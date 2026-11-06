@@ -772,3 +772,13 @@ def test_container_choice_requires_known_reviewed_profile(automatic, expected):
     else:
         assert "container" not in fields
         assert "container" not in step["properties"]["deploymentMode"]["enum"]
+
+
+@pytest.mark.ci_external
+def test_rhdh_postsync_packages_shared_admin_scope_helper(docs):
+    cm = one(docs, "ConfigMap", "saw-rhdh-keycloak-client")
+    assert cm["data"]["saw_keycloak_admin.py"] == (CHART / "files/saw_keycloak_admin.py").read_text()
+    job = one(docs, "Job", "saw-rhdh-keycloak-client")
+    assert job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "PostSync"
+    assert any(v.get("configMap", {}).get("name") == cm["metadata"]["name"]
+               for v in job["spec"]["template"]["spec"]["volumes"])

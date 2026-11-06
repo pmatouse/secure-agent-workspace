@@ -485,6 +485,22 @@ A PostSync Job creates or updates the Keycloak client `rhdh` (confidential,
 redirect `https://<rhdh>/api/auth/oidc/handler/frame`) with the secret from
 Vault, also in a realm that existed before.
 
+Keycloak 26.6.8+ requires `kc-admin-api` scope and the realm Admin REST URL
+in administrative access-token audiences. The shared bootstrap helper assigns
+that built-in scope as a default to the `rhdh` catalog/portal client, VM owner
+resolver and redirect registrar. Their existing realm-management roles stay
+unchanged; browser relay clients keep only their OpenShell audience. Earlier
+Keycloak versions without the built-in scope are left unchanged. API failures
+stop bootstrap instead of bypassing audience verification.
+
+The RHDH PostSync Job performs this migration; changes to the shared helper
+also roll the resolver and registrar through their normal bootstrap init
+containers. No credentials, token-request changes or custom Keycloak image
+are required. When upgrading a previously installed Keycloak, include these
+bootstrap reconciliations in the platform rollout; a server-only upgrade does
+not rerun existing init containers. See the
+[Keycloak 26.6.8 migration requirement](https://github.com/keycloak/keycloak/blob/26.6.8/docs/documentation/upgrading/topics/changes/changes-26_6_8.adoc#admin-rest-api-now-enforces-an-audience-check).
+
 RHDH is at `https://backstage-developer-hub-rhdh.apps.<cluster domain>`. Sign in
 with a realm user; user names must be lowercase DNS labels of at most 19
 characters (they name the VM).

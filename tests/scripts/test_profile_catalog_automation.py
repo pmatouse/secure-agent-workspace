@@ -71,7 +71,8 @@ def test_list_names_every_generated_file():
     assert "charts/saw-users/files/governed-profiles.json" in listed
     assert "charts/openshell-rhdh/files/set-workspace-state.yaml" in listed
     assert "charts/openshell-rhdh/files/workspace.py" in listed
-    assert len(listed) == 10 + len(shipped) + 1
+    assert "charts/openshell-rhdh/files/saw_keycloak_admin.py" in listed
+    assert len(listed) == 11 + len(shipped) + 1
     assert sorted(p.rsplit("/", 1)[1] for p in mirrored) == shipped
     assert "charts/openshell-saw/files/provider-profiles" in listed
     assert "charts/openshell-rhdh/files/create-workspace.yaml" in listed
@@ -84,7 +85,7 @@ def scratch(tmp_path):
     """A git repo with the generator, the profiles and their outputs, and a
     PATH whose python/python3 are this interpreter (it has PyYAML)."""
     repo = tmp_path / "repo"
-    for rel in ["scripts/saw-profile-catalog.py", ".githooks/pre-commit", "charts/openshell-saw/templates/_governed-proxy-policy.tpl", "charts/saw-users/files/workspace.py", *outputs()]:
+    for rel in ["scripts/saw-profile-catalog.py", ".githooks/pre-commit", "charts/openshell-saw/templates/_governed-proxy-policy.tpl", "charts/saw-users/files/workspace.py", "charts/openshell-keycloak/files/saw_keycloak_admin.py", *outputs()]:
         if (ROOT / rel).is_dir():          # the mirror directory is listed as an owned path
             continue
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
