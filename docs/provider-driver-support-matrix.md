@@ -9,7 +9,7 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 ## Validation matrix
 
-| Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live (this revision) |
+| Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live qualification |
 |---|---|---|---|---|
 | OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Initial sandbox API inference, owner browser chat and audited tool decisions passed on both data-science slots; model-update and complete RHDH lifecycle qualification remain blocked; see below |
 | Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
@@ -65,17 +65,23 @@ initial inference pass:
   reconnection must be tested separately; a successful readiness check does
   not establish uninterrupted chat.
 - An identity-service upgrade rejected the existing service-account admin API
-  tokens and blocked RHDH enrollment. The portal now preserves the prior
-  workspace projection on lookup failure; this preservation is not an
-  enrollment success.
+  tokens and blocked RHDH enrollment. The shared bootstrap now assigns the
+  supported built-in Admin API scope; live reads recovered for all three
+  service clients with unchanged roles. Bootstrap runs during Sync to avoid
+  waiting for the identity-dependent ApplicationSet's health. The portal also
+  preserves the prior workspace projection on lookup failure. These recovery
+  checks do not qualify a complete enrollment or fresh installation.
 
 Credential-marker and destination denials passed in isolated live checks.
 Separate direct-connect probes from both application Pods timed out to two
 currently resolved OpenAI IPv4 addresses on TCP/443, while mediated inference
 succeeded before and after; the stock deny-all network policies remained in
 place. This bounds the network result to the tested destinations and transport.
-Foreign-owner browser access still needs its own check. Keep detailed failures
-and immutable revision evidence in the separate qualification record.
+An authenticated second owner was denied access to the first owner's notebook
+in the browser, with the proxy confirming the rejected identity. Complete
+profile/lifecycle coverage and retesting of the final candidate remain required.
+Keep detailed failures and immutable revision evidence in the separate
+qualification record.
 
 The container compiler currently selects one inference provider per sandbox;
 additional simultaneous `inference.models` chat choices remain unsupported and
