@@ -276,12 +276,21 @@ neither placeholder hashes nor a previously approved profile digest. Re-run
 `make saw-create`. For a previously approved site,
 enrollment can be enabled on its first install.
 
+`approvedProfiles` hashes the exact rendered BOM ConfigMap data, including image
+overrides and optional harness bundles. Recompute it when effective inputs differ;
+a standalone approval applies to RHDH only when their rendered data is identical.
+`harnessEnabled` controls optional `harnessRef` bundles. Enrollment attaches the
+audited tool gate independently to each supported agent sandbox.
+
 The projector reads the immutable enrollment and relay publications; no one
 copies generated intent or resource UIDs back into Git. Argo then enables the
 reconciler, prepared mounts and owner-only browser relay. `make saw-create`
 waits for the same current-generation, BOM and browser-readiness conditions as
 RHDH. A failed API read or malformed publication returns a projection error,
 not an empty workspace list that could prune working applications.
+If the required Keycloak owner lookup fails, the shared VM/container projection
+also stops until lookup recovers. An unavailable identity service must not be
+interpreted as a missing owner or an empty membership list.
 
 ```sh
 make saw-status # JSON readiness and authenticated UI links
@@ -337,6 +346,12 @@ children, for VM and container registrations. Direct static VM Applications
 honor the same map. Forms and registration records cannot set these pins or
 select a different repository. A recreated registration uses the operator's
 current pin for that owner.
+
+When chart and values live in the same Git repository, keep them on one Argo
+source revision. Argo rejects different revisions of that repository for the
+chart and a `$values` reference. Integrate the reviewed portal chart into the site
+revision, or publish it as a separately versioned Helm artifact. Owner pins still
+control the generated workload revisions.
 
 Pin existing owners before upgrading shared portal code when their child charts
 must stay unchanged. The portal's chart revision and its generated workload

@@ -151,15 +151,15 @@ def compile_profile(profile_dir, config):
 def _openclaw_startup(kind, info):
     slot, _ = governed.requirements(kind, info.get("baseUrl"))
     endpoint = info.get("baseUrl") or shared.NATIVE_BASE_URLS[kind]
-    custom = kind == "custom-inference"
+    provider_id = shared.openclaw_managed_provider_id(kind)
     timeout = info.get("timeoutSeconds", 0)
     return (Path(__file__).with_name("openclaw.sh").read_text()
-            .replace("@SAW_PROVIDER_KEY@", json.dumps(kind) if custom else kind)
-            .replace("@SAW_BASE_URL@", json.dumps(endpoint) if custom else repr(endpoint))
+            .replace("@SAW_PROVIDER_KEY@", json.dumps(provider_id))
+            .replace("@SAW_BASE_URL@", json.dumps(endpoint))
             .replace("@SAW_TIMEOUT@", f"timeoutSeconds: {timeout}, " if timeout else "")
             .replace("@SAW_API@", "anthropic-messages" if info["protocol"] == "anthropic" else "openai-completions")
             .replace("@SAW_KEY_ENV@", slot["env_vars"][0])
-            .replace("@SAW_PROVIDER_ID@", kind))
+            .replace("@SAW_PROVIDER_ID@", provider_id))
 
 
 def _compatible_inference(workspace, sandbox, config):

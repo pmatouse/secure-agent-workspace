@@ -84,7 +84,7 @@ def test_install_then_apply_reaches_ready(world, credential_mode):
     assert oct(copy.stat().st_mode & 0o777) == "0o644"
     # Raw source fixtures carry the exact shared source beside the copy. The
     # signed chart-rendered installer embeds it instead (packaging tests).
-    for name in ("saw_core.py", "saw_admin.py"):
+    for name in ("saw_core.py", "saw_admin.py", "saw_ui_limit.py"):
         shared_copy = copy.with_name(name)
         assert shared_copy.read_bytes() == (world.inputs / "installer" / name).read_bytes()
         assert oct(shared_copy.stat().st_mode & 0o777) == "0o644"

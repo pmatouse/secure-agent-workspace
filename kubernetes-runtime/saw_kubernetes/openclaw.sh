@@ -22,8 +22,20 @@ const config = {
 };
 @SAW_BROWSER_CONFIG@
 const target = process.env.OPENCLAW_CONFIG_PATH;
-const tmp = target + '.' + crypto.randomUUID();
-fs.writeFileSync(tmp, JSON.stringify(config), {flag: 'wx', mode: 0o600});
-fs.renameSync(tmp, target);
+// Remove previously managed harness/gate capabilities when absent from this
+// approved startup. Do this after the preflights, never before their checks.
+for (const [path, empty] of Object.entries({
+  plugins:{allow:[], load:{paths:[]}, entries:{}}, skills:{load:{extraDirs:[]}},
+  channels:{}, mcp:{servers:{}}
+})) config[path] ??= empty;
+// Publish complete managed subtrees with the stock writer. Replacing the config
+// directly loses its metadata and triggers restoration of the previous backup.
+const batch = target + '.saw-managed';
+const tmp = batch + '.' + crypto.randomUUID();
+fs.writeFileSync(tmp, JSON.stringify(Object.entries(config).map(([path, value]) => ({path, value}))),
+                 {flag: 'wx', mode: 0o600});
+fs.renameSync(tmp, batch);
 JS
+openclaw config set --batch-file "$OPENCLAW_CONFIG_PATH.saw-managed"
+rm -f "$OPENCLAW_CONFIG_PATH.saw-managed"
 exec openclaw gateway run --bind loopback --port 18789

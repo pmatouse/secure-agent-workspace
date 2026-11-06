@@ -17,7 +17,7 @@ unmodified installer fail signing.mode: enforce for no reason (PR #54 review,
 committed bundle.sigstore.json (when one is committed) no longer verifies
 against a fresh render's manifest.
 
-The canonical saw_core.py and saw_admin.py are embedded inside rendered
+The canonical saw_core.py, saw_admin.py and saw_ui_limit.py are embedded inside rendered
 apply_bom.py, so their bytes are covered by that existing signed file. Keep this manifest set stable:
 golden images with the original verifier can verify new bundles without an
 unsigned adjacent module or a replacement verifier. Refuse raw source and
@@ -78,6 +78,10 @@ def validate_shared_core(data):
         raise SystemExit("installer must embed saw_admin.py inside its signed artifact")
     if embedded_core(data["apply_bom.py"], "_SAW_ADMIN_EMBEDDED_B64") != admin_source.read_bytes():
         raise SystemExit("rendered apply_bom.py does not embed canonical saw_admin.py")
+    if "saw_ui_limit.py" in data:
+        raise SystemExit("installer must embed saw_ui_limit.py inside its signed artifact")
+    if embedded_core(data["apply_bom.py"], "_SAW_UI_LIMIT_EMBEDDED_B64") != CORE_SOURCE.with_name("saw_ui_limit.py").read_bytes():
+        raise SystemExit("rendered apply_bom.py does not embed canonical saw_ui_limit.py")
 
 
 def build_manifest(data):

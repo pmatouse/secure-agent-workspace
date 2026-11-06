@@ -93,6 +93,13 @@ request from the sandbox, through its normal proxy path, to the provider's fixed
 official endpoint. It prints no key, headers, provider error body or model reply.
 Repeat with the selected Anthropic and NVIDIA models in their own registered
 sandboxes. Do not substitute a direct request from the bastion for this check.
+Use `openshell sandbox exec` for this probe: administrative `oc exec` into the
+application container does not establish the OpenShell execution session or its
+provider placeholder environment, so it does not test the owner's inference path.
+Before a model-update test, run the same probe with the proposed model ID and
+credential binding. Visibility in the provider's model catalog does not establish
+that an inference request will succeed. Record a rejected model separately from
+controller convergence and storage persistence.
 
 Then exercise RHDH/OpenClaw:
 
@@ -101,6 +108,10 @@ Then exercise RHDH/OpenClaw:
    and request a unique token. Record the selected model and returned token.
 2. **Update:** change the public model input through the normal update flow.
    Verify a fresh workload, the new model, successful chat and unchanged PVCs.
+   Inspect the provider/model in the resulting chat transcript as well as the
+   API probe. A stock agent's automatic configuration migration can change a
+   model after startup; a correct public selector or direct API reply alone is
+   insufficient.
 3. **Restart:** use the normal stop/start intent. Verify chat and a workspace
    canary survive; check a fresh Pod UID and unchanged PVC UIDs.
 4. **Isolation:** verify an unknown credential marker and an unapproved
@@ -108,6 +119,11 @@ Then exercise RHDH/OpenClaw:
    Keep keys confined to the trusted credential-proxy namespace.
 5. **Delete:** delete through RHDH. Verify foreground compute cleanup and the
    documented retained workspace/audit data disposition.
+
+Keep a browser session open across a relay OIDC-token expiry. Check a new chat
+connection and reconnection of an existing WebSocket separately, without
+automatically resubmitting tool approvals or other non-idempotent operations.
+Record any connection gap even if the relay subsequently recovers.
 
 Record provider-by-provider results in the
 [support matrix](provider-driver-support-matrix.md). Configuration tests,

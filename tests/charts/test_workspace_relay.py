@@ -29,6 +29,14 @@ def test_secret_and_membership_boundaries(tmp_path):
     assert [v["secret"]["secretName"] for v in pod["volumes"] if "secret" in v] == ["relay-credentials"]
     containers = {c["name"]:c for c in pod["containers"]}
     assert "credential" not in {v["name"] for v in containers["forward"]["volumeMounts"]}
+    assert "--local 127.0.0.1:28789" in containers["forward"]["args"][0]
+    assert containers["transport"]["command"] == ["python3", "/config/saw_ui_limit.py", "18789", "28789", "16", "--connect-only"]
+    assert containers["transport"]["volumeMounts"] == [{"name": "config", "mountPath": "/config", "readOnly": True}]
+    assert containers["transport"]["securityContext"] == containers["forward"]["securityContext"]
+    canonical = CHART.parent / "openshell-saw/files/installer/saw_ui_limit.py"
+    assert (CHART / "files/saw_ui_limit.py").read_bytes() == canonical.read_bytes()
+    config = next(d for d in resources if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "relay")
+    assert config["data"]["saw_ui_limit.py"] == canonical.read_text()
     assert "--authenticated-emails-file=/config/users" in containers["browser-login"]["args"]
     jobs = {d["metadata"]["namespace"]:d["spec"]["template"]["spec"] for d in resources if d["kind"]=="Job"}
     assert jobs["trusted"]["automountServiceAccountToken"] is False

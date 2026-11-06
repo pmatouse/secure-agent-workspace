@@ -441,6 +441,7 @@ def inputs_dir(tmp_path, bom, config, shipped_profile_files, secrets_dir, fake_e
     (installer / "apply_bom.py").write_text(SCRIPT.read_text())
     (installer / "saw_core.py").write_text((SCRIPT.parent / "saw_core.py").read_text())
     (installer / "saw_admin.py").write_text((SCRIPT.parent / "saw_admin.py").read_text())
+    (installer / "saw_ui_limit.py").write_text((SCRIPT.parent / "saw_ui_limit.py").read_text())
     # Match the installer disk: typed endpoint validation uses this shipped
     # host catalog to distinguish built-in and deployment-owned profiles.
     for profile in (CHART / "files/provider-profiles").glob("*.yaml"):

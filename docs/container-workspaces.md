@@ -52,7 +52,7 @@ flowchart TD
 | Governance interceptor | Supplies signed provider profiles and policy. SAW's existing interceptor extension additionally restricts Kubernetes driver configuration to an approved PVC/resource envelope submitted by an admin mTLS identity. |
 | Credential proxy | Resolves opaque credential markers using trusted-namespace Secrets and the shared provider policy. It supplies credentials only for approved destinations. |
 | Audit writer | Owns retained history outside the application namespace and signs acknowledgements after append. The application mounts an exchange volume, not the history PVC. |
-| Browser relay | Combines owner-only login, a dedicated nonadmin Keycloak client and OpenShell forwarding. Its membership is scoped to the intended workspace. Only its membership Job opens a temporary gateway administrator session; the UI has no administrator identity or trust-write permission. |
+| Browser relay | Combines owner-only login, a dedicated nonadmin Keycloak client, shared connection limiter and stock OpenShell forwarding. Its membership is scoped to the intended workspace. Only its membership Job opens a temporary gateway administrator session; the UI has no administrator identity or trust-write permission. |
 
 The implementation lives in `kubernetes-runtime/` and the `saw-kubernetes-*`,
 `openshell-saw-kubernetes`, `saw-runtime-policies`, `saw-audit-writer`,
@@ -233,6 +233,24 @@ Model selection is public configuration; API keys and refresh material are not.
 The compiler resolves an explicitly attached provider and an approved endpoint.
 OpenAI-compatible agent inference currently supports NVIDIA, OpenAI and the
 approved custom-inference path; unsupported combinations fail explicitly.
+
+The container startup publishes whole managed OpenClaw configuration subtrees
+through stock `openclaw config set --batch-file`, the same native writer used
+by VM configuration commands. It preserves OpenClaw's metadata and backup
+bookkeeping; directly replacing `openclaw.json` can trigger recovery of an older
+model selection. Managed gateway, provider, agent and tool/plugin settings are
+replaced together so removed permissions or providers do not survive an update.
+
+An explicit container model uses an internal OpenClaw provider ID such as
+`saw-openai/gpt-4.1`. This prevents the stock built-in model catalog from
+rewriting a requested model to a different release. The BOM still names
+`openai`; its approved OpenAI endpoint, protocol, credential marker and proxy
+authorization are unchanged. Chat transcripts therefore identify the internal
+provider alias and the exact requested model. VM native onboarding remains
+unchanged. The native writer regression can run against a stock binary with
+`node tests/openclaw-config-publication.mjs`; add `--expect-restore` on versions
+that restore configurations missing metadata. It uses synthetic credentials in
+temporary state and sends no inference requests.
 
 The application receives its writable workspace, a read-only prepared gate and
 optional harness, and an audit exchange. The writer's history and signing key

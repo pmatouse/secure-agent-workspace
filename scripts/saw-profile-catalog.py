@@ -23,6 +23,9 @@ It also mirrors the governance provider profiles into the installer:
                                                    gets when governance is off;
                                                    a file no longer shipped is removed)
 
+Canonical workspace projection and Keycloak bootstrap helpers are mirrored
+into the independently installable RHDH chart by the same generation/check.
+
     scripts/saw-profile-catalog.py            write both files
     scripts/saw-profile-catalog.py --check    fail when they are stale (CI)
     scripts/saw-profile-catalog.py --list     print the files it owns (writes, or removes)
@@ -561,6 +564,10 @@ def main(argv=None):
     # Independent Helm charts package the same reviewed broker renderer.
     policy_template = ROOT / "charts/openshell-saw/templates/_governed-proxy-policy.tpl"
     policy_outputs = [
+        (ROOT / "charts/openshell-rhdh/files/saw_keycloak_admin.py",
+         (ROOT / "charts/openshell-keycloak/files/saw_keycloak_admin.py").read_text()),
+        (ROOT / "charts/saw-workspace-relay/files/saw_ui_limit.py",
+         (ROOT / "charts/openshell-saw/files/installer/saw_ui_limit.py").read_text()),
         (ROOT / "charts/openshell-rhdh/files/workspace.py",
          (ROOT / "charts/saw-users/files/workspace.py").read_text()),
         (ROOT / "charts/saw-users/templates/_governed-proxy-policy.tpl", policy_template.read_text()),

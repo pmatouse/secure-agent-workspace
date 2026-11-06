@@ -10,6 +10,8 @@ data:
 {{ $v.gatewayCA | indent 4 }}
   token.py: |
 {{ .Files.Get "files/token.py" | indent 4 }}
+  saw_ui_limit.py: |
+{{ .Files.Get "files/saw_ui_limit.py" | indent 4 }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -33,7 +35,7 @@ spec:
   template:
     metadata:
       labels: {app: {{ $n }}, role: relay}
-      annotations: {checksum/config: {{ printf "%s%s" ($v | toJson) (.Files.Get "files/token.py") | sha256sum }}}
+      annotations: {checksum/config: {{ printf "%s%s%s" ($v | toJson) (.Files.Get "files/token.py") (.Files.Get "files/saw_ui_limit.py") | sha256sum }}}
     spec:
       serviceAccountName: {{ $n }}
       automountServiceAccountToken: false
@@ -64,7 +66,7 @@ spec:
         args:
         - |
           while true; do
-            openshell forward service -g relay --workspace "$1" "$2" --target-port 18789 --local 127.0.0.1:18789
+            openshell forward service -g relay --workspace "$1" "$2" --target-port 18789 --local 127.0.0.1:28789
             sleep 2
           done
         - relay
@@ -73,6 +75,11 @@ spec:
         env: [{name: XDG_CONFIG_HOME, value: /session}, {name: HOME, value: /session}]
         securityContext: *restricted
         volumeMounts: [{name: session, mountPath: /session}]
+      - name: transport
+        image: {{ $v.pythonImage }}
+        command: [python3, /config/saw_ui_limit.py, '18789', '28789', '16', --connect-only]
+        securityContext: *restricted
+        volumeMounts: [{name: config, mountPath: /config, readOnly: true}]
       - name: browser-login
         image: {{ $v.proxyImage }}
         args:
