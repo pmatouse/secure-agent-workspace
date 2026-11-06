@@ -1587,6 +1587,24 @@ def test_linked_runtime_tracks_owner_and_current_generation(portal):
     assert portal.linked_runtime_phase(reader, {"runtime":ref}) == "Unknown"
 
 
+@pytest.mark.parametrize("fault,expected", [
+    ("profile", "approved profiles: audited-openclaw"),
+    ("cleanup", "enable portal.pruneOnRemove"),
+])
+def test_container_preflight_explains_profile_and_cleanup_failures(portal, world, monkeypatch, capsys, fault, expected):
+    fake, signer = world
+    monkeypatch.setenv("SAW_DEPLOYMENT_MODES", '["vm","container"]')
+    monkeypatch.setenv("SAW_CONTAINER_SITES", json.dumps({"alice": {
+        "subject": "478fdd1f-8db9-41e8-97ad-b563215c89e9"}}))
+    monkeypatch.setenv("PRUNE_ON_REMOVE", "false" if fault == "cleanup" else "true")
+    fake.request("saw-req-rejected", ds_request(signer, deploymentMode="container",
+        profile="data-science" if fault == "profile" else "audited-openclaw"))
+    assert portal.main(["create", "saw-req-rejected"]) != 0
+    captured = capsys.readouterr()
+    assert expected in captured.out + captured.err
+    assert not fake.vault and REGISTRY not in fake.objects
+
+
 def test_container_portal_register_update_delete(portal, world, monkeypatch):
     fake, signer = world
     subject = "478fdd1f-8db9-41e8-97ad-b563215c89e9"

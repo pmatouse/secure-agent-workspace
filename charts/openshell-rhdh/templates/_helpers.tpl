@@ -177,6 +177,27 @@ allowlist into both forms without enabling privileged form parameters. */}}
 {{- $template := $root.Files.Get .path | fromYaml -}}
 {{- $step := last $template.spec.parameters -}}
 {{- $modes := include "openshell-rhdh.deploymentModes" $root | fromJsonArray -}}
+{{- /* The form can advertise a site-wide union, never an owner authorization.
+The server still verifies the authenticated owner's exact profile approval. */ -}}
+{{- $approved := dict -}}
+{{- range $site := $root.Values.portal.containerSites | default dict -}}
+{{- if and (kindIs "map" $site) (regexMatch "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$" (toString ($site.subject | default ""))) -}}
+{{- $automatic := $site.automaticEnrollment | default dict -}}
+{{- $profiles := dict "audited-openclaw" ($automatic.profileSHA256 | default "") -}}
+{{- if hasKey $automatic "approvedProfiles" -}}{{- $profiles = $automatic.approvedProfiles -}}{{- end -}}
+{{- range $id, $digest := $profiles -}}
+{{- if regexMatch "^[0-9a-f]{64}$" (toString $digest) -}}{{- $_ := set $approved $id true -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $containerIDs := list -}}{{- $containerNames := list -}}
+{{- range $i, $id := $step.properties.profile.enum -}}
+{{- if hasKey $approved $id -}}
+{{- $containerIDs = append $containerIDs $id -}}
+{{- $containerNames = append $containerNames (index $step.properties.profile.enumNames $i) -}}
+{{- end -}}
+{{- end -}}
+{{- if not $containerIDs -}}{{- $modes = without $modes "container" -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enum" $modes -}}
 {{- /* Hide the pilot profile on VM-only installations. The backend also checks it. */ -}}
 {{- if or (not (has "container" $modes)) (not $root.Values.portal.containerSites) -}}
@@ -193,5 +214,29 @@ allowlist into both forms without enabling privileged form parameters. */}}
 {{- $names := list -}}
 {{- range $mode := $modes -}}{{- $names = append $names (index $labels $mode) -}}{{- end -}}
 {{- $_ := set $step.properties.deploymentMode "enumNames" $names -}}
+{{- /* Put the profile enum in each deployment branch rather than merging a
+restricted enum with the broad generated field. Keep the generated profile
+dependency and its credential fields shared by all deployment branches. */ -}}
+{{- $profileField := deepCopy $step.properties.profile -}}
+{{- $vmIDs := list -}}{{- $vmNames := list -}}
+{{- range $i, $id := $profileField.enum -}}
+{{- if ne $id "audited-openclaw" -}}
+{{- $vmIDs = append $vmIDs $id -}}{{- $vmNames = append $vmNames (index $profileField.enumNames $i) -}}
+{{- end -}}
+{{- end -}}
+{{- $branches := list -}}
+{{- range $mode := $modes -}}
+{{- $field := deepCopy $profileField -}}
+{{- if eq $mode "container" -}}
+{{- $_ := set $field "enum" $containerIDs -}}{{- $_ := set $field "enumNames" $containerNames -}}
+{{- $_ := set $field "default" (first $containerIDs) -}}
+{{- $_ := set $field "description" "Container profiles configured at this site. Your administrator must also approve the selected profile for your account; existing container registrations keep their profile." -}}
+{{- else -}}
+{{- $_ := set $field "enum" $vmIDs -}}{{- $_ := set $field "enumNames" $vmNames -}}
+{{- end -}}
+{{- $branches = append $branches (dict "properties" (dict "deploymentMode" (dict "enum" (list $mode)) "profile" $field)) -}}
+{{- end -}}
+{{- $_ := unset $step.properties "profile" -}}
+{{- $_ := set $step.dependencies "deploymentMode" (dict "oneOf" $branches) -}}
 {{- include "openshell-rhdh.readinessTemplate" (dict "root" $root "template" $template) -}}
 {{- end -}}
