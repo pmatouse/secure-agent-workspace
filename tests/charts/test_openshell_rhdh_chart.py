@@ -689,6 +689,7 @@ def test_operator_mode_policy_reaches_both_forms_and_server(modes):
         assert json.loads(env["SAW_DEPLOYMENT_MODES"]) == modes
 
 
+
 @pytest.mark.ci_external
 @pytest.mark.parametrize("modes", [[], ["container"], ["vm", "vm"], ["vm", "confidential"],
                                   ["vm", "bogus"], ["vm", {}], "vm"])
@@ -701,12 +702,14 @@ def test_invalid_operator_mode_policy_rejects_chart(modes):
     assert not result.stdout.strip()
 
 
+
 def _deployment_profiles(form):
     step = form["spec"]["parameters"][-1]
     assert "profile" not in step["properties"], "a broad base enum would undo UI filtering"
     return step, {branch["properties"]["deploymentMode"]["enum"][0]:
                   branch["properties"]["profile"]
                   for branch in step["dependencies"]["deploymentMode"]["oneOf"]}
+
 
 
 @pytest.mark.ci_external
@@ -741,6 +744,7 @@ def test_container_choices_are_approved_catalog_profiles_in_both_forms():
                        for profile, label in zip(field["enum"], field["enumNames"]))
 
 
+
 @pytest.mark.ci_external
 @pytest.mark.parametrize("automatic,expected", [
     ({"profileSHA256": "a" * 64}, ["audited-openclaw"]),
@@ -761,3 +765,4 @@ def test_container_choice_requires_known_reviewed_profile(automatic, expected):
     else:
         assert "container" not in fields
         assert "container" not in step["properties"]["deploymentMode"]["enum"]
+
