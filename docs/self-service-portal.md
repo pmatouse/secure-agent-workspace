@@ -481,7 +481,7 @@ Before the first sync:
    `oc get argocd -n vp-gitops -o jsonpath='{.items[0].spec.applicationSet}'`
    must not be empty.
 
-A PostSync Job creates or updates the Keycloak client `rhdh` (confidential,
+A Sync-hook Job creates or updates the Keycloak client `rhdh` (confidential,
 redirect `https://<rhdh>/api/auth/oidc/handler/frame`) with the secret from
 Vault, also in a realm that existed before.
 
@@ -493,12 +493,15 @@ unchanged; browser relay clients keep only their OpenShell audience. Earlier
 Keycloak versions without the built-in scope are left unchanged. API failures
 stop bootstrap instead of bypassing audience verification.
 
-The RHDH PostSync Job performs this migration; changes to the shared helper
+The RHDH Sync-hook Job performs this migration; changes to the shared helper
 also roll the resolver and registrar through their normal bootstrap init
 containers. No credentials, token-request changes or custom Keycloak image
 are required. When upgrading a previously installed Keycloak, include these
 bootstrap reconciliations in the platform rollout; a server-only upgrade does
-not rerun existing init containers. See the
+not rerun existing init containers. The Job shares the ordinary sync wave with
+its Secret, RBAC and ConfigMaps; it can repair identity access while dependent
+controllers are unhealthy. Waiting for PostSync would create a health dependency
+cycle. See the
 [Keycloak 26.6.8 migration requirement](https://github.com/keycloak/keycloak/blob/26.6.8/docs/documentation/upgrading/topics/changes/changes-26_6_8.adoc#admin-rest-api-now-enforces-an-audience-check).
 
 RHDH is at `https://backstage-developer-hub-rhdh.apps.<cluster domain>`. Sign in

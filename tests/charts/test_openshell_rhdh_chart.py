@@ -775,10 +775,20 @@ def test_container_choice_requires_known_reviewed_profile(automatic, expected):
 
 
 @pytest.mark.ci_external
-def test_rhdh_postsync_packages_shared_admin_scope_helper(docs):
+def test_rhdh_identity_bootstrap_can_repair_unhealthy_consumers(docs):
     cm = one(docs, "ConfigMap", "saw-rhdh-keycloak-client")
     assert cm["data"]["saw_keycloak_admin.py"] == (CHART / "files/saw_keycloak_admin.py").read_text()
     job = one(docs, "Job", "saw-rhdh-keycloak-client")
-    assert job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "PostSync"
+    # A 401 makes the AppSet unhealthy; PostSync would prevent the bootstrap
+    # that repairs it from running. PreSync would miss first-install inputs.
+    assert job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "Sync"
+    assert job["metadata"]["annotations"].get("argocd.argoproj.io/sync-wave", "0") == "0"
+    for resource in (cm, one(docs, "ServiceAccount", "saw-rhdh-keycloak"),
+                     one(docs, "ExternalSecret", "rhdh-oidc"),
+                     one(docs, "Role", "saw-rhdh-keycloak-admin"),
+                     one(docs, "RoleBinding", "saw-rhdh-keycloak-admin")):
+        annotations = resource["metadata"].get("annotations", {})
+        assert not annotations.get("argocd.argoproj.io/hook")
+        assert annotations.get("argocd.argoproj.io/sync-wave", "0") == "0"
     assert any(v.get("configMap", {}).get("name") == cm["metadata"]["name"]
                for v in job["spec"]["template"]["spec"]["volumes"])

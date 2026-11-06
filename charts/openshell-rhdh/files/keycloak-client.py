@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create or update RHDH's confidential OIDC client in the openshell realm.
 
-Runs as an Argo CD PostSync hook, so it also fixes a realm that existed
+Runs as an Argo CD Sync hook, so it also fixes a realm that existed
 before the portal (a realm import only runs once). The client secret comes
 from the rhdh-oidc Secret (from Vault); the Keycloak admin credentials from
 the operator's <keycloak>-initial-admin Secret, read through the Kubernetes
