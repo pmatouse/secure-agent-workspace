@@ -130,6 +130,26 @@ BASE_URL_CONFIG_KEYS = {
 }
 
 
+# OpenShell 0.1.x has no inference router: the agent calls the endpoint
+# itself, and the provider profile must name that endpoint's host.
+# OpenShell 0.1.x removed managed inference (`openshell inference`,
+# https://inference.local). An agent is configured with its provider's native
+# OpenAI-compatible endpoint and the placeholder key the sandbox receives in
+# the provider's env var; the sandbox proxy swaps in the real key only for
+# requests to the profile's endpoints from the profile's binaries. A
+# provider's baseUrl overrides these.
+NATIVE_BASE_URLS = {
+    "nvidia": "https://integrate.api.nvidia.com/v1",
+    "build": "https://integrate.api.nvidia.com/v1",
+    "openai": "https://api.openai.com/v1",
+}
+
+OPENCLAW_AUTH_CHOICES = {"openai": "openai-api-key", "anthropic": "apiKey"}
+# By protocol: the official API an agent talks to when no endpoint is given.
+PROTOCOL_NATIVE_BASE_URLS = {"openai": "https://api.openai.com/v1",
+                             "anthropic": "https://api.anthropic.com"}
+
+
 class InstallerError(Exception):
     """A failure with a message that is safe to log and show in status."""
 
@@ -801,6 +821,70 @@ def resolve_bom_input(src, read_value, what, forbidden=()):
     return ""
 
 
+def select_inference_provider(providers, names, *, inference_ref=None):
+    """Select an agent provider from the adapter's available candidates.
+
+    Disabled and credential-free providers cannot onboard an agent. An explicit
+    inference reference never falls back to a different provider. Otherwise use
+    attachment order, preferring a candidate with a model. The legacy empty
+    attachment list retains candidate order; strict adapters must validate
+    attachment requirements before calling. Availability and governance remain
+    adapter checks, so a skipped provider must be absent from ``providers``.
+    """
+    usable = [p for p in providers if p.enabled and not p.credential_free]
+    if inference_ref is not None:
+        return next((p for p in usable if p.name == inference_ref), None)
+    if names:
+        usable = [p for name in names for p in usable if p.name == name]
+    return next((p for p in usable if p.model), usable[0] if usable else None)
+
+
+def sandbox_protocol(sb, provider):
+    """How the agent talks to its inference endpoint."""
+    if sb.inference_values:
+        return sb.inference_values["protocol"]
+    return PROVIDER_PROTOCOLS.get(provider.type, "") if provider else ""
+
+
+def sandbox_model(sb, provider, default=""):
+    """The model the agent runs: `inference.model`, else the legacy sandbox
+    `model`, the provider's `model`/`modelSecretKey`, the built-in default."""
+    if sb.inference_values:
+        return sb.inference_values["model"]
+    return sb.model or (provider.model if provider else "") or default
+
+
+def sandbox_endpoint(sb, provider):
+    """The endpoint the agent is onboarded against: `inference.baseUrl`, else
+    the provider's own base URL ("" = the protocol's native API)."""
+    if sb.inference_values:
+        return sb.inference_values["baseUrl"]
+    return provider.base_url if provider else ""
+
+
+def openclaw_inference_settings(sb, provider):
+    """Pure onboarding choices; transports and endpoint approval stay in adapters.
+
+    Resolved inference inputs take precedence over legacy fields. An explicit
+    endpoint uses custom onboarding even when its URL is a native API. A legacy
+    base URL reference also keeps custom onboarding when its resolved value is
+    absent, preserving the VM installer's compatibility behavior.
+    """
+    model = sandbox_model(sb, provider, "nvidia/nemotron-3.5-lightning-30b-a3b")
+    endpoint = sandbox_endpoint(sb, provider)
+    protocol = sandbox_protocol(sb, provider)
+    if sb.inference_values:
+        base_url = (endpoint or NATIVE_BASE_URLS.get(provider.type, "")
+                    or PROTOCOL_NATIVE_BASE_URLS.get(protocol, ""))
+        native = (not endpoint and provider.type in OPENCLAW_AUTH_CHOICES
+                  and PROVIDER_PROTOCOLS.get(provider.type) == protocol)
+    else:
+        base_url = endpoint or NATIVE_BASE_URLS.get(provider.type, "")
+        native = not (endpoint or provider.base_url_secret_key)
+    return {"model": model, "base_url": base_url, "protocol": protocol,
+            "auth_choice": OPENCLAW_AUTH_CHOICES.get(provider.type) if native else None}
+
+
 def resolve_inference(ws, sb, read_value, validate_endpoint, forbidden=()):
     """A sandbox's `inference:` resolved: providerRef, protocol, baseUrl
     (validated, "" = the protocol's native API), model, timeoutSeconds."""
@@ -939,7 +1023,9 @@ __all__ = (
     'INPUT_KEYS', 'secret_ref', 'secret_ref_problems', 'INFERENCE_KEYS', 'INFERENCE_PROTOCOLS',
     'PROVIDER_PROTOCOLS', 'check_env_value', 'sandbox_env_problems', 'input_problems',
     'check_base_url', 'resolve_bom_input', 'resolve_inference', 'inference_protocol', 'sandbox_inference_problems', 'harness_from_plan', 'profiles_from_plan',
-    'validate_profile_document', 'apply_workspace_sequence',
+    'validate_profile_document', 'apply_workspace_sequence', 'select_inference_provider',
+    'NATIVE_BASE_URLS', 'OPENCLAW_AUTH_CHOICES', 'PROTOCOL_NATIVE_BASE_URLS',
+    'sandbox_protocol', 'sandbox_model', 'sandbox_endpoint', 'openclaw_inference_settings',
 )
 
 

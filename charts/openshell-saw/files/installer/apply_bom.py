@@ -151,26 +151,6 @@ REFRESH_BOOTSTRAP_CREDENTIAL = "saw-refresh-pending"
 RESTART_MODE_HINT = "run make saw-restart-pending CONFIRM=yes to boot the new credential mode"
 
 
-# OpenShell 0.1.x has no inference router: the agent calls the endpoint
-# itself, and the provider profile must name that endpoint's host.
-# OpenShell 0.1.x removed managed inference (`openshell inference`,
-# https://inference.local). An agent is configured with its provider's native
-# OpenAI-compatible endpoint and the placeholder key the sandbox receives in
-# the provider's env var; the sandbox proxy swaps in the real key only for
-# requests to the profile's endpoints from the profile's binaries. A
-# provider's baseUrl overrides these.
-NATIVE_BASE_URLS = {
-    "nvidia": "https://integrate.api.nvidia.com/v1",
-    "build": "https://integrate.api.nvidia.com/v1",
-    "openai": "https://api.openai.com/v1",
-}
-
-OPENCLAW_AUTH_CHOICES = {"openai": "openai-api-key", "anthropic": "apiKey"}
-# By protocol: the official API an agent talks to when no endpoint is given.
-PROTOCOL_NATIVE_BASE_URLS = {"openai": "https://api.openai.com/v1",
-                             "anthropic": "https://api.anthropic.com"}
-
-
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -1242,21 +1222,6 @@ def resolve_sandbox_inference(ws, sb, secrets_dir, mode="proxy", forbidden=()):
     return resolve_inference(ws, sb, read_value, validate_endpoint, forbidden)
 
 
-def sandbox_protocol(sb, provider):
-    """How the agent talks to its inference endpoint."""
-    if sb.inference_values:
-        return sb.inference_values["protocol"]
-    return PROVIDER_PROTOCOLS.get(provider.type, "") if provider else ""
-
-
-def sandbox_model(sb, provider, default=""):
-    """The model the agent runs: `inference.model`, else the legacy sandbox
-    `model`, the provider's `model`/`modelSecretKey`, the built-in default."""
-    if sb.inference_values:
-        return sb.inference_values["model"]
-    return sb.model or (provider.model if provider else "") or default
-
-
 def openclaw_agent_model(model_ref, current):
     """Change the model without dropping its provider's selected credential."""
     primary = current.get("primary", "") if isinstance(current, dict) else current
@@ -1266,14 +1231,6 @@ def openclaw_agent_model(model_ref, current):
         if binding.startswith(provider + ":"):
             model_ref += "@" + binding
     return {**current, "primary": model_ref} if isinstance(current, dict) else model_ref
-
-
-def sandbox_endpoint(sb, provider):
-    """The endpoint the agent is onboarded against: `inference.baseUrl`, else
-    the provider's own base URL ("" = the protocol's native API)."""
-    if sb.inference_values:
-        return sb.inference_values["baseUrl"]
-    return provider.base_url if provider else ""
 
 
 # ---------------------------------------------------------------------------
@@ -3054,13 +3011,8 @@ class ProfileApplier:
         preferring one with a model. Never another provider of the
         workspace: found live, a skipped `custom` provider made OpenClaw
         onboard with `brave` and a default NVIDIA model."""
-        usable = [p for p in self.usable(ws) if not p.credential_free]
-        if sb is not None and sb.inference_values:
-            ref = sb.inference_values["providerRef"]
-            return next((p for p in usable if p.name == ref), None)
-        if names:
-            usable = [p for n in names for p in usable if p.name == n]
-        return next((p for p in usable if p.model), usable[0] if usable else None)
+        ref = sb.inference_values["providerRef"] if sb is not None and sb.inference_values else None
+        return select_inference_provider(self.usable(ws), names, inference_ref=ref)
 
     def sandbox_state(self, ws, sb):
         """'running', 'broken' (Error/Completed), 'deleting' or 'missing'."""
@@ -3715,7 +3667,8 @@ class ProfileApplier:
         # No /sandbox chown: OpenShell 0.1.x runs the workload without
         # capabilities (root in the container cannot even read /sandbox) and
         # already gives /sandbox to the image's user.
-        model = sandbox_model(sb, provider, "nvidia/nemotron-3.5-lightning-30b-a3b")
+        inference = openclaw_inference_settings(sb, provider)
+        model = inference["model"]
         oc_env = OPENCLAW_EXEC_ENV
         # OpenShell 0.1.x: no inference.local. OpenClaw calls the provider's
         # own endpoint with the placeholder key this exec receives in the
@@ -3726,22 +3679,9 @@ class ProfileApplier:
         # (`inference:`), else the provider type's (legacy). The provider
         # only names the credential: its profile decides which hosts the
         # key may reach; the protocol decides how the agent talks to them.
-        endpoint = sandbox_endpoint(sb, provider)
-        protocol = sandbox_protocol(sb, provider)
-        if sb.inference_values:
-            # No baseUrl: the provider type's own API (NVIDIA's, say), else
-            # the protocol's official one. An official API (openai,
-            # anthropic) is onboarded natively (OpenClaw's own catalog) when
-            # the provider is that API; anything else as a custom endpoint.
-            base_url = (endpoint or NATIVE_BASE_URLS.get(provider.type, "")
-                        or PROTOCOL_NATIVE_BASE_URLS.get(protocol, ""))
-            native = (not endpoint and provider.type in OPENCLAW_AUTH_CHOICES
-                      and PROVIDER_PROTOCOLS.get(provider.type) == protocol)
-        else:
-            base_url = endpoint or NATIVE_BASE_URLS.get(provider.type, "")
-            native = not (endpoint or provider.base_url_secret_key)
+        base_url, protocol = inference["base_url"], inference["protocol"]
         key_var = credential_env_name(provider.type, self.provider_profiles)
-        auth_choice = OPENCLAW_AUTH_CHOICES.get(provider.type) if native else None
+        auth_choice = inference["auth_choice"]
         if (not base_url and not auth_choice) or not key_var:
             log(f"WARN: no endpoint for provider '{provider.name}' (type '{provider.type}'); "
                 f"set the sandbox's inference.baseUrl. Skipping OpenClaw onboarding")

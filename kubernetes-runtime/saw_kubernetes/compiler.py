@@ -150,8 +150,8 @@ def compile_profile(profile_dir, config):
 
 def _openclaw_startup(kind, info):
     # Preserve previously enrolled command bytes for the two original providers.
-    slot, hosts = governed.requirements(kind, info.get("baseUrl"))
-    endpoint = info.get("baseUrl") or f"https://{hosts[0]}/v1"
+    slot, _ = governed.requirements(kind, info.get("baseUrl"))
+    endpoint = info.get("baseUrl") or shared.NATIVE_BASE_URLS[kind]
     custom = kind == "custom-inference"
     timeout = info.get("timeoutSeconds", 0)
     return (Path(__file__).with_name("openclaw.sh").read_text()
@@ -296,8 +296,11 @@ def compile_profile_files(files, config):
                                or not bindings.get(f"{ws_name}/{sandbox.name}", {}).get("browser")):
                 raise ContractError("UI route capability requires the matching approved OpenClaw browser binding")
             if sandbox.type in ("openclaw", "nemoclaw"):
-                inference_provider = next((p for p in workspace.providers if p.enabled and p.name in sandbox.providers
-                                           and p.type == "nvidia" and p.model), None)
+                # Preserve the compiled legacy NVIDIA profile's workspace
+                # order; common eligibility/model preference lives in core.
+                inference_provider = shared.select_inference_provider(
+                    (p for p in workspace.providers if p.name in sandbox.providers
+                     and p.type == "nvidia" and p.model), [])
                 nvidia = inference_provider is not None and not sandbox.inference and bool(config.get("proxyBindings"))
                 custom = (sandbox.inference or {}).get("providerRef") == "custom-inference"
                 expected_type = "custom-inference" if custom else "openai"
@@ -306,7 +309,7 @@ def compile_profile_files(files, config):
                 if nvidia:
                     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,180}", inference_provider.model):
                         raise ContractError("invalid NVIDIA inference model")
-                    info = {"model": inference_provider.model}
+                    info = {"model": shared.sandbox_model(sandbox, inference_provider)}
                 else:
                     info = _compatible_inference(workspace, sandbox, config)
                 kind = "nvidia" if nvidia else expected_type

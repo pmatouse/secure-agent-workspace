@@ -8,6 +8,13 @@ An enrolled owner chooses **Container** in the existing RHDH create/update templ
 
 Both deployment methods render `charts/saw-bom` and read the same profile documents. Both use `saw_core` to parse and validate those documents, resolve typed inference inputs and defaults, and order workspace, provider and sandbox creation. The profile catalog lists the enabled workspaces, sandboxes and browser routes. The VM installer supplies its filesystem reader for inference inputs. The Kubernetes adapter supplies public model selections and attaches PVCs to stock OpenShell sandboxes.
 
+Provider eligibility, model preference and native endpoint defaults are also
+shared. The VM adapter uses the core's native/custom OpenClaw onboarding
+decisions. Transport commands, approved provider capabilities, credential
+rotation, object-identity checks and storage recovery remain adapter operations.
+In particular, VM migration can archive and recreate a sandbox; the container
+controller rejects unexpected replacement and retains its approved claims.
+
 The site approves the rendered BOM digest in `automaticEnrollment.approvedProfiles`. RHDH derives one storage binding per enabled sandbox, and a scoped owner relay for each declared UI. An additional profile using these capabilities needs a digest approval and qualification. A new BOM capability belongs in the shared engine when both runtimes need it, with storage, placement and authorization supplied by the adapters.
 
 | Input or behavior | Owner |

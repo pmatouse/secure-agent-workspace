@@ -907,9 +907,18 @@ providers → sandboxes readiness sequence. Strict parsing and backend capabilit
 checks reject fields that Kubernetes cannot yet implement. Existing VM parsing
 remains compatible. The shared-core tests cover every shipped profile.
 
-The remaining engine extraction below is still a target architecture: provider
-mutation, onboarding, migration, pruning and observation semantics are not yet
-fully shared. Do not extend either frontend with a second copy of feature logic.
+Provider selection and model/endpoint defaults now also live in `saw_core.py`.
+The VM adapter delegates native/custom OpenClaw onboarding choices to the core;
+the container compiler reuses selection and defaults within its approved
+capabilities. The existing compiled container commands remain unchanged.
+
+The remaining extraction is a target architecture, not a claim that both
+backends should execute identical recovery operations. VM apply rotates provider
+credentials and supports archive/restore migrations. The container reconciler
+pins provider revisions and object identities, rejects drift, and retains PVCs.
+Those mutation, migration and deletion policies stay explicit in their adapters.
+Common agent configuration and observation rules can be extracted as capability
+support converges. New shared feature semantics belong in the core.
 
 ```mermaid
 flowchart TB
