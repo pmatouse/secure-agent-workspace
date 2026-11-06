@@ -7,6 +7,7 @@ sawUsers:
     sawk8sowner: d3ea06363c20c5c358649083d88bb7e0be76cda2
     sawvmcanary: d3ea06363c20c5c358649083d88bb7e0be76cda2
     sawpr153two: b0f02442255836e3bbbad351e3770a42440f9d3b
+    sawpr153vm: b0f02442255836e3bbbad351e3770a42440f9d3b
 portal:
   deploymentModes:
   - vm
