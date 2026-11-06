@@ -153,6 +153,7 @@ process.exit(1);
         source=(HERE/"portal_audit_evidence.cjs").read_text()
         def evidence():return json.loads(run("oc","-n",archive,"exec","-i","deploy/"+base+"-writer","--","node","-",prefix,stdin=source))
         before=evidence()
+        print(json.dumps({"slot":key,"stage":"fixture-audit","evidence":before}),flush=True)
         def check_update(stage="after-update"):
             nonlocal pod, puid
             current,=[p for p in workload_pods() if any(v.get("persistentVolumeClaim",{}).get("claimName")==workspace_claim for v in p["spec"]["volumes"])]
