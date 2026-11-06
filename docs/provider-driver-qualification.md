@@ -93,6 +93,9 @@ request from the sandbox, through its normal proxy path, to the provider's fixed
 official endpoint. It prints no key, headers, provider error body or model reply.
 Repeat with the selected Anthropic and NVIDIA models in their own registered
 sandboxes. Do not substitute a direct request from the bastion for this check.
+Use `openshell sandbox exec` for this probe: administrative `oc exec` into the
+application container does not establish the OpenShell execution session or its
+provider placeholder environment, so it does not test the owner's inference path.
 
 Then exercise RHDH/OpenClaw:
 

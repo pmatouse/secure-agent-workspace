@@ -276,6 +276,12 @@ neither placeholder hashes nor a previously approved profile digest. Re-run
 `make saw-create`. For a previously approved site,
 enrollment can be enabled on its first install.
 
+`approvedProfiles` hashes the exact rendered BOM ConfigMap data, including image
+overrides and optional harness bundles. Recompute it when effective inputs differ;
+a standalone approval applies to RHDH only when their rendered data is identical.
+`harnessEnabled` controls optional `harnessRef` bundles. Enrollment attaches the
+audited tool gate independently to each supported agent sandbox.
+
 The projector reads the immutable enrollment and relay publications; no one
 copies generated intent or resource UIDs back into Git. Argo then enables the
 reconciler, prepared mounts and owner-only browser relay. `make saw-create`

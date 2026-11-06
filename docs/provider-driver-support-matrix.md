@@ -11,7 +11,7 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 | Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live (this revision) |
 |---|---|---|---|---|
-| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Pending candidate qualification |
+| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Sandbox API inference and owner browser chat passed on both data-science slots with `gpt-4.1-mini`; lifecycle/isolation qualification pending |
 | Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
 | NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Historical pass; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Not qualified |
 
@@ -45,6 +45,13 @@ chat, update/restart, credential isolation and RHDH delete. Record immutable
 image/Git revisions and actual Kubernetes workload identities in that record.
 Anthropic and NVIDIA require separate native-provider runs with real credentials
 before their live cells can pass. Do not infer their results from OpenAI success.
+
+The current OpenAI result uses the official remote API through the Kubernetes
+credential proxy. The CUDA-named sandbox does not imply local GPU inference.
+The stock gateway also passed committed-provider-response recovery with a fresh
+temporary administrator identity; the same provider ID/version was recovered
+and the disposable provider and temporary credentials were removed afterward.
+These checks do not replace RHDH lifecycle or final clean-install qualification.
 
 The container compiler currently selects one inference provider per sandbox;
 additional simultaneous `inference.models` chat choices remain unsupported and
