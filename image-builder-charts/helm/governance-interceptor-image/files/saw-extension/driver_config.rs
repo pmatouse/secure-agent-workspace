@@ -95,7 +95,27 @@ fn valid_kubernetes_driver(config: &Value) -> bool {
     }
     let gate = mounts.get(1).and_then(|m| m.get("name")).and_then(Value::as_str) == Some("saw-gate");
     let reserved = if gate { 3 } else { 1 };
-    if volumes.len() < reserved || volumes.len() > reserved + 16 || volumes.len() != mounts.len() { return false; }
+    if volumes.len() < reserved || volumes.len() > reserved + 16 || mounts.len() < volumes.len() { return false; }
+    // The briefing harness reuses two approved PVCs. These are the only aliases
+    // allowed; base mounts still have a one-to-one ordered volume mapping.
+    let aliases = &mounts[volumes.len()..];
+    if !aliases.is_empty() {
+        if !gate || aliases.len() != 2 { return false; }
+        for (mount, name, path, ro) in [
+            (&aliases[0], "saw-gate", "/sandbox/harness", true),
+            (&aliases[1], "saw-workspace", "/sandbox/briefing", false),
+        ] {
+            let Some(fields) = mount.as_object() else { return false; };
+            if fields.len() != 4 || fields.get("name").and_then(Value::as_str) != Some(name)
+                || fields.get("mount_path").and_then(Value::as_str) != Some(path)
+                || fields.get("read_only").and_then(Value::as_bool) != Some(ro) { return false; }
+            let Some(sub) = fields.get("sub_path").and_then(Value::as_str) else { return false; };
+            if ro {
+                let Some(digest) = sub.strip_prefix("harness-") else { return false; };
+                if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) { return false; }
+            } else if sub != "briefing" { return false; }
+        }
+    }
     let mut paths: Vec<String> = Vec::new();
     let mut claims: Vec<String> = Vec::new();
     for (index, (volume, mount)) in volumes.iter().zip(mounts.iter()).enumerate() {
