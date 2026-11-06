@@ -21,6 +21,8 @@ flowchart LR
 The transport is a restricted Python container with only a read-only script
 ConfigMap: no client secret, CLI session or Kubernetes token mount. It allows
 16 upstream connections, reserving capacity below OpenShell's sandbox limit.
+It starts Python with `-I` so the adjacent OIDC `token.py` helper cannot shadow
+Python's standard-library `token` module during transport startup.
 While the CLI restarts after an expired authentication token, the stable listener
 queues connections with bounded retries **before sending any request bytes**.
 The container's `--connect-only` mode never replays an HTTP request or WebSocket

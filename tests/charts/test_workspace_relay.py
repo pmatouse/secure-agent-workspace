@@ -1,5 +1,8 @@
 import shutil
+import socket
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -30,7 +33,7 @@ def test_secret_and_membership_boundaries(tmp_path):
     containers = {c["name"]:c for c in pod["containers"]}
     assert "credential" not in {v["name"] for v in containers["forward"]["volumeMounts"]}
     assert "--local 127.0.0.1:28789" in containers["forward"]["args"][0]
-    assert containers["transport"]["command"] == ["python3", "/config/saw_ui_limit.py", "18789", "28789", "16", "--connect-only"]
+    assert containers["transport"]["command"] == ["python3", "-I", "/config/saw_ui_limit.py", "18789", "28789", "16", "--connect-only"]
     assert containers["transport"]["volumeMounts"] == [{"name": "config", "mountPath": "/config", "readOnly": True}]
     assert containers["transport"]["securityContext"] == containers["forward"]["securityContext"]
     canonical = CHART.parent / "openshell-saw/files/installer/saw_ui_limit.py"
@@ -52,6 +55,52 @@ def test_secret_and_membership_boundaries(tmp_path):
     assert [v["secret"]["secretName"] for v in jobs["kc"]["volumes"] if "secret" in v] == ["kc-admin"]
     role = next(d for d in resources if d["kind"]=="Role" and d["metadata"].get("namespace", "ui") == "ui")
     assert role["rules"] == [{"apiGroups":[""],"resources":["secrets"],"resourceNames":["relay-credentials"],"verbs":["get","patch"]}]
+
+
+def test_rendered_transport_starts_beside_projected_token_module(tmp_path):
+    values = dict(enabled=True, clientID="site-agent", keycloakNamespace="kc", keycloakAdminSecret="kc-admin",
+                  issuer="https://kc.example/realms/openshell", trustedNamespace="trusted", gatewayNamespace="runtime",
+                  installationID="installation", gateway="gateway", workspace="agent", workspaceID="workspace-id",
+                  sandbox="assistant", ownerLogin="alice", ownerSubject="owner", subject="relay",
+                  imageBuildNamespace="build", sdkImage="example/sdk@sha256:"+"f"*64,
+                  host="alice.apps.example", egress=[{"ports":[{"port":443}]}])
+    rendered = subprocess.run(["helm", "template", "relay", str(CHART), "-n", "ui", "-f", "-"],
+                              input=yaml.safe_dump(values), capture_output=True, text=True, check=True)
+    docs = list(yaml.safe_load_all(rendered.stdout))
+    config = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "relay")
+    pod = next(d for d in docs if d["kind"] == "Deployment")["spec"]["template"]["spec"]
+    command = list(next(c for c in pod["containers"] if c["name"] == "transport")["command"])
+    script = tmp_path / "saw_ui_limit.py"
+    script.write_text(config["data"]["saw_ui_limit.py"])
+    # Projected token.py is an OIDC helper, not Python's stdlib token module.
+    # asyncio -> logging -> tokenize must not import it from the script directory.
+    (tmp_path / "token.py").write_text("raise RuntimeError('projected-token-shadow')\n")
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+    command[0] = sys.executable
+    command[command.index("/config/saw_ui_limit.py")] = str(script)
+    command[command.index("18789")] = str(port)
+    with subprocess.Popen(command, cwd=tmp_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
+        try:
+            deadline = time.monotonic() + 5
+            while True:
+                if process.poll() is not None:
+                    _, error = process.communicate()
+                    pytest.fail("rendered transport exited before listening: " + error)
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                        break
+                except OSError:
+                    assert time.monotonic() < deadline, "transport did not start listening"
+                    time.sleep(0.02)
+        finally:
+            process.terminate()
+            process.communicate(timeout=3)
+    # The regression fixture must reproduce the original failure without -I.
+    unsafe = subprocess.run([arg for arg in command if arg != "-I"], cwd=tmp_path,
+                            capture_output=True, text=True, timeout=5)
+    assert unsafe.returncode != 0 and "projected-token-shadow" in unsafe.stderr
 
 
 def test_relay_jobs_change_with_images_and_mount_their_exact_scripts():

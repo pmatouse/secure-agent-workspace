@@ -77,7 +77,8 @@ spec:
         volumeMounts: [{name: session, mountPath: /session}]
       - name: transport
         image: {{ $v.pythonImage }}
-        command: [python3, /config/saw_ui_limit.py, '18789', '28789', '16', --connect-only]
+        # token.py shares this ConfigMap; isolate stdlib imports from /config.
+        command: [python3, -I, /config/saw_ui_limit.py, '18789', '28789', '16', --connect-only]
         securityContext: *restricted
         volumeMounts: [{name: config, mountPath: /config, readOnly: true}]
       - name: browser-login
