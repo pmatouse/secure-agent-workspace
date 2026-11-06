@@ -1,5 +1,6 @@
 {{- include "saw-users.validate" . -}}
 {{- range $user := .Values.users | default list }}
+{{- if not (and $.Values.projection.enabled (eq (dig "deployment" "mode" "vm" ($user.values | default dict)) "container")) }}
 {{- $container := eq (dig "deployment" "mode" "vm" ($user.values | default dict)) "container" }}
 {{- if not $container }}
 ---
@@ -44,5 +45,6 @@
   "ignoreVMDefaults" true
   "values" (include "saw-users.openshellValues" (dict "root" $ "user" $user))
 ) }}
+{{- end }}
 {{- end }}
 {{- end }}

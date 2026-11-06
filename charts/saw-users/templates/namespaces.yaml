@@ -1,5 +1,6 @@
 {{- include "saw-users.validate" . -}}
 {{- range $user := .Values.users | default list }}
+{{- if not (and $.Values.projection.enabled (eq (dig "deployment" "mode" "vm" ($user.values | default dict)) "container")) }}
 ---
 apiVersion: v1
 kind: Namespace
@@ -23,4 +24,5 @@ metadata:
     {{- if not (include "saw-users.prune" (dict "root" $ "user" $user)) }}
     argocd.argoproj.io/sync-options: Prune=false
     {{- end }}
+{{- end }}
 {{- end }}

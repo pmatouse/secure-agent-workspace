@@ -101,6 +101,7 @@ clusterGroup:
       path: charts/saw-users
       extraValueFiles:
         - /overrides/saw-users.yaml
+        - /overrides/pr153-static.yaml
       overrides:
         - name: ownerResolution.enabled
           value: "true"
