@@ -11,9 +11,9 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 | Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live (this revision) |
 |---|---|---|---|---|
-| OpenAI | `gpt-6-luna` | Passed; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Pending glmhg qualification |
-| Anthropic | `claude-sonnet-4-6` | Passed; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Blocked: no test credential |
-| NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Passed; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Blocked: no test credential |
+| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Pending candidate qualification |
+| Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
+| NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Historical pass; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Not qualified |
 
 Offline cases use synthetic credentials and Node execution of the actual
 compiled OpenClaw configuration. Provider recovery tests cover a lost create
@@ -25,25 +25,26 @@ Rust test to execute, rather than silently treating a missing toolchain as a pas
 
 ## Historical VM results
 
-All three providers passed authenticated inference requests from inside the
-sandbox through the in-VM OpenShell sandbox proxy, before namespace credential isolation. The namespace-proxy path is **not yet re-validated** for this matrix. Each API returned **HTTP 200**
-with a response matching the test prompt.
+The 2026-10-21 results covered authenticated inference from a sandbox through
+the in-VM OpenShell sandbox proxy, before namespace credential isolation. Each
+API returned **HTTP 200** with a response matching the test prompt. These results
+do not qualify the current namespace-proxy path or candidate installation.
 
 OpenClaw chat also returned responses from all three providers. NVIDIA passed
 with both an explicit model selection and the configured notebook default.
 
-**Environment:** OpenShift with Podman running inside KubeVirt VMs;
-`default/notebook` in `saw-provider-test` (OpenAI and Anthropic) and
-`saw-nvidia-test` (NVIDIA). Running on OpenShift does not validate the
-OpenShell Kubernetes driver.
+The historical backend was Podman inside KubeVirt VMs on OpenShift. This does
+not validate the OpenShell Kubernetes driver. Environment identities and raw
+live evidence belong in the separate qualification record, not this matrix.
 
 ## Remaining work
 
 Follow [provider qualification](provider-driver-qualification.md) against the
 candidate runtime and governance images: sandbox API inference, owner browser
 chat, update/restart, credential isolation and RHDH delete. Record immutable
-image/Git revisions and actual Kubernetes workload identities. Anthropic and
-NVIDIA require real provider credentials before their live cells can pass.
+image/Git revisions and actual Kubernetes workload identities in that record.
+Anthropic and NVIDIA require separate native-provider runs with real credentials
+before their live cells can pass. Do not infer their results from OpenAI success.
 
 The container compiler currently selects one inference provider per sandbox;
 additional simultaneous `inference.models` chat choices remain unsupported and
@@ -51,7 +52,8 @@ fail closed. Kata/confidential runtime qualification is outside this matrix.
 
 ## Scope
 
-Validation covers inference in existing workspaces after credential and model
-updates. Clean deployment, restart recovery, tools, and memory embeddings are
-not validated. A memory-embedding credential error was observed separately
-while chat succeeded.
+The historical live scope was inference in existing workspaces after credential
+and model updates. It did not qualify clean installation, restart recovery,
+tools, or memory embeddings. The current candidate still needs its own
+installation, browser lifecycle, persistence and denial checks. Offline tests
+and image builds do not satisfy those live criteria.
