@@ -11,7 +11,7 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 | Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live qualification |
 |---|---|---|---|---|
-| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Initial sandbox API inference, owner browser chat and standalone audited tool decisions passed on both data-science slots. Standalone model update passed with fresh Pods and retained workspace/audit data; complete RHDH lifecycle and clean replay remain pending |
+| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Sandbox API inference, owner chat and audited tool decisions passed on both data-science slots. Standalone model update, stop/start and explicit restart preserved workspace/audit data. RHDH browser create/update and subsequent inference passed; complete lifecycle and clean replay remain pending |
 | Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
 | NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Historical pass; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Not qualified |
 
@@ -64,13 +64,22 @@ initial inference pass:
   both RHDH browser UIs also passed. A standalone model update then passed actual
   API inference and owner chat on both replacement application Pods, with the
   selected model reflected in provider response transcripts. Workspace canaries,
-  tool effects and original audit records survived unchanged. Stop/start,
-  explicit restart and the full RHDH lifecycle still require qualification.
+  tool effects and original audit records survived unchanged. A subsequent
+  standalone stop/start and explicit restart passed the same persistence,
+  inference and chat checks. The post-restart controller observation found no
+  remaining temporary administrator sessions or private credential directories.
+  RHDH browser model update also passed with fresh application Pods, unchanged
+  workspace PVCs and the selected model confirmed by both provider transcripts
+  and a new browser-chat response. RHDH browser stop passed with no application
+  Pods, unavailable chat routes and retained workspace/audit claims. Portal
+  start/persistence, delete/recreate and clean installation remain pending.
 - A RHDH tool run reached its decisions, but the stock CLI closed an exec relay
   before reporting the verification command's exit status. Independent read-only
   checks confirmed that slot's expected file effects and audit records. The
-  combined test remains failed; those diagnostics do not qualify stock exec or
-  the other slot's tool flow.
+  combined test remains failed. A separate test with new fixtures after the
+  RHDH model update passed both slots, including stock-exec verification and six
+  expected audit records per slot. This does not resolve the earlier
+  intermittent transport failure or justify retrying mutating commands.
 - The stock CLI's browser-forward process briefly closes its listener when
   its OIDC token expires. New-request recovery and established WebSocket
   reconnection must be tested separately; a successful readiness check does
