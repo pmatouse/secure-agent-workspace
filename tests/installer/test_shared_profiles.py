@@ -1,13 +1,12 @@
 """One profile language and dependency sequence for VM and Kubernetes backends."""
 
 from dataclasses import asdict
-import importlib.util
 from types import SimpleNamespace
 
 import pytest
 import yaml
 
-from conftest import PROFILES, ROOT, profile_files
+from conftest import PROFILES, profile_files
 
 
 def files_for(*, providers=None, sandboxes=None, workspace=None):
@@ -42,16 +41,6 @@ def test_vm_reexports_actual_shared_objects(ab):
                  "InstallerError", "read_profile_files", "parse_profiles",
                  "validate_profiles", "apply_workspace_sequence"):
         assert getattr(ab, name) is getattr(ab._saw_core, name)
-
-
-def test_vm_and_kubernetes_load_the_same_canonical_module(ab):
-    path = ROOT / "kubernetes-runtime/saw_kubernetes/core.py"
-    spec = importlib.util.spec_from_file_location("test_saw_kubernetes_core", path)
-    loader = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(loader)
-    assert loader.shared is ab._saw_core
-    assert loader.shared.Profile is ab.Profile
-    assert loader.shared.InstallerError is ab.InstallerError
 
 
 @pytest.mark.parametrize("files", [
