@@ -11,7 +11,7 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 | Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live qualification |
 |---|---|---|---|---|
-| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Initial sandbox API inference, owner browser chat and audited tool decisions passed on both data-science slots; model-update and complete RHDH lifecycle qualification remain blocked; see below |
+| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Sandbox API inference, owner chat and audited tool decisions passed on both data-science slots. Standalone model update, stop/start and explicit restart preserved workspace/audit data. RHDH browser create/update and subsequent inference passed; complete lifecycle and clean replay remain pending |
 | Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
 | NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Historical pass; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Not qualified |
 
@@ -56,14 +56,39 @@ These checks do not replace RHDH lifecycle or final clean-install qualification.
 Current qualification also exposed failures that remain distinct from the
 initial inference pass:
 
-- A model update reached Ready and preserved storage, but a stock notebook
-  OpenClaw release migrated the requested model to another model. Direct API
-  inference used the requested model; the chat transcript did not. Model-update
-  parity requires both paths to agree with the approved input.
+- An earlier model update reached Ready and preserved storage, but stock
+  OpenClaw restored/migrated the notebook's model configuration. The integration
+  now publishes managed configuration through the native batch command and uses
+  an explicit managed provider ID. Fresh standalone and RHDH sandboxes passed
+  actual API inference and owner chat with matching requested/response models;
+  both RHDH browser UIs also passed. A standalone model update then passed actual
+  API inference and owner chat on both replacement application Pods, with the
+  selected model reflected in provider response transcripts. Workspace canaries,
+  tool effects and original audit records survived unchanged. A subsequent
+  standalone stop/start and explicit restart passed the same persistence,
+  inference and chat checks. The post-restart controller observation found no
+  remaining temporary administrator sessions or private credential directories.
+  RHDH browser model update also passed with fresh application Pods, unchanged
+  workspace PVCs and the selected model confirmed by both provider transcripts
+  and a new browser-chat response. RHDH browser stop passed with no application
+  Pods, unavailable chat routes and retained workspace/audit claims. Portal
+  start/persistence, delete/recreate and clean installation remain pending.
+- A RHDH tool run reached its decisions, but the stock CLI closed an exec relay
+  before reporting the verification command's exit status. Independent read-only
+  checks confirmed that slot's expected file effects and audit records. The
+  combined test remains failed. A separate test with new fixtures after the
+  RHDH model update passed both slots, including stock-exec verification and six
+  expected audit records per slot. This does not resolve the earlier
+  intermittent transport failure or justify retrying mutating commands.
 - The stock CLI's browser-forward process briefly closes its listener when
   its OIDC token expires. New-request recovery and established WebSocket
   reconnection must be tested separately; a successful readiness check does
   not establish uninterrupted chat.
+- Initial deployment of the shared transport exposed a Python import collision
+  with the adjacent OIDC helper. Isolated mode fixes that startup failure, with
+  a subprocess regression reproducing the old failure. GitOps recovery and
+  subsequent inference/chat passed; a clean replay of the final revision remains
+  required and must be recorded separately from recovery.
 - An identity-service upgrade rejected the existing service-account admin API
   tokens and blocked RHDH enrollment. The shared bootstrap now assigns the
   supported built-in Admin API scope; live reads recovered for all three

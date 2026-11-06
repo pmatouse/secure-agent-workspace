@@ -157,6 +157,15 @@ This shows the input contract, not a runnable site with omitted fields. Generate
 unique registration/installation IDs and keep them stable for the installation.
 Never reuse an old registration to adopt retained storage or credentials.
 
+Enrollment also pins the initial compiled plan. A runtime/compiler change that
+changes that plan cannot be authorized merely by changing an image digest,
+source revision or intent generation. An in-place operator reapproval/migration
+workflow is not implemented. Use the documented deletion and a new registration
+for such a change; runtime/workspace storage is removed, while the separate
+audit history remains retained. Do not remove the plan check or edit the
+immutable enrollment publication. Ordinary supported public-model updates use
+the existing model-input lifecycle and do not require a new registration.
+
 For an internal-registry runtime image, `automaticEnrollment.buildNamespace`
 identifies its build namespace. The enrollment and preparation pull grants are
 restricted to the image stream named by the configured digest-pinned image.
