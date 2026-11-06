@@ -11,7 +11,7 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 | Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live qualification |
 |---|---|---|---|---|
-| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Initial sandbox API inference, owner browser chat and audited tool decisions passed on both data-science slots; model-update and complete RHDH lifecycle qualification remain blocked; see below |
+| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Initial sandbox API inference, owner browser chat and standalone audited tool decisions passed on both data-science slots. Standalone model update passed with fresh Pods and retained workspace/audit data; complete RHDH lifecycle and clean replay remain pending |
 | Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
 | NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Historical pass; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Not qualified |
 
@@ -61,8 +61,16 @@ initial inference pass:
   now publishes managed configuration through the native batch command and uses
   an explicit managed provider ID. Fresh standalone and RHDH sandboxes passed
   actual API inference and owner chat with matching requested/response models;
-  both RHDH browser UIs also passed. Model-update and restart parity still require
-  the same checks after lifecycle transitions.
+  both RHDH browser UIs also passed. A standalone model update then passed actual
+  API inference and owner chat on both replacement application Pods, with the
+  selected model reflected in provider response transcripts. Workspace canaries,
+  tool effects and original audit records survived unchanged. Stop/start,
+  explicit restart and the full RHDH lifecycle still require qualification.
+- A RHDH tool run reached its decisions, but the stock CLI closed an exec relay
+  before reporting the verification command's exit status. Independent read-only
+  checks confirmed that slot's expected file effects and audit records. The
+  combined test remains failed; those diagnostics do not qualify stock exec or
+  the other slot's tool flow.
 - The stock CLI's browser-forward process briefly closes its listener when
   its OIDC token expires. New-request recovery and established WebSocket
   reconnection must be tested separately; a successful readiness check does
