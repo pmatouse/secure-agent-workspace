@@ -37,6 +37,13 @@ def offered_profiles(step, mode):
     return []
 
 
+def workspace_values(step, mode, profile):
+    if profile not in offered_profiles(step, mode):
+        raise RuntimeError(f"installed owner template does not offer the requested {mode} profile")
+    # Only the separate scaffolder secrets map carries the actual credential.
+    return {"profile": profile, "deploymentMode": mode, "inference__api_key": "********"}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("action", choices=("inspect", "create", "update", "delete", "status", "start", "stop", "workspace-status", "logs"))
@@ -44,6 +51,7 @@ def main():
     p.add_argument("--issuer", required=True)
     p.add_argument("--user", required=True)
     p.add_argument("--profile",default="audited-openclaw")
+    p.add_argument("--deployment-mode", choices=("vm", "container"), default="container")
     p.add_argument("--model",action="append",default=[],metavar="FIELD=MODEL")
     p.add_argument("--endpoint", help="site-approved custom inference HTTPS v1 URL")
     p.add_argument("--key-file", type=Path)
@@ -120,17 +128,15 @@ def main():
         step = entity["spec"]["parameters"][-1]
         modes = step["properties"].get("deploymentMode", {"enum":["vm"]})["enum"]
         print(json.dumps({"user":a.user,"template":template,"deploymentModes":modes,
-                          "profiles":offered_profiles(step,"container"),
+                          "profiles":offered_profiles(step,a.deployment_mode),
                           "profilesByDeployment":{mode:offered_profiles(step,mode) for mode in modes}})); return
     data = {"templateRef":"template:default/"+template, "values":{},"secrets":{}}
     if a.action == "delete":
         data["values"].update(workspace="component:default/saw-"+a.user, confirm=True)
     else:
-        if a.profile not in offered_profiles(entity["spec"]["parameters"][-1], "container"):
-            raise RuntimeError("installed owner template does not offer the requested container profile")
         # The browser places a redacted value in form data to satisfy JSON
         # Schema. Only the separate secrets map carries the credential.
-        data["values"].update(profile=a.profile,deploymentMode="container",inference__api_key="********")
+        data["values"].update(workspace_values(entity["spec"]["parameters"][-1], a.deployment_mode, a.profile))
         if a.endpoint:
             data["values"]["inference__url"] = a.endpoint
         for assignment in a.model:
