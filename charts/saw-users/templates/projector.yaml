@@ -223,8 +223,15 @@ spec:
         helm:
           releaseName: 'workspace-{{ "{{" }} .name {{ "}}" }}'
           values: '{{ "{{" }} .workspaceValues {{ "}}" }}'
+      # Argo owns these two hook-state finalizers. Preserve them during sync;
+      # keep detecting changes to the resource-deletion finalizer and app spec.
+      ignoreDifferences:
+        - group: argoproj.io
+          kind: Application
+          jqPathExpressions:
+            - '.metadata.finalizers[]? | select(. == "pre-delete-finalizer.argocd.argoproj.io" or . == "pre-delete-finalizer.argocd.argoproj.io/cleanup")'
       syncPolicy:
         automated: {prune: true, selfHeal: true}
         retry: {limit: 20, refresh: true}
-        syncOptions: [PrunePropagationPolicy=foreground]
+        syncOptions: [PrunePropagationPolicy=foreground, RespectIgnoreDifferences=true]
 {{- end }}{{- end }}
