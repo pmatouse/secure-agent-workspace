@@ -52,7 +52,7 @@ flowchart TD
 | Governance interceptor | Supplies signed provider profiles and policy. SAW's existing interceptor extension additionally restricts Kubernetes driver configuration to an approved PVC/resource envelope submitted by an admin mTLS identity. |
 | Credential proxy | Resolves opaque credential markers using trusted-namespace Secrets and the shared provider policy. It supplies credentials only for approved destinations. |
 | Audit writer | Owns retained history outside the application namespace and signs acknowledgements after append. The application mounts an exchange volume, not the history PVC. |
-| Browser relay | Combines owner-only login, a dedicated nonadmin Keycloak client and OpenShell forwarding. Its membership is scoped to the intended workspace. Only its membership Job opens a temporary gateway administrator session; the UI has no administrator identity or trust-write permission. |
+| Browser relay | Combines owner-only login, a dedicated nonadmin Keycloak client, shared connection limiter and stock OpenShell forwarding. Its membership is scoped to the intended workspace. Only its membership Job opens a temporary gateway administrator session; the UI has no administrator identity or trust-write permission. |
 
 The implementation lives in `kubernetes-runtime/` and the `saw-kubernetes-*`,
 `openshell-saw-kubernetes`, `saw-runtime-policies`, `saw-audit-writer`,

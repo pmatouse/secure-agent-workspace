@@ -800,7 +800,7 @@ def test_rendered_proxies_verify_issuer_tls_by_default(settings, skip):
 def test_installer_configmap_ships_the_real_files(default_docs, ab):
     data = installer_data(default_docs)
     source = (CHART / "files" / "installer" / "apply_bom.py").read_text()
-    for name in ("core", "admin"):
+    for name in ("core", "admin", "ui_limit"):
         shared = (CHART / "files/installer" / ("saw_"+name+".py")).read_bytes()
         field = "_SAW_"+name.upper()+"_EMBEDDED_B64"
         marker = field+' = "__SAW_'+name.upper()+'_SOURCE_BASE64__"'

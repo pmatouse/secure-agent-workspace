@@ -33,6 +33,8 @@ def test_manifest_requires_every_tool_gate_file():
         module.CORE_SOURCE.read_bytes()).decode("ascii") + '"\n'
     data["apply_bom.py"] += '_SAW_ADMIN_EMBEDDED_B64 = "' + base64.b64encode(
         module.CORE_SOURCE.with_name("saw_admin.py").read_bytes()).decode("ascii") + '"\n'
+    data["apply_bom.py"] += '_SAW_UI_LIMIT_EMBEDDED_B64 = "' + base64.b64encode(
+        module.CORE_SOURCE.with_name("saw_ui_limit.py").read_bytes()).decode("ascii") + '"\n'
     assert len(module.build_manifest(data).splitlines()) == len(BUNDLE_FILES)
     for name in BUNDLE_FILES[3:]:
         with pytest.raises(SystemExit, match=name):

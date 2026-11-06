@@ -82,6 +82,8 @@ def run_file(path, *, cwd=None, pythonpath=None):
 
 
 def test_render_embeds_exact_canonical_bytes_and_preserves_legacy_manifest(rendered_data, signer):
+    assert "saw_ui_limit.py" not in rendered_data
+    assert signer.embedded_core(rendered_data["apply_bom.py"], "_SAW_UI_LIMIT_EMBEDDED_B64") == CORE.with_name("saw_ui_limit.py").read_bytes()
     assert "saw_admin.py" not in rendered_data
     assert signer.embedded_core(rendered_data["apply_bom.py"], "_SAW_ADMIN_EMBEDDED_B64") == CORE.with_name("saw_admin.py").read_bytes()
     assert "saw_core.py" not in rendered_data
@@ -153,6 +155,7 @@ def test_embedded_installer_and_runtime_copy_ignore_adjacent_and_pythonpath_core
         directory.mkdir()
         (directory / "saw_core.py").write_text(hostile)
         (directory / "saw_admin.py").write_text(hostile)
+        (directory / "saw_ui_limit.py").write_text(hostile)
     (live / "apply_bom.py").write_text(rendered_data["apply_bom.py"])
     # Golden-image staging and cmd_apply both copy the same complete artifact.
     shutil.copyfile(live / "apply_bom.py", staged / "apply_bom.py")
@@ -262,12 +265,15 @@ def test_golden_verifier_stages_embedded_core_and_refuses_tampering(rendered_dat
     assert not witness.exists()
 
 
-def test_shared_admin_tampering_and_unsigned_module_rejected(rendered_data, signer):
-    changed = base64.b64encode(CORE.with_name("saw_admin.py").read_bytes() + b"\n# drift\n").decode()
-    source = re.sub(r'^_SAW_ADMIN_EMBEDDED_B64 = .*$',
-                    lambda _: '_SAW_ADMIN_EMBEDDED_B64 = "' + changed + '"',
+@pytest.mark.parametrize("name", ["admin", "ui_limit"])
+def test_shared_admin_tampering_and_unsigned_module_rejected(rendered_data, signer, name):
+    filename = "saw_" + name + ".py"
+    field = "_SAW_" + name.upper() + "_EMBEDDED_B64"
+    changed = base64.b64encode(CORE.with_name(filename).read_bytes() + b"\n# drift\n").decode()
+    source = re.sub(r'^' + field + r' = .*$',
+                    lambda _: field + ' = "' + changed + '"',
                     rendered_data["apply_bom.py"], flags=re.MULTILINE)
-    with pytest.raises(SystemExit, match="canonical saw_admin.py"):
+    with pytest.raises(SystemExit, match="canonical " + filename):
         signer.build_manifest({**rendered_data, "apply_bom.py": source})
     with pytest.raises(SystemExit, match="signed artifact"):
-        signer.build_manifest({**rendered_data, "saw_admin.py": "foreign"})
+        signer.build_manifest({**rendered_data, filename: "foreign"})

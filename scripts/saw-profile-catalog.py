@@ -566,6 +566,8 @@ def main(argv=None):
     policy_outputs = [
         (ROOT / "charts/openshell-rhdh/files/saw_keycloak_admin.py",
          (ROOT / "charts/openshell-keycloak/files/saw_keycloak_admin.py").read_text()),
+        (ROOT / "charts/saw-workspace-relay/files/saw_ui_limit.py",
+         (ROOT / "charts/openshell-saw/files/installer/saw_ui_limit.py").read_text()),
         (ROOT / "charts/openshell-rhdh/files/workspace.py",
          (ROOT / "charts/saw-users/files/workspace.py").read_text()),
         (ROOT / "charts/saw-users/templates/_governed-proxy-policy.tpl", policy_template.read_text()),
