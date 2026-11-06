@@ -26,6 +26,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from saw_keycloak_admin import ensure_admin_api_scope
+
 SA = "/var/run/secrets/kubernetes.io/serviceaccount"
 
 
@@ -92,6 +94,9 @@ def main():
     if group:
         admin = f"{kc}/admin/realms/{realm}"
         client = call(f"{base}?clientId={urllib.parse.quote(client_id)}", token=token, ctx=ctx)[0]
+        ensure_admin_api_scope(
+            lambda method, path, body=None: call(admin + path, method=method, body=body, token=token, ctx=ctx),
+            client["id"])
         grant_catalog_reader(admin, client["id"], token, ctx)
         everyone_in_group(admin, group, token, ctx)
     return 0

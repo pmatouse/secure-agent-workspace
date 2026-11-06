@@ -44,6 +44,8 @@ metadata:
   labels:
     {{- include "openshell-rhdh.labels" . | nindent 4 }}
 data:
+  saw_keycloak_admin.py: |
+{{ .Files.Get "files/saw_keycloak_admin.py" | indent 4 }}
   keycloak-client.py: |
 {{ .Files.Get "files/keycloak-client.py" | indent 4 }}
 ---
