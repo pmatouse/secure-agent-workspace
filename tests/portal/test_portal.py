@@ -1453,6 +1453,68 @@ def test_owner_subject_cache_rechecks_account_recreation(portal, monkeypatch, tm
     assert subjects.fill(workspaces)[0]["ownerSubject"] == ""
 
 
+@pytest.mark.parametrize("failure", [401, "network"])
+def test_owner_lookup_failure_holds_vm_and_container_projection_until_recovery(
+        portal, monkeypatch, tmp_path, failure):
+    secret = tmp_path / "secret"
+    secret.write_text("test-client-secret\n")
+    for key, value in {"KEYCLOAK_URL": "https://kc.example.com", "KEYCLOAK_REALM": "openshell",
+                       "KEYCLOAK_CLIENT_ID": "rhdh", "KEYCLOAK_SECRET_FILE": str(secret)}.items():
+        monkeypatch.setenv(key, value)
+    now = [1000]
+    monkeypatch.setattr(portal.time, "time", lambda: now[0])
+    failed, calls = [False], []
+
+    def lookup(*args, **kwargs):
+        calls.append(list(args[4]))
+        if failed[0]:
+            if failure == "network":
+                raise OSError("connection refused")
+            raise portal.HttpError(failure, "Keycloak users: HTTP 401")
+        return {name: "id-" + name for name in args[4]}
+
+    monkeypatch.setattr(portal, "keycloak_user_ids", lookup)
+    subjects = portal.OwnerSubjects(ttl=60)
+    workspaces = [{"name": "vm-owner", "ownerSubject": "", "values": {"deployment": {"mode": "vm"}}},
+                  {"name": "container-owner", "ownerSubject": "", "values": {"deployment": {"mode": "container"}}}]
+    assert [w["ownerSubject"] for w in subjects.fill(workspaces)] == ["id-vm-owner", "id-container-owner"]
+    failed[0] = True
+    now[0] += 60
+    with pytest.raises(portal.PortalError, match="workspace projection held"):
+        subjects.fill(workspaces)
+    # No stale identities, empty owner fields or partial generator response
+    # may escape while the failed request is being throttled.
+    now[0] += 1
+    for selected in (workspaces, workspaces[:1], workspaces[1:]):
+        with pytest.raises(portal.PortalError, match="workspace projection held"):
+            subjects.fill(selected)
+    assert len(calls) == 2
+    failed[0] = False
+    now[0] += 60
+    assert [w["ownerSubject"] for w in subjects.fill(workspaces)] == ["id-vm-owner", "id-container-owner"]
+    assert len(calls) == 3
+
+
+def test_initial_owner_lookup_failure_is_not_cached_as_missing_user(portal, monkeypatch, tmp_path):
+    secret = tmp_path / "secret"
+    secret.write_text("test-client-secret\n")
+    for key, value in {"KEYCLOAK_URL": "https://kc.example.com", "KEYCLOAK_REALM": "openshell",
+                       "KEYCLOAK_CLIENT_ID": "rhdh", "KEYCLOAK_SECRET_FILE": str(secret)}.items():
+        monkeypatch.setenv(key, value)
+    def unavailable(*args, **kwargs):
+        raise portal.HttpError(401, "Keycloak users: HTTP 401")
+
+    monkeypatch.setattr(portal, "keycloak_user_ids", unavailable)
+    subjects = portal.OwnerSubjects(ttl=60)
+    workspaces = [{"name": "alice", "ownerSubject": ""}]
+    for _ in range(2):
+        with pytest.raises(portal.PortalError, match="workspace projection held"):
+            subjects.fill(workspaces)
+    # A separately pinned explicit owner does not depend on failed discovery.
+    explicit = [{"name": "bob", "ownerSubject": "operator-resolved-subject"}]
+    assert subjects.fill(explicit) == explicit
+
+
 def test_the_ca_bundle_holds_every_source_found(tmp_path, monkeypatch):
     """files/ca-bundle.py: system CAs, then the cluster's, the extra ones;
     a missing source is skipped (no service account here)."""
