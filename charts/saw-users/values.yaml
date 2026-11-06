@@ -132,3 +132,14 @@ global:
   clusterDomain: example.com
   pattern: secure-agent-workspace
   vpArgoNamespace: vp-gitops
+
+# Static container entries use the same workspace projector as the portal.
+# RHDH supplies already-projected values and leaves this disabled.
+projection:
+  enabled: false
+  image: registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5
+  # Explicit API/DNS egress for the projector and its identity bootstrap.
+  egress: []
+  # Match the selected OpenShift GitOps instance's controller Pod, not a
+  # presumed instance name. Used together with the Argo namespace selector.
+  applicationSetControllerLabels: {}

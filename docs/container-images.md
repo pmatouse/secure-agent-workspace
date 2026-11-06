@@ -20,9 +20,10 @@ those deployment overrides local when preparing changes for upstream.
 | `nemoclaw-sandbox` | `latest`, `sha-<commit>` | Data-science default and CUDA profiles |
 | `governance-interceptor` | `latest`, `sha-<commit>`, OpenShell ref (currently `v0.1.2`) | Interceptor deployment and image builder |
 | `saw-credential-proxy` | `latest`, `sha-<commit>` (multi-arch) | Chart default `credentialProxy.image` (digest pinned in `charts/openshell-saw/values.yaml`) |
+| `saw-kubernetes-runtime` | `latest`, `sha-<commit>` (multi-arch) | Container reconciler, preparation/enrollment helpers, standalone projector and relay membership Job; operator site values pin the manifest digest. |
 | `saw-harness-<bundle>` | Bundle version, `sha-<commit>` | Optional digest-pinned `harnessRef.image` |
 
-`openshell-gateway`, `nemoclaw-cli`, `nemoclaw-sandbox`, `saw-credential-proxy` and `governance-interceptor` tags are
+`openshell-gateway`, `nemoclaw-cli`, `nemoclaw-sandbox`, `saw-credential-proxy`, `saw-kubernetes-runtime` and `governance-interceptor` tags are
 multi-architecture indexes (`linux/amd64`, `linux/arm64`): each architecture
 builds natively and pushes by digest, and the merge job joins the digests with
 `.github/actions/merge-image`. `make images-mirror` on an arm64 cluster gets
@@ -39,6 +40,12 @@ repository. GHCR can create packages as private initially: a package administrat
 must set each package's visibility to **Public** in its GitHub package settings,
 including newly added harness bundles. Public pulls need no registry Secret.
 Publishing uses `GITHUB_TOKEN` with `packages: write`.
+The Kubernetes runtime recipe is `kubernetes-runtime/Containerfile`; it packages
+the canonical BOM and temporary admin-session modules, the workspace projector,
+and protobuf stubs generated from the pinned OpenShell source. Its build context
+allowlist excludes unrelated repository and local files. See the
+[container installation guide](container-installation.md) for operator builds
+and component input references.
 The first publication of a new package can therefore fail its public-pull
 check after the image is pushed. Set it to Public, then rerun the workflow.
 GitHub's documented [package REST API](https://docs.github.com/en/rest/packages/packages)

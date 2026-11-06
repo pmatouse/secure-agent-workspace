@@ -1,10 +1,19 @@
 # Self-service agent workspaces (RHDH)
 
 Users create their own Secure Agent Workspace from Red Hat Developer Hub
-(RHDH). They pick a SAW-BOM profile, enter the keys that profile needs, and
-get namespace `saw-<user>` with a VM, the profile's OpenShell sandboxes, and
+(RHDH). They pick an enabled deployment backend and a SAW-BOM profile, enter the keys that profile needs, and
+get namespace `saw-<user>` with the profile's OpenShell sandboxes and
 routes to the sandbox web UIs. Nothing goes into Git: the keys go to Vault,
 and the workspace is an entry in an in-cluster registry that Argo CD builds.
+
+VM remains the default. Container mode uses the same forms, registration,
+provider inputs and lifecycle pipelines, with a Kubernetes runtime adapter.
+An operator enables `portal.deploymentModes: [vm, container]` and supplies an
+approved `portal.containerSites.<owner>` entry. Backend selection is recorded
+in the registration and cannot silently migrate an existing workspace.
+See [container installation](container-installation.md#pattern-and-rhdh-enablement)
+and [architecture](container-workspaces.md). The VM-specific flow below describes
+the default backend; container component ownership and data paths are in those guides.
 
 The step-by-step walkthrough and manual test is in [rhdh-user-guide.md](rhdh-user-guide.md).
 
