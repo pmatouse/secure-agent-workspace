@@ -6,8 +6,8 @@ sawUsers:
   workspaceRevisions:
     sawk8sowner: d3ea06363c20c5c358649083d88bb7e0be76cda2
     sawvmcanary: d3ea06363c20c5c358649083d88bb7e0be76cda2
-    sawpr153two: b0f02442255836e3bbbad351e3770a42440f9d3b
-    sawpr153vm: b0f02442255836e3bbbad351e3770a42440f9d3b
+    sawpr153two: 6a20d4fd21b789bff3442f38588c2016cd16502b
+    sawpr153vm: 6a20d4fd21b789bff3442f38588c2016cd16502b
 portal:
   deploymentModes:
   - vm
@@ -19,7 +19,7 @@ portal:
       subject: 8b8975a5-4e61-4352-9665-11dbc9961155
       stack:
         identity:
-          revision: b0f02442255836e3bbbad351e3770a42440f9d3b
+          revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
           values:
             enabled: true
             ownerID: '@INSTALLATION@'
@@ -29,7 +29,7 @@ portal:
             - '@OWNER@-gateway.@RUNTIME@.svc'
             - '@OWNER@-gateway.@RUNTIME@.svc.cluster.local'
         policy:
-          revision: b0f02442255836e3bbbad351e3770a42440f9d3b
+          revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
           values:
             enabled: true
             targetNamespace: '@RUNTIME@'
@@ -104,7 +104,7 @@ portal:
                     protocol: TCP
                     port: 3128
         proxy:
-          revision: b0f02442255836e3bbbad351e3770a42440f9d3b
+          revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
           values:
             enabled: true
             ownerID: '@INSTALLATION@'
@@ -181,7 +181,7 @@ portal:
                 - protocol: TCP
                   port: 443
         gateway:
-          revision: b0f02442255836e3bbbad351e3770a42440f9d3b
+          revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
           values:
             deployment:
               mode: container
@@ -281,7 +281,7 @@ portal:
             route:
               enabled: false
         audit:
-          revision: b0f02442255836e3bbbad351e3770a42440f9d3b
+          revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
           values:
             enabled: true
             trustedNamespace: '@ARCHIVE@'
@@ -297,7 +297,7 @@ portal:
               sandbox: audited
       automaticEnrollment:
         image: image-registry.openshift-image-registry.svc:5000/saw-pr153-build/saw-kubernetes-runtime@sha256:4b35b04182f0d9a4769c40b686477d715f6359f23bcc7585373046be357ed771
-        revision: b0f02442255836e3bbbad351e3770a42440f9d3b
+        revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
         buildNamespace: saw-pr153-build
         resources:
           limits:
@@ -344,7 +344,7 @@ portal:
             - protocol: TCP
               port: 443
           - *id001
-          revision: 83d68d8ed834ab831ee1e82bd4db2c7e6d708775
+          revision: 6a20d4fd21b789bff3442f38588c2016cd16502b
         reference:
           validation: 6fd950e205d7b18108695042a3c2287b16909ff8cda059955e1b27e5f6d55da4
           binding: 6f8c98af328883d2a8c2872ecab9a7272f581e0ff35e3b9df368ef669904cff4
