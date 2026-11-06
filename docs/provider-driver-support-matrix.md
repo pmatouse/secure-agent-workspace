@@ -11,7 +11,7 @@ through the stock gateway. This does not by itself qualify a live provider.
 
 | Provider | Historical VM model | Podman live (2026-10-21) | Kubernetes offline contracts | Kubernetes live (this revision) |
 |---|---|---|---|---|
-| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Sandbox API inference and owner browser chat passed on both data-science slots with `gpt-4.1-mini`; lifecycle/isolation qualification pending |
+| OpenAI | `gpt-6-luna` | Historical pass; see scope below | Passed: native protocol/config, marker/host policy, mutable selection | Initial sandbox API inference, owner browser chat and audited tool decisions passed on both data-science slots; model-update and complete RHDH lifecycle qualification remain blocked; see below |
 | Anthropic | `claude-sonnet-4-6` | Historical pass; see scope below | Passed: native Messages protocol/config, marker/host policy, mutable selection | Not qualified |
 | NVIDIA | `nvidia/nemotron-3.5-lightning-30b-a3b` | Historical pass; see scope below | Passed: OpenAI protocol/config, marker/host policy, slash-qualified model selection | Not qualified |
 
@@ -52,6 +52,27 @@ The stock gateway also passed committed-provider-response recovery with a fresh
 temporary administrator identity; the same provider ID/version was recovered
 and the disposable provider and temporary credentials were removed afterward.
 These checks do not replace RHDH lifecycle or final clean-install qualification.
+
+Current qualification also exposed failures that remain distinct from the
+initial inference pass:
+
+- A model update reached Ready and preserved storage, but a stock notebook
+  OpenClaw release migrated the requested model to another model. Direct API
+  inference used the requested model; the chat transcript did not. Model-update
+  parity requires both paths to agree with the approved input.
+- The stock CLI's browser-forward process briefly closes its listener when
+  its OIDC token expires. New-request recovery and established WebSocket
+  reconnection must be tested separately; a successful readiness check does
+  not establish uninterrupted chat.
+- An identity-service upgrade rejected the existing service-account admin API
+  tokens and blocked RHDH enrollment. The portal now preserves the prior
+  workspace projection on lookup failure; this preservation is not an
+  enrollment success.
+
+Credential-marker and destination denials passed in isolated live checks.
+They do not qualify direct network-egress isolation or foreign-owner browser
+access, which require their own checks. Keep detailed failures and immutable
+revision evidence in the separate qualification record.
 
 The container compiler currently selects one inference provider per sandbox;
 additional simultaneous `inference.models` chat choices remain unsupported and
