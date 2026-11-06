@@ -52,15 +52,39 @@ class TrustBundle:
         self.path = f"/api/v1/namespaces/{namespace}/secrets/{self.name}"
         self.uid = None
 
-    def live(self, holder):
+    def _pod(self, holder):
         try:
-            pod = self.request("GET", f"/api/v1/namespaces/{self.trusted_namespace}/pods/{holder['pod']}")
+            return self.request("GET", f"/api/v1/namespaces/{self.trusted_namespace}/pods/{holder['pod']}")
         except ApiError as exc:
-            if exc.code == 404: return False
+            if exc.code == 404: return None
             raise
+
+    def live(self, holder):
+        pod = self._pod(holder)
         meta = (pod or {}).get("metadata", {})
         return (meta.get("uid") == holder["uid"] and not meta.get("deletionTimestamp")
                 and (pod or {}).get("status", {}).get("phase") == "Running")
+
+    def wait_for_holder(self, *, timeout=30, sleep=time.sleep, monotonic=time.monotonic):
+        """A Job process can start before kubelet publishes its Running phase.
+
+        Wait only for this exact, nondeleting Pod while it is Pending. Do not
+        publish trust for it yet or relax live() for cleanup/publication checks.
+        """
+        deadline = monotonic() + timeout
+        while True:
+            pod = self._pod({"pod": self.pod}) or {}
+            meta, phase = pod.get("metadata", {}), pod.get("status", {}).get("phase")
+            if meta.get("uid") != self.pod_uid or meta.get("deletionTimestamp"):
+                raise ContractError("administrator session holder missing, replaced or deleting")
+            if phase == "Running":
+                return
+            if phase != "Pending":
+                raise ContractError("administrator session holder is not starting or running")
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise ContractError("administrator session holder did not become Running before the deadline")
+            sleep(min(0.5, remaining))
 
     def read(self):
         obj = self.request("GET", self.path)
@@ -151,6 +175,7 @@ class GatewaySessions:
             finally:
                 # Also remove private files if API recovery is unavailable.
                 admin.remove_abandoned(self.runtime)
+            self.trust.wait_for_holder()
             yield
         finally:
             os.close(fd)
