@@ -234,6 +234,24 @@ The compiler resolves an explicitly attached provider and an approved endpoint.
 OpenAI-compatible agent inference currently supports NVIDIA, OpenAI and the
 approved custom-inference path; unsupported combinations fail explicitly.
 
+The container startup publishes whole managed OpenClaw configuration subtrees
+through stock `openclaw config set --batch-file`, the same native writer used
+by VM configuration commands. It preserves OpenClaw's metadata and backup
+bookkeeping; directly replacing `openclaw.json` can trigger recovery of an older
+model selection. Managed gateway, provider, agent and tool/plugin settings are
+replaced together so removed permissions or providers do not survive an update.
+
+An explicit container model uses an internal OpenClaw provider ID such as
+`saw-openai/gpt-4.1`. This prevents the stock built-in model catalog from
+rewriting a requested model to a different release. The BOM still names
+`openai`; its approved OpenAI endpoint, protocol, credential marker and proxy
+authorization are unchanged. Chat transcripts therefore identify the internal
+provider alias and the exact requested model. VM native onboarding remains
+unchanged. The native writer regression can run against a stock binary with
+`node tests/openclaw-config-publication.mjs`; add `--expect-restore` on versions
+that restore configurations missing metadata. It uses synthetic credentials in
+temporary state and sends no inference requests.
+
 The application receives its writable workspace, a read-only prepared gate and
 optional harness, and an audit exchange. The writer's history and signing key
 remain outside its mounts. A missing/invalid acknowledgement blocks the gated

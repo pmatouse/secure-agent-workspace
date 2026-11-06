@@ -44,11 +44,20 @@ vm.runInNewContext(process.argv[1], {
 console.log(written);
 """
     result = subprocess.run(["node", "-e", runner, javascript, model], capture_output=True, text=True, check=True)
-    config = json.loads(result.stdout)
-    actual = config["models"]["providers"][kind]
+    batch = json.loads(result.stdout)
+    config = {operation["path"]: operation["value"] for operation in batch}
+    assert set(config) == {"gateway", "models", "agents", "tools", "plugins", "skills", "channels", "mcp"}
+    assert all(set(operation) == {"path", "value"} for operation in batch)
+    # Whole managed subtrees replace previous settings; the stock writer owns
+    # metadata/backup publication and unrelated user configuration remains.
+    assert 'openclaw config set --batch-file "$OPENCLAW_CONFIG_PATH.saw-managed"' in command[2]
+    actual = config["models"]["providers"]["saw-" + kind]
     assert actual == {"baseUrl":url,"api":api,"apiKey":"${"+env+"}","models":[{"id":model,"name":model}]}
-    assert config["agents"]["defaults"]["model"]["primary"] == kind+"/"+model
+    assert config["agents"]["defaults"]["model"]["primary"] == "saw-"+kind+"/"+model
     assert config["tools"] == {"deny":["*"]}
+    assert config["plugins"] == {"allow":[], "load":{"paths":[]}, "entries":{}}
+    assert config["skills"] == {"load":{"extraDirs":[]}}
+    assert config["channels"] == {} and config["mcp"] == {"servers":{}}
 
 
 @pytest.mark.parametrize("kind,model,url,api,env", CASES)

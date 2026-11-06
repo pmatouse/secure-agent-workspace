@@ -885,6 +885,18 @@ def openclaw_inference_settings(sb, provider):
             "auth_choice": OPENCLAW_AUTH_CHOICES.get(provider.type) if native else None}
 
 
+def openclaw_managed_provider_id(kind):
+    """Namespace explicit model catalogs away from stock catalog migrations.
+
+    This is an OpenClaw configuration ID only. The BOM provider type, approved
+    endpoint/protocol and OpenShell credential binding retain their identity.
+    Native onboarding in the VM adapter remains unchanged.
+    """
+    if kind not in {"openai", "anthropic", "nvidia", "custom-inference"}:
+        raise InstallerError("unsupported managed OpenClaw provider")
+    return "saw-" + kind
+
+
 def resolve_inference(ws, sb, read_value, validate_endpoint, forbidden=()):
     """A sandbox's `inference:` resolved: providerRef, protocol, baseUrl
     (validated, "" = the protocol's native API), model, timeoutSeconds."""
@@ -1026,6 +1038,7 @@ __all__ = (
     'validate_profile_document', 'apply_workspace_sequence', 'select_inference_provider',
     'NATIVE_BASE_URLS', 'OPENCLAW_AUTH_CHOICES', 'PROTOCOL_NATIVE_BASE_URLS',
     'sandbox_protocol', 'sandbox_model', 'sandbox_endpoint', 'openclaw_inference_settings',
+    'openclaw_managed_provider_id',
 )
 
 
