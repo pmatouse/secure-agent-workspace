@@ -78,7 +78,8 @@ spec:
         - name: NAMESPACE
           value: {{ .Values.portal.namespace }}
         - name: PIPELINE_RUN
-          value: $(context.pipelineRun.name)
+          valueFrom:
+            fieldRef: {fieldPath: "metadata.labels['tekton.dev/pipelineRun']"}
         - name: RESULT_PATH
           value: $(results.user.path)
         - name: CLUSTER_DOMAIN
