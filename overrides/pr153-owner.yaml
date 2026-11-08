@@ -345,8 +345,41 @@ portal:
               port: 443
           - *id001
           revision: 04cb28cfe289af20eb7b93f651de324130fdfa80
-        reference: {}
-        enabled: false
+        reference:
+          binding: 6f8c98af328883d2a8c2872ecab9a7272f581e0ff35e3b9df368ef669904cff4
+          deny: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+          gateway: 099c48af8ff3b5c76929521b0ceaa9334d034b238ce5dd53f90975c6f51df405
+          gatewayConfig: b92522741883f3b4873e3f2df769cd7a2c1be72e65aa69236633c1dbeaabe0b0
+          gatewayNetwork: 0f663e9ab7c13d6c461c84195e23bf07adda55b2bd9a134f86b7772be14b412f
+          gatewayRole: d8494e1fa758a9c6245eaa5002468cf8798aa796ebd09289e34f5991dd9824f7
+          gatewayService: 93010fe2dcf582c02de9eba40bc10249fa80ed93feb57d902eaca3bc53e8c139
+          governance:
+            sha256: b30e27ab8e0530319e278b1a60f8b597432c96e48dbdb9a8cff9884d49c749aa
+            uid: 9ab4695a-865a-4993-a0d8-6a3d236c50e6
+          governancePolicy:
+            sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+            uid: c2a9a226-e47f-4c19-8b85-fc815f5b4dfa
+          governanceProfiles:
+            sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+            uid: d2232eee-b4d6-47bc-9200-45b441bae783
+          governanceService:
+            sha256: 31f7cb983349fb00a5e473511707147b592b60e8f469731b73037102c643330a
+            uid: 7bbbd7d5-ea9a-422b-b696-db450c459436
+          network: 849ba89b99c9b6d3c77fa7d136716da2cae75b7b7cbab2e25692c44f82c15af4
+          podDeleteBinding: 721c7c49f064ac14debfc96a306f68039d2119f7c85a2d8d35d7303a91899b3a
+          podDeleteGuard: d491a61718f1ed14adaec77e08bf799039aa88fe4b65a1413d9db6130f048f79
+          proxy: 4d49792efcfef758690b805d9c6c03f67c2d9ae1019b24b5c0459f9df2f087e0
+          proxyNetwork: 00973255a1f849f15c1c531f7e4942f1892c0f867f9da7dd0c4d8942a1d7bce2
+          proxyPolicy: 9d701feb1dc89824b8591cf92576543a01d213f0830743c899712a42e92c9c98
+          publicCA: equals independent trusted proxy public CA
+          secretBinding: bd701e50fda5dca34341e5b2b194cea9904315f40f613a64d03a3bb921d899f7
+          secretGuard: bd4e241995f8d7444ea14fd5d15dfab3f8a6c390e4b763dd1d11367181ceb2bf
+          serviceBinding: 992128f3066a55510fef50961d18464932b9ecf48551a574f908802bd19b2dd2
+          serviceGuard: 2bcb214920230966093f52552a7670c107ef1e6e69930ba0fc3748ff0c22f93f
+          supervisorFence: c5ffb2ab56778a6e515bc038c285ebfe2e56822c4143ef270f6ca5bfb5ba0c62
+          validation: 411cd6d31286cdd5cc3189ea8ebf946c7b79e970c72a119003492d20022ae5dc
+          workloadFence: ac8cf686df8dab4f31bcab9ff863c7021d9e40908b852e5f58c62d38751773da
+        enabled: true
         approvedProfiles:
           data-science: 87baf2f3cbbc8c08f892cbd2e63f34440132fa2fabded0834b5069ec7762ea67
       profileImageOverrides:
