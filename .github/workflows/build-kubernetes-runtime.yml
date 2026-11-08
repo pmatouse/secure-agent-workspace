@@ -32,7 +32,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: build-kubernetes-runtime-${{ github.ref }}
@@ -40,6 +39,29 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-push-image
+        with:
+          image_name: saw-kubernetes-runtime
+          context: .
+          dockerfile: kubernetes-runtime/Containerfile
+          cache_scope: saw-kubernetes-runtime
+          platform: ${{ matrix.platform }}
+          registry_token: ""
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions: {contents: read, packages: write}
     strategy:
       fail-fast: false
       matrix:
@@ -60,7 +82,8 @@ jobs:
           platform: ${{ matrix.platform }}
           registry_token: ${{ secrets.GITHUB_TOKEN }}
   merge:
-    needs: build
+    needs: publish
+    permissions: {contents: read, packages: write}
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
