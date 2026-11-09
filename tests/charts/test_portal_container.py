@@ -95,6 +95,15 @@ def test_multiple_catalog_sandboxes_receive_distinct_storage_and_ui_namespaces()
     assert set(targets)=={"default/notebook","cuda-dev/cuda-sandbox"}
     site={**SITE,"targets":targets,"selectedDigest":"a"*64}
     docs=render("saw-portal-container",U,"saw-"+U,dict(site=site,owner=U,registration=REG,installationID=user()["installationID"],ownerSubject=SITE["subject"],vaultPrefix=user()["vaultPrefix"],**{"global":GLOBAL}))
+    for app in (resource for resource in docs if resource["kind"] == "Application"):
+        source = app["spec"]["source"]
+        if source["path"] == "charts/openshell-saw-kubernetes":
+            assert source["helm"]["apiVersions"] == [
+                "agents.x-k8s.io/v1beta1/Sandbox",
+                "policy.networking.k8s.io/v1alpha1/AdminNetworkPolicy",
+            ]
+        else:
+            assert "apiVersions" not in source["helm"]
     writers=[o for o in docs if o["kind"]=="Application" and o["spec"]["source"]["path"]=="charts/saw-audit-writer"]
     assert len(writers)==2
     assert {o["spec"]["source"]["helm"]["releaseName"] for o in writers}=={x["base"] for x in targets.values()}

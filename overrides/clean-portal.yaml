@@ -9,7 +9,7 @@ portal:
       subject: ef7be59b-e7ae-404a-bc46-c0be49b943bb
       stack:
         identity:
-          revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+          revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
           values:
             enabled: true
             ownerID: '@INSTALLATION@'
@@ -19,7 +19,7 @@ portal:
             - '@OWNER@-gateway.@RUNTIME@.svc'
             - '@OWNER@-gateway.@RUNTIME@.svc.cluster.local'
         policy:
-          revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+          revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
           values:
             enabled: true
             targetNamespace: '@RUNTIME@'
@@ -94,7 +94,7 @@ portal:
                     protocol: TCP
                     port: 3128
         proxy:
-          revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+          revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
           values:
             enabled: true
             ownerID: '@INSTALLATION@'
@@ -170,7 +170,7 @@ portal:
                 - protocol: TCP
                   port: 443
         gateway:
-          revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+          revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
           values:
             deployment:
               mode: container
@@ -270,7 +270,7 @@ portal:
             route:
               enabled: false
         audit:
-          revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+          revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
           values:
             enabled: true
             trustedNamespace: '@ARCHIVE@'
@@ -286,7 +286,7 @@ portal:
               sandbox: audited
       automaticEnrollment:
         image: image-registry.openshift-image-registry.svc:5000/saw-pr153-build/saw-kubernetes-runtime@sha256:6751a48a614d757e20fab1848767e995b5ab3e72522a59f57457aab6120937fe
-        revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+        revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
         buildNamespace: saw-pr153-build
         resources:
           limits:
@@ -346,7 +346,7 @@ portal:
               port: 443
             - protocol: TCP
               port: 6443
-          revision: c6a1f680891076fe34bfc9fcecec177d64fd4041
+          revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
         reference: {}
         enabled: false
         approvedProfiles:
@@ -363,4 +363,4 @@ portal:
       - api.openai.com
 sawUsers:
   workspaceRevisions:
-    sawbootstrap: c6a1f680891076fe34bfc9fcecec177d64fd4041
+    sawbootstrap: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
