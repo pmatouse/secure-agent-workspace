@@ -1,0 +1,5 @@
+portal:
+  deploymentModes:
+  - vm
+  - container
+  containerSites: {}

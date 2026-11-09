@@ -22,3 +22,5 @@ main:
   multiSourceConfig:
     enabled: true
     clusterGroupChartVersion: 0.9.*
+    clusterGroupGitRepoUrl: https://github.com/pmatouse/clustergroup-chart.git
+    clusterGroupChartGitRevision: 620f7a5d89717a92c0fd6dc6efd018b776dc84e7
