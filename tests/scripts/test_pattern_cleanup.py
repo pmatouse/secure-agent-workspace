@@ -115,11 +115,11 @@ def test_operator_cleanup_removes_orphaned_hco_crd(tmp_path):
                             env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines()
-    assert "wait --for=delete namespace/openshift-cnv --timeout=180s" in calls
+    assert "wait --for=delete namespace/openshift-cnv --timeout=1h" in calls
     assert "delete crd hyperconvergeds.hco.kubevirt.io --wait=true" in calls
 
 
-def test_operator_cleanup_warns_when_cnv_namespace_remains(tmp_path):
+def test_operator_cleanup_fails_without_removing_crd_when_cnv_namespace_remains(tmp_path):
     namespace = {"metadata": {"name": "openshift-cnv", "annotations": {
         "argocd.argoproj.io/tracking-id":
             "secure-agent-workspace-prod:/Namespace:patterns-operator/openshift-cnv"}}}
@@ -127,8 +127,8 @@ def test_operator_cleanup_warns_when_cnv_namespace_remains(tmp_path):
     env["OC_WAIT_FAIL"] = "yes"
     result = subprocess.run(["bash", str(ROOT / "scripts/pattern-operator-cleanup.sh")],
                             env=env, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    assert "still exists after 180 s" in result.stderr
+    assert result.returncode != 0
+    assert "CNV teardown incomplete" in result.stderr
     assert "delete crd" not in log.read_text()
 
 

@@ -46,6 +46,17 @@ Additional requirements:
 - `oc`, Helm 3 and `uv` on the installation machine. Provider credentials stay
   in Vault; local files and Git contain references and public configuration.
 
+Argo CD can retain an older list of API versions after the stock Agent Sandbox
+CRD is installed. For a generated gateway Application, the parent supplies the
+two API versions used by its Helm chart when the parent, gateway and identity
+charts share one immutable revision. Mixed revisions retain normal Helm
+discovery. The identity Job reads the live API
+server over verified TLS and checks the group, version, resource, kind and scope
+of both Sandbox and AdminNetworkPolicy before creating or projecting any keys.
+Missing discovery stops identity bootstrap. The policy chart also applies the
+actual AdminNetworkPolicy objects. Direct gateway Helm installs keep their
+existing capability checks.
+
 If the cluster uses a private CA, configure client trust with a combined bundle
 containing the normal system roots **and** the independently verified cluster CA.
 For example, set `SSL_CERT_FILE` to that combined file for Python/`uv` commands.
@@ -90,6 +101,61 @@ registration or Vault credentials. Configure `portal.adminSubjects` with the
 immutable Keycloak subject for each portal administrator who may act for another
 owner. The portal Task needs the existing read-only directory client projection
 `saw-generator-keycloak` when container sites are enabled.
+
+### Prepare large images on cold nodes
+
+The pinned stock OpenShell driver rolls back a sandbox whose bootstrap remains
+unfinished for five minutes. A slow first image pull can consume that entire
+window. Check cold nodes when qualifying a profile. For large images, install
+the optional `charts/saw-image-cache` chart through the clustergroup before
+creating workspaces. Give it the same immutable digests selected by the BOM
+and site overrides. [Pinned driver](https://github.com/opendatahub-io/openshell/blob/305c8b3d7bbdb97a6f2f7264c3ad43b0087c307f/crates/openshell-driver-kubernetes/src/driver.rs#L284)
+
+```yaml
+# Site values
+clusterGroup:
+  namespaces:
+    saw-image-cache:
+      operatorGroup: false
+  applications:
+    saw-image-cache:
+      name: saw-image-cache
+      namespace: saw-image-cache
+      path: charts/saw-image-cache
+      extraValueFiles:
+        - /overrides/workspace-image-cache.yaml
+```
+
+```yaml
+# overrides/workspace-image-cache.yaml
+enabled: true
+images:
+  - <approved-registry>/<workspace-image>@sha256:<64-hex-digest>
+nodeSelector:
+  kubernetes.io/os: linux
+```
+
+Kubelet pulls the images as read-only OCI image volumes. The DaemonSet runs a
+separate nonroot holder with an immutable image, no service-account token,
+dropped capabilities, a read-only root filesystem and no pod network access.
+The workload images are never executed by the holder. Set `imagePullSecrets`
+to authorized namespaced references for a private registry. For OpenShift
+internal images in another namespace, grant the holder service account only
+`get` on the required `imagestreams/layers` resource names.
+[Image volume behavior](https://v1-35.docs.kubernetes.io/docs/concepts/storage/volumes/#image)
+
+```sh
+oc -n saw-image-cache rollout status daemonset/saw-image-cache --timeout=30m
+oc -n saw-image-cache get daemonset/saw-image-cache -o json |
+  jq -e '.status.desiredNumberScheduled > 0 and
+         .status.numberReady == .status.desiredNumberScheduled and
+         .status.updatedNumberScheduled == .status.desiredNumberScheduled'
+```
+
+Confirm that the ready holders cover every node eligible for the workload.
+Match workload selectors and tolerations, and recheck after adding nodes or
+changing digests. Each node needs space for the selected images. Keep the
+holder running while the profile is in use.
 
 ### One-time Keycloak registration setup
 
@@ -349,6 +415,11 @@ uv run --locked python scripts/portal-container/inspect-boundary.py \
 ```
 
 These commands read public objects and do not grant approval or read Secrets.
+The RHDH create pipeline stays pending while the operator reviews a fresh container
+registration. Its intent wait uses `portal.sandboxReadyTimeoutMinutes` (at least
+10 minutes). Approve within this budget or the request fails. The VM provisioning
+stage retains its 10-minute wait.
+
 Review the resource specifications against the intended configuration. Put the
 approved reference under `automaticEnrollment.reference` and enable enrollment
 in the values file. Review the rendered BOM and put its digest under

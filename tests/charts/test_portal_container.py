@@ -104,6 +104,29 @@ def test_multiple_catalog_sandboxes_receive_distinct_storage_and_ui_namespaces()
         assert identity["workspace"]+"/"+identity["sandbox"] in targets
 
 
+@pytest.mark.parametrize("older_component", [None, "identity", "gateway"])
+def test_gateway_api_versions_require_the_same_reviewed_identity_revision(older_component):
+    site = json.loads(json.dumps(SITE))
+    revision = "a" * 40
+    site["stack"]["identity"]["revision"] = revision
+    site["stack"]["gateway"]["revision"] = revision
+    if older_component:
+        site["stack"][older_component]["revision"] = "b" * 40
+    values = dict(site=site, owner=U, registration=REG, installationID=user()["installationID"],
+                  ownerSubject=SITE["subject"], vaultPrefix=user()["vaultPrefix"],
+                  **{"global": {**GLOBAL, "targetRevision": revision}})
+    apps = [r for r in render("saw-portal-container", U, "saw-" + U, values)
+            if r["kind"] == "Application"]
+    gateway, = [app for app in apps if app["spec"]["source"]["path"] == "charts/openshell-saw-kubernetes"]
+    expected = ["agents.x-k8s.io/v1beta1/Sandbox", "policy.networking.k8s.io/v1alpha1/AdminNetworkPolicy"]
+    for app in apps:
+        helm = app["spec"]["source"]["helm"]
+        if app is gateway and older_component is None:
+            assert helm["apiVersions"] == expected
+        else:
+            assert "apiVersions" not in helm
+
+
 def test_model_gate_claim_is_shared_only_for_the_publisher_and_agent():
     audit = SITE["stack"]["audit"]["values"]
     # Use the same per-registration Helm values projection as the nested Applications.
