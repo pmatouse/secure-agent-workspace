@@ -1609,14 +1609,18 @@ def wait_stage(stage, user, timeout, sleep=time.sleep, clock=time.monotonic, pin
     domain = os.environ.get("CLUSTER_DOMAIN", "")
     if stage != "gone" and stage not in STAGE_IDS:
         raise PortalError(f"unknown stage {stage}; one of {', '.join(STAGE_IDS)}, gone")
-    deadline, last = clock() + timeout, None
+    started, last = clock(), None
     while True:
+        budget = timeout
         if stage == "gone":
             marker = k8s.call("GET", f"/api/v1/namespaces/{ns}/configmaps/saw-ws-{user}", ok404=True)
             done, detail = removal_status(k8s, user, argo_ns, read_entry(marker))
             failed = False
         else:
             st = workspace_status(k8s, user, catalog, ns, argo_ns, domain, ping)
+            if stage == "vm" and st.get("deploymentMode") == "container":
+                # The initial intent can only be published after the new registration is reviewed.
+                budget = max(timeout, int(os.environ.get("SAW_CONTAINER_ENROLLMENT_SECONDS", timeout)))
             current = next((x for x in st["steps"] if x["id"] == stage), {})
             detail = current.get("detail") or st["message"]
             done = current.get("state") == "done"
@@ -1631,8 +1635,8 @@ def wait_stage(stage, user, timeout, sleep=time.sleep, clock=time.monotonic, pin
             return
         if failed:
             raise PortalError(detail)
-        if clock() >= deadline:
-            raise PortalError(f"not done after {timeout // 60} minutes: {detail}")
+        if clock() >= started + budget:
+            raise PortalError(f"not done after {budget // 60} minutes: {detail}")
         sleep(POLL_SECONDS * 2)
 
 

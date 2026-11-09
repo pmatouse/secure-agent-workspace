@@ -1958,3 +1958,19 @@ def test_dedicated_endpoint_excludes_renamed_and_additional_tool_secrets(portal,
     assert set(values) == {"model"}
     with pytest.raises(portal.PortalError, match="search-renamed"):
         portal.parse_request({**data,"deploymentMode":"vm"}, {"p":profile})
+
+
+@pytest.mark.parametrize("mode,stage,expected", [
+    ("container", "vm", 1800), ("vm", "vm", 600), ("container", "running", 600)
+])
+def test_enrollment_budget_only_extends_the_container_intent_wait(portal, world, monkeypatch, mode, stage, expected):
+    created(portal, world)
+    monkeypatch.setenv("SAW_CONTAINER_ENROLLMENT_SECONDS", "1800")
+    monkeypatch.setattr(portal, "workspace_status", lambda *args: {
+        "deploymentMode": mode, "failed": False, "message": "pending",
+        "steps": [{"id": stage, "state": "active", "detail": "pending"}],
+    })
+    now = [0]
+    with pytest.raises(portal.PortalError, match=f"not done after {expected // 60} minutes"):
+        portal.wait_stage(stage, "alice", 600, sleep=lambda _: now.__setitem__(0, now[0] + 600), clock=lambda: now[0])
+    assert now == [expected]
