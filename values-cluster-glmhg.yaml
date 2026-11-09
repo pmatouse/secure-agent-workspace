@@ -24,6 +24,11 @@ clusterGroup:
       extraValueFiles:
       - /overrides/saw-users.yaml
       - /overrides/clean-portal.yaml
+    openshift-cnv:
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
   subscriptions:
     openshift-virtualization:
       config:

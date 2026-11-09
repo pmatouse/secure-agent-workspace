@@ -1,6 +1,9 @@
-apiVersion: hco.kubevirt.io/v1beta1
-kind: HyperConverged
+# The qualification site's single HCO is retired before uninstall. This
+# marker keeps Argo's managed set nonempty while it prunes that instance.
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: kubevirt-hyperconverged
+  name: qualification-cnv-retired
   namespace: openshift-cnv
-spec: {}
+data:
+  reason: "Retiring disposable SAW installation after OLM conversion failure."
