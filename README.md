@@ -777,6 +777,36 @@ make quickstart-delete
 ./pattern.sh make pattern-uninstall
 ```
 
+A full SAW uninstall first drains the Pattern-owned `openshell-rhdh` and
+`saw-users` Applications. The command sets their clustergroup `disabled`
+overrides on the Pattern and waits for Argo to mark each child for pruning.
+It terminates any active sync and waits for foreground deletion before
+the framework removes operators and webhooks. The VM cleanup runs after this
+drain so a reconciling SAW Application cannot recreate a VM during teardown.
+If the drain fails, correct
+the reported problem and rerun `pattern-uninstall`. Those two overrides
+persist on the Pattern until uninstall completes.
+
+To qualify a fresh RHDH-enabled installation, run the first check on the
+clean cluster and the second after installing with the configured site inputs:
+
+```bash
+scripts/check-rhdh-bootstrap.sh before
+./pattern.sh make install
+scripts/check-rhdh-bootstrap.sh after
+```
+
+ESO creates `rhdh/rhdh-oidc` from Vault before the Keycloak client hook can
+start. The hook requires that Secret and has a 15-minute execution deadline.
+The check also requires the completed Job and a Synced/Healthy RHDH Application.
+
+A reinstall also depends on OpenShift Virtualization cleanup. Uninstall waits
+up to 15 minutes for the Pattern-owned `openshift-cnv` namespace to disappear
+before checking whether its marked HyperConverged CRD is unused. A timeout
+returns an error. Check namespace termination, then rerun
+`./pattern.sh make pattern-uninstall` before installing again. A retained
+CRD can point OLM at a conversion webhook that no longer exists.
+
 ## Repository structure
 
 ```

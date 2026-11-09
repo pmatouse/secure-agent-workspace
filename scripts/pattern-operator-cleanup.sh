@@ -54,10 +54,12 @@ if [[ "${namespace_present}" == true && \
 fi
 
 if [[ "${namespace_present}" == true ]]; then
-  if ! oc wait --for=delete namespace/openshift-cnv --timeout=180s; then
-    if [[ -n "$(oc get namespace openshift-cnv -o name --ignore-not-found)" ]]; then
-      echo "Warning: openshift-cnv still exists after 180 s; keeping its HyperConverged CRD." >&2
-      exit 0
+  if ! oc wait --for=delete namespace/openshift-cnv --timeout=15m; then
+    remaining="$(oc get namespace openshift-cnv -o name --ignore-not-found)"
+    if [[ -n "${remaining}" ]]; then
+      echo "CNV teardown incomplete: openshift-cnv still exists; its HyperConverged CRD is retained." >&2
+      echo "After the namespace terminates, rerun make pattern-uninstall before reinstalling." >&2
+      exit 1
     fi
   fi
 fi
