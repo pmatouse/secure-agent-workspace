@@ -52,6 +52,18 @@ clusterGroup:
         annotations:
           operatorframework.io/bundle-unpack-timeout: 30m
           operatorframework.io/bundle-unpack-min-retry-interval: 10m
+    bootstrap-resources:
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: bootstrap-requests
+        namespace: imperative
+      spec:
+        limits:
+        - type: Container
+          defaultRequest:
+            cpu: '1'
+            memory: 256Mi
     qualification-governance-pull:
       apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
