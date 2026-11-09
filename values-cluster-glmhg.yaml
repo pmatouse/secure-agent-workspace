@@ -1,0 +1,115 @@
+portal:
+  sandboxReadyTimeoutMinutes: 60
+keycloak:
+  instances: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1700Mi
+    limits:
+      memory: 2Gi
+clusterGroup:
+  applications:
+    saw-agent-sandbox:
+      name: saw-agent-sandbox
+      namespace: agent-sandbox-system
+      path: charts/agent-sandbox
+      overrides:
+      - name: enabled
+        value: 'true'
+    governance-interceptor:
+      extraValueFiles:
+      - /overrides/clean-governance.yaml
+    openshell-rhdh:
+      extraValueFiles:
+      - /overrides/saw-users.yaml
+      - /overrides/clean-portal.yaml
+    saw-image-cache:
+      name: saw-image-cache
+      namespace: saw-image-cache
+      path: charts/saw-image-cache
+      extraValueFiles:
+      - /overrides/workspace-image-cache.yaml
+  subscriptions:
+    openshift-virtualization:
+      config:
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+  namespaces:
+    external-secrets-operator:
+      operatorGroup: false
+    saw-image-cache:
+      operatorGroup: false
+  extraObjects:
+    external-secrets-operator-group:
+      apiVersion: operators.coreos.com/v1
+      kind: OperatorGroup
+      metadata:
+        name: external-secrets-operator-operator-group
+        namespace: external-secrets-operator
+        annotations:
+          operatorframework.io/bundle-unpack-timeout: 30m
+          operatorframework.io/bundle-unpack-min-retry-interval: 10m
+    qualification-governance-pull:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: clean-governance-pull
+        namespace: saw-pr153-build
+      rules:
+      - apiGroups:
+        - image.openshift.io
+        resources:
+        - imagestreams/layers
+        resourceNames:
+        - bootstrap-governance
+        verbs:
+        - get
+    qualification-governance-pull-binding:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: clean-governance-pull
+        namespace: saw-pr153-build
+      subjects:
+      - kind: ServiceAccount
+        name: default
+        namespace: openshell-agents
+      roleRef:
+        kind: Role
+        apiGroup: rbac.authorization.k8s.io
+        name: clean-governance-pull
+    image-cache-role:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cache-read-approved-openclaw
+        namespace: saw-pr153-build
+      rules:
+      - apiGroups:
+        - image.openshift.io
+        resources:
+        - imagestreams/layers
+        resourceNames:
+        - qualification-openclaw
+        verbs:
+        - get
+    image-cache-binding:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cache-read-approved-openclaw
+        namespace: saw-pr153-build
+      subjects:
+      - kind: ServiceAccount
+        name: saw-image-cache
+        namespace: saw-image-cache
+      roleRef:
+        kind: Role
+        apiGroup: rbac.authorization.k8s.io
+        name: cache-read-approved-openclaw
+global:
+  webSearch:
+    enabled: false

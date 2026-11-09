@@ -1,0 +1,5 @@
+enabled: true
+images:
+- image-registry.openshift-image-registry.svc:5000/saw-pr153-build/qualification-openclaw@sha256:1d51568cfe839646f6b93f25fb4352327c366e61b335206ff93a7806eb8beb59
+- ghcr.io/validatedpatterns-sandbox/nemoclaw-sandbox@sha256:28457eec59e71eca310cd72fc4b57c71506c3fce4c30f2636a237dca85725dbd
+- quay.io/opendatahub/odh-openshell-sandbox@sha256:acc2e36f4b05d494714aaa0a10392d2148bda3c26bbf75078f6b3c3cdf7c67ea
