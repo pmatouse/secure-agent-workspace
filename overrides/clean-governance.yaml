@@ -1,0 +1,5 @@
+image: image-registry.openshift-image-registry.svc:5000/saw-pr153-build/bootstrap-governance@sha256:f1f8e0e0cce6b670731d1032fae7017b6e26e456e1116394bfe2a2e950b0e9ce
+gatewayEndpoint: ''
+kubernetesGateways:
+- namespace: saw-sawbootstrap
+  gatewayId: sawbootstrap
