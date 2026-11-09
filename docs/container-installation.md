@@ -46,6 +46,15 @@ Additional requirements:
 - `oc`, Helm 3 and `uv` on the installation machine. Provider credentials stay
   in Vault; local files and Git contain references and public configuration.
 
+Argo CD can retain an older list of API versions after the stock Agent Sandbox
+CRD is installed. For a generated gateway Application, the parent supplies the
+two API versions used by its Helm chart. The identity Job reads the live API
+server over verified TLS and checks the group, version, resource, kind and scope
+of both Sandbox and AdminNetworkPolicy before creating or projecting any keys.
+Missing discovery stops identity bootstrap. The policy chart also applies the
+actual AdminNetworkPolicy objects. Direct gateway Helm installs keep their
+existing capability checks.
+
 If the cluster uses a private CA, configure client trust with a combined bundle
 containing the normal system roots **and** the independently verified cluster CA.
 For example, set `SSL_CERT_FILE` to that combined file for Python/`uv` commands.
