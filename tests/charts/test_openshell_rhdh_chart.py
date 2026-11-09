@@ -783,13 +783,27 @@ def test_rhdh_identity_bootstrap_can_repair_unhealthy_consumers(docs):
     # A 401 makes the AppSet unhealthy; PostSync would prevent the bootstrap
     # that repairs it from running. PreSync would miss first-install inputs.
     assert job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "Sync"
-    assert job["metadata"]["annotations"].get("argocd.argoproj.io/sync-wave", "0") == "0"
-    for resource in (cm, one(docs, "ServiceAccount", "saw-rhdh-keycloak"),
-                     one(docs, "ExternalSecret", "rhdh-oidc"),
-                     one(docs, "Role", "saw-rhdh-keycloak-admin"),
-                     one(docs, "RoleBinding", "saw-rhdh-keycloak-admin")):
-        annotations = resource["metadata"].get("annotations", {})
-        assert not annotations.get("argocd.argoproj.io/hook")
-        assert annotations.get("argocd.argoproj.io/sync-wave", "0") == "0"
+    def wave(resource):
+        return int(resource["metadata"].get("annotations", {}).get("argocd.argoproj.io/sync-wave", "0"))
+
+    secret = one(docs, "ExternalSecret", "rhdh-oidc")
+    dependencies = [cm, one(docs, "ServiceAccount", "saw-rhdh-keycloak"), secret,
+                    one(docs, "Role", "saw-rhdh-keycloak-admin"),
+                    one(docs, "RoleBinding", "saw-rhdh-keycloak-admin"),
+                    one(docs, "Role", "saw-portal-ingress-ca"),
+                    one(docs, "RoleBinding", "saw-portal-ingress-ca")]
+    dependencies.extend(r for r in docs if r["kind"] == "ConfigMap"
+                        and r["metadata"]["name"] in ("saw-ca-sources", "saw-trusted-ca")
+                        and r["metadata"]["namespace"] == job["metadata"]["namespace"])
+    for resource in dependencies:
+        assert not resource["metadata"].get("annotations", {}).get("argocd.argoproj.io/hook")
+        assert wave(resource) < wave(job)
+    consumers = [r for r in docs if r["kind"] in ("Backstage", "ApplicationSet")]
+    assert {r["kind"] for r in consumers} == {"Backstage", "ApplicationSet"}
+    assert all(wave(job) < wave(r) for r in consumers)
+    client = job["spec"]["template"]["spec"]["containers"][0]
+    ref = next(e["valueFrom"]["secretKeyRef"] for e in client["env"] if e["name"] == "CLIENT_SECRET")
+    assert ref == {"name": secret["spec"]["target"]["name"], "key": "AUTH_OIDC_CLIENT_SECRET"}
+    assert 0 < job["spec"]["activeDeadlineSeconds"] <= 900
     assert any(v.get("configMap", {}).get("name") == cm["metadata"]["name"]
                for v in job["spec"]["template"]["spec"]["volumes"])

@@ -295,6 +295,7 @@ pre-uninstall: ## Delete pattern VMs before framework uninstall
 	@$(SCRIPTS_DIR)/pattern-cnv-mark.sh
 	@$(SCRIPTS_DIR)/pattern-pipelines-mark.sh
 	@$(SCRIPTS_DIR)/pattern-pre-uninstall.sh
+	@python3 $(SCRIPTS_DIR)/pattern-drain-applications.py
 
 # Generate SSH keys before install. No deletions — safe to run repeatedly.
 pattern-install: ssh-key-generate
