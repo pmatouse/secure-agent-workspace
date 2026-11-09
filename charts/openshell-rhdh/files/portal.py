@@ -215,6 +215,11 @@ def verify_jwt(token, jwks, what, now=None, leeway=0):
     header, payload, signed, signature = decode_jwt(token)
     if header.get("alg") != "ES256":
         raise PortalError(f"{what}: unsupported algorithm {header.get('alg')!r} (expected ES256)")
+    kid = header.get("kid")
+    if not isinstance(kid, str) or not kid:
+        raise PortalError(f"{what}: missing signing key ID")
+    if callable(jwks):
+        jwks = jwks(kid)
     keys = [k for k in jwks.get("keys", []) if k.get("kid") == header.get("kid")
             and k.get("kty") == "EC" and k.get("crv") == "P-256"]
     if not keys:
@@ -514,11 +519,14 @@ def token_user(token, jwks=None, leeway=0):
         rhdh = env("RHDH_INTERNAL_URL").rstrip("/")
         insecure = os.environ.get("RHDH_SKIP_VERIFY") == "true"
         jwks = lambda path: fetch_json(rhdh + path, insecure=insecure)  # noqa: E731
-    scaffolder_jwks = None
-    if decode_jwt(token)[0].get("typ") == PLUGIN_TYP:
-        scaffolder_jwks = jwks("/api/scaffolder/.backstage/auth/v1/jwks.json")
-    return check_user(verify_backstage_token(token, jwks("/api/auth/.well-known/jwks.json"),
-                                             scaffolder_jwks, leeway=leeway))
+    def keys_for(path):
+        if isinstance(jwks, JwksCache):
+            return lambda kid: jwks(path, kid)
+        return lambda kid: jwks(path)
+
+    return check_user(verify_backstage_token(token, keys_for("/api/auth/.well-known/jwks.json"),
+                                             keys_for("/api/scaffolder/.backstage/auth/v1/jwks.json"),
+                                             leeway=leeway))
 
 
 def requester(data):
@@ -1286,20 +1294,31 @@ def wait_for(check, done, seconds, sleep=time.sleep, clock=time.monotonic):
 
 
 class JwksCache:
-    """RHDH's JWKS documents, refetched every few minutes."""
+    """Cache RHDH keys, with bounded on-demand refetches for rotating key IDs."""
 
     def __init__(self, ttl=300):
         self.ttl, self.docs = ttl, {}
+        self.next_miss_refresh = {}
+        self.lock = threading.Lock()
 
-    def __call__(self, path):
-        now = time.time()
-        hit = self.docs.get(path)
-        if hit and now - hit[0] < self.ttl:
-            return hit[1]
-        rhdh = env("RHDH_INTERNAL_URL").rstrip("/")
-        doc = fetch_json(rhdh + path, insecure=os.environ.get("RHDH_SKIP_VERIFY") == "true")
-        self.docs[path] = (now, doc)
-        return doc
+    def __call__(self, path, kid=None):
+        # The verifier chooses one of two fixed paths. No token field selects
+        # the issuer or URL. Coalesce misses per issuer, not per untrusted kid.
+        with self.lock:
+            now = time.monotonic()
+            hit = self.docs.get(path)
+            if hit and now - hit[0] < self.ttl:
+                if kid is None or any(k.get("kid") == kid for k in hit[1].get("keys", [])):
+                    return hit[1]
+                if now < self.next_miss_refresh.get(path, 0):
+                    return hit[1]
+                self.next_miss_refresh[path] = now + 5
+            rhdh = env("RHDH_INTERNAL_URL").rstrip("/")
+            doc = fetch_json(rhdh + path, insecure=os.environ.get("RHDH_SKIP_VERIFY") == "true")
+            self.docs[path] = (time.monotonic(), doc)
+            if kid is not None and not any(k.get("kid") == kid for k in doc.get("keys", [])):
+                self.next_miss_refresh[path] = time.monotonic() + 5
+            return doc
 
 
 PORTAL_NS_LABEL = "saw.redhat.com/portal"

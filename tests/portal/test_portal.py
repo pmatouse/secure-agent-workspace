@@ -142,6 +142,47 @@ def test_the_scaffolders_plugin_token_names_the_user_it_acts_for(portal):
     assert portal.verify_backstage_token(token, auth.jwks(), scaffolder.jwks()) == "alice"
 
 
+def test_cached_verifier_refreshes_both_rotated_backstage_keys(portal, monkeypatch):
+    auth_path = "/api/auth/.well-known/jwks.json"
+    scaffolder_path = "/api/scaffolder/.backstage/auth/v1/jwks.json"
+    old_auth, old_plugin = Signer("old-auth"), Signer("old-scaffolder")
+    new_auth, new_plugin = Signer("new-auth"), Signer("new-scaffolder")
+    issued = {auth_path: old_auth, scaffolder_path: old_plugin}
+    calls = []
+    monkeypatch.setenv("RHDH_INTERNAL_URL", "https://rhdh.test")
+
+    def fetch(url, insecure=False):
+        assert not insecure
+        path = url.removeprefix("https://rhdh.test")
+        calls.append(path)
+        return issued[path].jwks()
+
+    monkeypatch.setattr(portal, "fetch_json", fetch)
+    cache = portal.JwksCache()
+    assert portal.token_user(plugin_token(old_plugin, old_auth.limited()), cache) == "alice"
+    issued.update({auth_path: new_auth, scaffolder_path: new_plugin})
+    signed = plugin_token(new_plugin, new_auth.limited())
+    assert portal.token_user(signed, cache) == "alice"
+    assert portal.token_user(signed, cache) == "alice"
+    assert calls.count(auth_path) == calls.count(scaffolder_path) == 2
+    with pytest.raises(portal.PortalError, match="signature is not valid"):
+        portal.token_user(plugin_token(new_plugin, Signer("new-auth").limited()), cache)
+
+
+def test_unknown_key_ids_do_not_trigger_unbounded_issuer_fetches(portal, monkeypatch):
+    real = Signer("published")
+    calls = []
+    monkeypatch.setenv("RHDH_INTERNAL_URL", "https://rhdh.test")
+    monkeypatch.setattr(portal, "fetch_json", lambda url, insecure=False: calls.append(url) or real.jwks())
+    cache = portal.JwksCache()
+    assert portal.token_user(real.token(), cache) == "alice"
+    for kid in ("unknown-a", "unknown-b", "unknown-c"):
+        with pytest.raises(portal.PortalError, match="signing key is not in the JWKS"):
+            portal.token_user(Signer(kid).token(), cache)
+    assert len(calls) == 2
+    assert portal.token_user(real.token(), cache) == "alice"
+
+
 @pytest.mark.parametrize("make, message", [
     (lambda auth, sc: plugin_token(Signer("x"), auth.limited()), "scaffolder token: its signing key"),
     (lambda auth, sc: plugin_token(sc, Signer("auth").limited()), "user token: the signature"),
