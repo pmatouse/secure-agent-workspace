@@ -347,10 +347,43 @@ portal:
             - protocol: TCP
               port: 6443
           revision: 4c051284ca9fd6707afa0e77d25d65a09e5a1720
-        reference: {}
-        enabled: false
+        reference:
+          validation: f6820185a3eecf291dab8a2c75fa8b1e5fcb5ea7b57efd42b685aee0d8ff88a3
+          podDeleteGuard: cc472ff9f5091887c8227bb3a10c6b2fac651e32df47c50565bb75fd9c15bf7f
+          podDeleteBinding: 15527edf054faa65574661663460439ad061beaed3d25da5fc0ef1312909fab4
+          secretGuard: c4b4faa2711587580ff995b05f49b7eb5c790ad8f59eb5fff8e6e90edbddb020
+          secretBinding: edda98cd20b97f5f7fea96f1b87c99a1598caff81f430c44cd26d45775d0fa4b
+          serviceGuard: 0b6577da806f112f062549de23bc78e2a0a74506521b6e4918bce82fac734b82
+          serviceBinding: efe696b1afc315140ace0089081d68a50c7f9275eabe6a4a73def6a15b31c813
+          gatewayRole: d0e88ef854c979c82ff10b73a78a108bb3240b7df87c9ff88eb90ada2ae0c0c5
+          workloadFence: ac8cf686df8dab4f31bcab9ff863c7021d9e40908b852e5f58c62d38751773da
+          supervisorFence: c5ffb2ab56778a6e515bc038c285ebfe2e56822c4143ef270f6ca5bfb5ba0c62
+          binding: 9fa4a9945fa6d4d8327cb34ba7dcb95ed26cebc758de5d30ac03be56001aa4b3
+          network: 9be1f47d5d6ac0738077731d6dffa8fb374e8f47f0ceb402fc1ab9dc3652aeeb
+          deny: 79558fd7757e83a7e26bf87d1840b7c975e8571d0e2a458ed61e159d9d578d27
+          gatewayNetwork: 181e0ab50f1c6f4c128961775bba520968640b2d0d5f26f57d0d7159d0a0d513
+          gateway: 23e11dd32d8e2b981179bb775962901cbd4fe0851defe68c6cf874b4cd240df0
+          gatewayService: a930e27f432e9ec486a144628e5fa2ec8d78ee494a3c9e7df87930c3b4cd9ad6
+          gatewayConfig: 112c367936abd0113a5cff581dc54bafc2e6d1d119fce8e49c7a42bf03fc669a
+          governance:
+            uid: 8aa4e4df-9faf-4e30-b98e-665b55781703
+            sha256: a0967e90c7f3c46ea70a3e914aa3e4d8531b315aa5484106e0005b879581174d
+          governanceService:
+            uid: 8d94c09c-3dc5-4467-b76a-3b017768591b
+            sha256: 849b6b8b9af0a6c253e53e75b6dae7d42841071139629eee15e0d60f3e1a5100
+          governancePolicy:
+            uid: b3cc1c22-c602-4ed8-8065-68151be835de
+            sha256: 9209caa9ad501f3c0e6cae80b2e44bc3e2f680971295aedb41e674c24afe7a3f
+          governanceProfiles:
+            uid: c5471781-d73b-47b1-9b2c-b0b5d6443aef
+            sha256: c7408e794c24c59895d7615de7bce502af537aa52cb587288d59ce9276e44534
+          proxy: e357b6c63096e14bfdf0fbff02c535be768869c5407bc5e0bb20d7e48437251e
+          proxyNetwork: e1b3d417d3b525b5362a84199c87be407134d1b480ec3a8dd4168aab8d12db00
+          proxyPolicy: 9d701feb1dc89824b8591cf92576543a01d213f0830743c899712a42e92c9c98
+          publicCA: equals independent trusted proxy public CA
+        enabled: true
         approvedProfiles:
-          data-science: 87baf2f3cbbc8c08f892cbd2e63f34440132fa2fabded0834b5069ec7762ea67
+          data-science: f6d15fb46713b79b7d37399e12d5a1ec596d4129e721d2d3522e08927077f738
       profileImageOverrides:
         data-science:
           notebook: image-registry.openshift-image-registry.svc:5000/saw-pr153-build/qualification-openclaw@sha256:1d51568cfe839646f6b93f25fb4352327c366e61b335206ff93a7806eb8beb59
