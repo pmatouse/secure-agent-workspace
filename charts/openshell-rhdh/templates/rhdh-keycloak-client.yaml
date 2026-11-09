@@ -105,7 +105,7 @@ spec:
             - name: CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: rhdh-oidc
+                  name: qualification-pending-oidc
                   key: AUTH_OIDC_CLIENT_SECRET
           volumeMounts:
             - name: script
